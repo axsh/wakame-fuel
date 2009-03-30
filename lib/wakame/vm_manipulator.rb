@@ -3,6 +3,10 @@ require 'wakame'
 
 module Wakame
   module VmManipulator
+    def self.create
+      Wakame.new_([self.to_s, Wakame.config.vm_environment ].join('::'))
+    end
+
     class Base
       def start_instance(attr)
       end
@@ -18,6 +22,7 @@ module Wakame
       # local_ipv4 : Internal IP address which is assigned to the VM instance.
       # local_hostname : Internal hostname assigned to the VM instance.
       def fetch_local_attrs
+        
       end
     end
 
@@ -40,7 +45,6 @@ module Wakame
         attrs = {:instance_id=>'__stand_alone__', :local_ipv4=>'127.0.0.1', :local_hostname=>'localhost'}
         attrs
       end
-
     end
 
     class EC2 < Base
@@ -50,8 +54,13 @@ module Wakame
         @ec2 = ::EC2::Base.new(:access_key_id => Wakame.config.aws_access_key, :secret_access_key => Wakame.config.aws_secret_key )
       end
       
-      def start_instance(attr={})
-        res = @ec2.run_instances(:image_id => attr[:image_id], :user_data => attr[:user_data])
+      def start_instance(image_id, attr={})
+        res = @ec2.run_instances(:image_id => image_id,
+                                 :availability_zone => attr[:availability_zone],
+                                 :group_id => attr[:security_groups],
+                                 :instance_type => attr[:instance_type],
+                                 :user_data => attr[:user_data]
+                                 )
         {:instance_id => res.instancesSet.item[0].instanceId}
       end
 

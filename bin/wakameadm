@@ -5,11 +5,11 @@ require File.dirname(__FILE__) + '/../config/boot'
 require 'rubygems'
 require 'optparse'
 require 'drb/drb'
-require 'json'
 
 require 'erb'
 
 require 'wakame'
+require 'wakame/util'
 
 class Wakame::AdministratorCommandRunner
   class CommandArgumentError < StandardError; end
@@ -27,6 +27,8 @@ class Wakame::AdministratorCommandRunner
 
   SUB_COMMANDS = {
     'status' => {:opt_parser => lambda { |parser|
+      }},
+    'action_status' => {:opt_parser => lambda { |parser|
       }},
     'launch_cluster' => {},
     'shutdown_cluster'=> {},
@@ -78,15 +80,15 @@ class Wakame::AdministratorCommandRunner
       cmd.deploy_config
     when 'status'
       res = cmd.status
-      #print_status(JSON.parse(res))
       print_status(res)
+    when 'action_status'
+      res = cmd.action_status
+      print_action_status(res)
     end
 
   end
 
   private
-
-  
 
   def parse_sub_command
     @subcmd = @tmp_args.shift
@@ -102,8 +104,6 @@ class Wakame::AdministratorCommandRunner
     left_parser = SUB_COMMANDS[@subcmd][:left_parser]
     if left_parser
       begin
-puts binding
-        #eval("instance_eval(&left_parser)", binding)
         instance_eval(&left_parser)
       rescue CommandArgumentError => e
         fail e
@@ -147,7 +147,23 @@ __E__
     puts ERB.new(STATUS_TMPL, nil, '-').result(binding)
   end
 
+  ACTION_STATUS_TMPL=<<__E__
+Running Actions : <%= status.size %> action(s)
+<%- if status.size > 0 -%>
+<%- status.each { |id, j| -%>
+  JOB <%= id %> :
+    start : <%= j[:created_at] %>
+    <%- j[:actions].each { |a| -%>
+    <%= a[:type] %> (<%= a[:status] %>)
+    <%- } -%>
+<%- } -%>
+<%- end -%>
+__E__
 
+
+  def print_action_status(status)
+    puts ERB.new(ACTION_STATUS_TMPL, nil, '-').result(binding)
+  end
   
 end
 

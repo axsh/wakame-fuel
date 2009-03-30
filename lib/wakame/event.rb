@@ -1,20 +1,18 @@
 
-require 'mutex_m'
-require 'sync'
-
 require 'wakame'
+require 'wakame/util'
 
 module Wakame
   class EventHandler
     class << self
- 
+      
       def instance
         if @instance.nil?
           @instance = self.new
         end
         @instance
       end
-     
+      
       def subscribe(event_class, *args, &blk)
         self.instance.subscribe(event_class, *args, &blk)
       end
@@ -34,79 +32,66 @@ module Wakame
 
     end
     
+    include ThreadImmutable
     include Wakame
 
     def initialize
-      extend(Sync_m)
       @event_handlers = {}
-      @event_handlers.extend(Sync_m)
       @tickets = {}
 
       @unsubscribe_queue = []
-
-      @handler_run_queue = Queue.new
-      @handler_run_t = Thread.new {
-        while h = @handler_run_queue.pop
-          begin
-            h.call
-          rescue => e
-            Wakame.log.error(e)
-          end
-        end
-      }
-      @handler_run_t[:name]="#{self.class} handler"
     end
 
     def subscribe(event_class, *args, &blk)
-      event_class = event_class.is_a?(Class) ? event_class : event_class.class
-      self.synchronize {
-        tlist = @event_handlers[event_class]
-        
-        if tlist.nil?
-          #@event_handlers.synchronize {
-          tlist = @event_handlers[event_class] = []
-          tlist.extend(Sync_m)
-          #}
-        end
-        
-        tickets = []
-        args.each { |o|
-          tickets << Wakame.gen_id
-          @tickets.store(tickets.last, [event_class, o])
-          tlist << tickets.last
-        }
-        
-        if blk 
-          tickets << Wakame.gen_id
-          @tickets.store(tickets.last, [event_class, blk])
-          tlist << tickets.last
-        end
-        
+      event_class = case event_class
+                    when Class
+                      event_class
+                    when String
+                      Wakame.str2const(event_class)
+                    else
+                      raise ArgumentError, "event_class has to be a form of String or Class type"
+                    end
+
+      EM.barrier {
+      tlist = @event_handlers[event_class]
+      if tlist.nil?
+        tlist = @event_handlers[event_class] = []
+      end
+      
+      tickets = []
+      args.each { |o|
+        tickets << Wakame.gen_id
+        @tickets.store(tickets.last, [event_class, o])
+        tlist << tickets.last
+      }
+      
+      if blk
+        tickets << Wakame.gen_id
+        @tickets.store(tickets.last, [event_class, blk])
+        tlist << tickets.last
+      end
+
         # Return in array if num of ticket to be returned is more than or equal 2.
-        return tickets.size > 1 ? tickets : tickets.first
+        tickets.size > 1 ? tickets : tickets.first
       }
     end
-    
-    def unsubscribe(ticket)
-      self.synchronize {
-      ary = @tickets.delete(ticket)
-      return nil if ary.nil?
-      log.debug("Event unsubscribe(#{ticket})")
 
-      tlist = @event_handlers[ary[0]]
-      if tlist.locked?
-        @unsubscribe_queue << ticket
-      else
-        #tlist.synchronize {
-          tlist.delete(ticket)
-        #}
+    def unsubscribe(ticket)
+      unless @tickets.has_key?(ticket)
+        #Wakame.log.warn("EventHander.unsubscribe(#{ticket}) has been tried but the ticket was not registered.")
+        return nil
       end
-      ticket
+      
+      EM.barrier {
+        log.debug("EventHandler.unsubscribe(#{ticket})")
+
+        @unsubscribe_queue << ticket
+        ticket
       }
     end
     
     def fire_event(event_obj)
-      raise TypeError unless event_obj.is_a?(Event::Base)
+      raise ArgumentError unless event_obj.is_a?(Event::Base)
       log_msg = ""
       log_msg = " #{event_obj.log_message}" unless event_obj.log_message.nil?
 
@@ -114,36 +99,44 @@ module Wakame
       tlist = @event_handlers[event_obj.class]
       return if tlist.nil?
 
-      run_handlers = proc {
-        self.synchronize {
-          #tlist.synchronize {
-          tlist.each { |t|
-            ary = @tickets[t]
-            c = ary[1]
-            if c.nil?
-              next
-            end
+      run_callbacks = proc {
+        @unsubscribe_queue.each { |t|
+          @tickets.delete(t)
+          tlist.delete(t)
+        }
 
-            begin 
-              c.call(event_obj)
-            rescue => e
-              log.error(e)
-              raise e
-            end
-              
-          }
-
-          while t = @unsubscribe_queue.pop
-            tlist.delete(t)
+        tlist.each { |t|
+          ary = @tickets[t]
+          c = ary[1]
+          if c.nil?
+            next
+          end
+          
+          begin 
+            c.call(event_obj)
+          rescue => e
+            log.error(e)
+            #raise e
           end
         }
+        
+        @unsubscribe_queue.each { |t|
+          @tickets.delete(t)
+          tlist.delete(t)
+        }
       }
-
-      @handler_run_queue.push(run_handlers)
+    
+      #@handler_run_queue.push(run_handlers)
+      EventMachine.next_tick {
+        begin 
+          run_callbacks.call
+        rescue => e
+          Wakame.log.error(e)
+        end
+      }
     end
     
     def reset(event_class=nil)
-      self.synchronize {
       if event_class.nil?
         @event_handlers.clear
         @tickets.clear
@@ -155,8 +148,8 @@ module Wakame
           @event_handlers[event_class.to_s].clear
         end
       end
-      }
     end
+    thread_immutable_methods :reset
 
   end
 
@@ -318,7 +311,6 @@ module Wakame
 
     class ActionStart < ActionEvent
     end
-
     class ActionComplete < ActionEvent
     end
     class ActionFailed < ActionEvent
@@ -327,10 +319,31 @@ module Wakame
         super(action)
         @exception = e
       end
-      
     end
 
+    class JobEvent < Base
+      attr_reader :job_id
+      def initialize(job_id)
+        super()
+        @action = job_id
+      end
 
+      def log_message
+        "#{@action.class}"
+      end
+    end
+    class JobStart < JobEvent
+    end
+    class JobComplete < JobEvent
+    end
+    class JobFailed < JobEvent
+      attr_reader :exception
+      def initialize(job_id, e)
+        super(job_id)
+        @exception = e
+      end
+    end
+    
 
     class AgentShutdown < Base; end
     class MasterShutdown < Base; end

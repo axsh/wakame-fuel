@@ -1,12 +1,12 @@
 #!/usr/bin/ruby
 
-require 'sync'
 require 'ostruct'
 
 require 'wakame'
 require 'wakame/manager'
 require 'wakame/event'
 require 'wakame/configuration_template'
+require 'wakame/util'
 
 module Wakame
   module Service
@@ -30,68 +30,55 @@ module Wakame
         end
       end
 
+      include ThreadImmutable
+
       attr_reader :dg, :instance_id, :status_changed_at, :rule_engine, :master
       attr_reader :status
 
       STATUS_OFFLINE = 0
       STATUS_ONLINE = 1
       STATUS_PARTIAL_ONLINE = 2
-
       
       def initialize(master, &blk)
-        extend(Sync_m)
+        bind_thread
         @master = master
         @instance_id =Wakame.gen_id
         prepare
-
+        
         instance_eval(&blk) if blk
         
         self.class.instance_collection[@instance_id] = self
       end
-
+      
       def add_service(service_property, name=nil)
-        self.synchronize {
-          #if name.nil? || @name2prop.has_key? name
-          #  name = "#{service_property.class.to_s}#{name2prop.size + 1}"
-          #end
-          raise "Duplicate service property registration" if @properties.has_key? service_property.class.to_s
-          @properties[service_property.class.to_s]=service_property
-          @dg.add_object(service_property.class.to_s)
-
-          #name
-        }
+        #if name.nil? || @name2prop.has_key? name
+        #  name = "#{service_property.class.to_s}#{name2prop.size + 1}"
+        #end
+        raise "Duplicate service property registration" if @properties.has_key? service_property.class.to_s
+        @properties[service_property.class.to_s]=service_property
+        @dg.add_object(service_property.class.to_s)
+        
+        #name
       end
-
-#       def add_service(service_property)
-#         svc_inst = Service::ServiceInstance.new(service_property)
-#         @services.synchronize {
-#           svc_inst.bind_cluster(self)
-
-#           @services[svc_inst.instance_id]=svc_inst
-#           @dg.add_service(service_property.class)
-#         }
-#         svc_inst.instance_id
-#       end
-
+      thread_immutable_methods :add_service
+      
       def set_dependency(prop_name1, prop_name2)
-        self.synchronize {
-          prop1 = @properties[prop_name1.to_s]
-          prop2 = @properties[prop_name2.to_s]
-          
-          return if !(prop1.nil? || prop2.nil?) && prop1 != prop2
-          @dg.set_dependency(prop_name1.to_s, prop_name2.to_s)
-        }
+        prop1 = @properties[prop_name1.to_s]
+        prop2 = @properties[prop_name2.to_s]
+        
+        return if !(prop1.nil? || prop2.nil?) && prop1 != prop2
+        @dg.set_dependency(prop_name1.to_s, prop_name2.to_s)
       end
+      thread_immutable_methods :set_dependency
 
       def included_instance?(service_instance_id)
-        self.synchronize {
-          @services.has_key? service_instance_id
-        }
+        @services.has_key? service_instance_id
       end
 
 
       def shutdown
       end
+      thread_immutable_methods :shutdown
 
       # Create service instance objects which will be equivalent with the number min_instance.
       # The agents are not assigned at this point.
@@ -101,7 +88,7 @@ module Wakame
           each_instance(p.class) { |svc|
             count += 1
           }
-
+          
           if p.min_instance - count > 0
             (p.min_instance - count).times {
               propagate(p.class)
@@ -109,39 +96,39 @@ module Wakame
           end
         }
       end
+      thread_immutable_methods :launch
 
 
       def destroy(service_instance_id)
-        self.synchronize {
-          raise("Unknown service instance : #{service_instance_id}") unless included_instance?(service_instance_id)
-          svc_inst = @services[service_instance_id]
-          old_agent = svc_inst.unbind_agent
-          svc_inst.unbind_cluster
-          @services.delete(service_instance_id)
-          if old_agent
-            Wakame.log.debug("#{svc_inst.property.class}(#{svc_inst.instance_id}) has been destroied from Agent #{old_agent.agent_id}")
-          else
-            Wakame.log.debug("#{svc_inst.property.class}(#{svc_inst.instance_id}) has been destroied.")
-          end
-        }
+        raise("Unknown service instance : #{service_instance_id}") unless included_instance?(service_instance_id)
+        svc_inst = @services[service_instance_id]
+        old_agent = svc_inst.unbind_agent
+        svc_inst.unbind_cluster
+        @services.delete(service_instance_id)
+        if old_agent
+          Wakame.log.debug("#{svc_inst.property.class}(#{svc_inst.instance_id}) has been destroied from Agent #{old_agent.agent_id}")
+        else
+          Wakame.log.debug("#{svc_inst.property.class}(#{svc_inst.instance_id}) has been destroied.")
+        end
       end
+      thread_immutable_methods :destroy
 
       def propagate(property_name, agent=nil)
-        self.synchronize {
-          prop = @properties[property_name.to_s] || raise("Unknown property name: #{property_name.to_s}")
-          if instance_count(property_name) >= prop.max_instance
-            Wakame.log.info("#{prop.class} has been reached max_instance limit: max=#{prop.max_instance}")
-            raise ServicePropagationError, "#{prop.class} has been reached to max_instance limit" 
-          end
-          
-          svc_inst = Service::ServiceInstance.new(prop)
-          svc_inst.bind_cluster(self)
-          svc_inst.bind_agent(agent) if agent
+        prop = @properties[property_name.to_s] || raise("Unknown property name: #{property_name.to_s}")
+        if instance_count(property_name) >= prop.max_instance
+          Wakame.log.info("#{prop.class} has been reached max_instance limit: max=#{prop.max_instance}")
+          raise ServicePropagationError, "#{prop.class} has been reached to max_instance limit" 
+        end
+        
+        svc_inst = Service::ServiceInstance.new(prop)
+        svc_inst.bind_cluster(self)
+        svc_inst.bind_agent(agent) if agent
 
-          @services[svc_inst.instance_id]=svc_inst
-          svc_inst
-        }
+        @services[svc_inst.instance_id]=svc_inst
+        svc_inst
       end
+      thread_immutable_methods :propagate
+
 
       def instance_count(property_name=nil)
         return @services.size if property_name.nil?
@@ -160,30 +147,28 @@ module Wakame
 
       def each_instance(filter_prop_name=nil, &blk)
         ary = nil
-        self.synchronize {
-          prop_obj = nil
-          if filter_prop_name.is_a? String
-            filter_prop_name = Wakame.str2const(filter_prop_name)
-          end
+        prop_obj = nil
+        if filter_prop_name.is_a? String
+          filter_prop_name = Wakame.str2const(filter_prop_name)
+        end
 
-          if filter_prop_name.is_a? Module
-            prop_obj = @properties.find { |k, v|
-              v.kind_of? filter_prop_name
-            }
-            if prop_obj.is_a? Array
-              prop_obj = prop_obj[1]
-            else
-              raise("Unknown property name: #{filter_prop_name.to_s}")
-            end
-          end
-
-          if prop_obj.nil?
-            ary = @services.dup
+        if filter_prop_name.is_a? Module
+          prop_obj = @properties.find { |k, v|
+            v.kind_of? filter_prop_name
+          }
+          if prop_obj.is_a? Array
+            prop_obj = prop_obj[1]
           else
-            ary = @services.find_all{|k, v| v.property.class == prop_obj.class }
-            ary = Hash[*ary.flatten]
+            raise("Unknown property name: #{filter_prop_name.to_s}")
           end
-        }
+        end
+
+        if prop_obj.nil?
+          ary = @services.dup
+        else
+          ary = @services.find_all{|k, v| v.property.class == prop_obj.class }
+          ary = Hash[*ary.flatten]
+        end
 
         ary.each {|k,v| blk.call v } if block_given? && ary
         ary
@@ -198,6 +183,7 @@ module Wakame
         end
         @status
       end
+      thread_immutable_methods :status=
 
       def size
         @dg.size
@@ -214,7 +200,6 @@ module Wakame
 
 
       def dump_status
-        self.synchronize {
         r = {:name => self.class.to_s, :status => self.status }
         
         r[:instances]={}
@@ -229,70 +214,64 @@ module Wakame
         }
 
         r
-        }
       end
+      thread_immutable_methods :dump_status
       
       private
       def prepare
         @dg = DependencyGraph.new(self)
         @services = {}
-
+        
         @properties = {}
         @name2prop ={}
         @status = STATUS_OFFLINE
         @status_changed_at = Time.now
         @rule_engine = nil
       end
-
+      thread_immutable_methods :prepare
+      
     end
     
     
     class DependencyGraph
-
+      
       require 'rgl/adjacency'
       require 'rgl/traversal'
       
       def initialize(service_cluster)
-        extend(Sync_m)
         @graph = RGL::DirectedAdjacencyGraph.new
         @graph.add_vertex(0)
         @service_cluster = service_cluster
         @nodes = {}
       end
-
+      
       
       def add_object(obj)
-        self.synchronize {
-          @nodes[obj.hash] = obj
-          @graph.add_edge(0, obj.hash)
-          return self
-        }
+        @nodes[obj.hash] = obj
+        @graph.add_edge(0, obj.hash)
+        return self
       end
-
+      
       def set_dependency(parent_obj, child_obj)
         return if parent_obj == child_obj
-        self.synchronize {
-          @graph.add_edge(parent_obj.hash, child_obj.hash)
-          
-          @graph.remove_edge(0, child_obj.hash) if @graph.has_edge?(0, child_obj.hash)
-        }
+        @graph.add_edge(parent_obj.hash, child_obj.hash)
+        
+        @graph.remove_edge(0, child_obj.hash) if @graph.has_edge?(0, child_obj.hash)
       end
-
+      
       def size
         @graph.size - 1
       end
-
-
+      
+      
       def bfs(&blk)
         l=[]
-        self.synchronize {
-          bfs = @graph.bfs_iterator(0)
-          bfs.each { |hashid|
-            next if hashid == 0
-            l << hashid
-          }
+        bfs = @graph.bfs_iterator(0)
+        bfs.each { |hashid|
+          next if hashid == 0
+          l << hashid
         }
-
+        
         l.each { |hashid|
           blk.call(@service_cluster.properties[@nodes[hashid]]) if blk
         }
@@ -300,14 +279,15 @@ module Wakame
       
       
     end
-
-
+    
+    
     class ServiceInstance
+      include ThreadImmutable
       attr_reader :instance_id, :service_property, :agent, :service_cluster, :status_changed_at
       attr_accessor :name, :status
       alias :cluster :service_cluster
       alias :property :service_property
-
+      
       class << self
         def instance_collection
           @collection ||= {}
@@ -316,9 +296,9 @@ module Wakame
       
       
       def initialize(service_property)
+        bind_thread
         raise TypeError unless service_property.is_a?(Property)
-        extend(Sync_m)
-
+        
         @instance_id = Wakame.gen_id
         @service_property = service_property
         @status = Service::STATUS_OFFLINE
@@ -328,26 +308,24 @@ module Wakame
       end
       
       def status=(new_status)
-        self.synchronize {
-          if @status != new_status
-            prev_status = @status
-            set_status(new_status, Time.now)
-            #@status = new_status
-            #@status_changed_at = Time.now
-
-            event = Event::ServiceStatusChanged.new(@instance_id, @service_property, @status, prev_status)
-            event.time = @status_changed_at.dup
-            EH.fire_event(event)
-          end
-        }
+        if @status != new_status
+          prev_status = @status
+          set_status(new_status, Time.now)
+          
+          event = Event::ServiceStatusChanged.new(@instance_id, @service_property, @status, prev_status)
+          event.time = @status_changed_at.dup
+          EH.fire_event(event)
+        end
         @status
       end
+      thread_immutable_methods :status=
       
       def set_status(new_status, changed_at)
         @status = new_status
         @status_changed_at = changed_at
       end
-
+      thread_immutable_methods :set_status
+      
       def property
         @service_property
       end
@@ -355,67 +333,138 @@ module Wakame
       def type
         @service_property.class
       end
-
+      
       def bind_agent(agent)
-        self.synchronize {
-          return if agent.nil? || (@agent && agent.agent_id == @agent.agent_id)
-          raise "The agent (#{agent.agent_id}) has been assigned same service already: #{property.class}" if agent.has_service_type?(property.class)
+        return if agent.nil? || (@agent && agent.agent_id == @agent.agent_id)
+        raise "The agent (#{agent.agent_id}) has been assigned same service already: #{property.class}" if agent.has_service_type?(property.class)
         
-          # UboundAgent & BoundAgent event occured only when the different agent obejct is assigned.
-          unbind_agent
-          @agent = agent
-          @agent.synchronize {
-            @agent.services[instance_id]=self
-          }
-
-          EH.fire_event(Event::ServiceBoundAgent.new(self, agent))
-          @agent
-        }
+        # UboundAgent & BoundAgent event occured only when the different agent obejct is assigned.
+        unbind_agent
+        @agent = agent
+        @agent.services[instance_id]=self
+        
+        EH.fire_event(Event::ServiceBoundAgent.new(self, agent))
+        @agent
       end
+      thread_immutable_methods :bind_agent
       
       def unbind_agent
-        self.synchronize {
-          return if @agent.nil?
-          @agent.synchronize {
-            @agent.services.delete(instance_id)
-          }
-          old_item = @agent
-          @agent = nil
-          EH.fire_event(Event::ServiceUnboundAgent.new(self, old_item))
-          old_item
-        }
+        return if @agent.nil?
+        @agent.services.delete(instance_id)
+        old_item = @agent
+        @agent = nil
+        EH.fire_event(Event::ServiceUnboundAgent.new(self, old_item))
+        old_item
       end
+      thread_immutable_methods :unbind_agent
 
       def bind_cluster(cluster)
-        self.synchronize {
         return if cluster.nil? || (@service_cluster && cluster.instance_id == @service_cluster.instance_id)
         unbind_cluster
         @service_cluster = cluster
         EH.fire_event(Event::ServiceBoundCluster.new(self, cluster))
-        }
       end
-      
+      thread_immutable_methods :bind_cluster
+
       def unbind_cluster
-        self.synchronize {
         return if @service_cluster.nil?
         old_item = @service_cluster
         @service_cluster = nil
         EH.fire_event(Event::ServiceUnboundCluster.new(self, old_item))
-        }
       end
+      thread_immutable_methods :unbind_cluster
       
       def export_binding
         binding
       end
-
+      
       def dump_status
         {:type => self.class.to_s, :status => status, :property => property.class.to_s, :instance_id => instance_id}
       end
+      thread_immutable_methods :dump_status
 
-
+      
     end
 
-    
+
+    class VmSpec
+      def self.define(&blk)
+        spec = self.new
+        spec.instance_eval(&blk)
+        spec
+      end
+
+      def initialize
+        @environments = {}
+      end
+
+      def current
+        environment(Wakame.config.vm_environment)
+      end
+
+      def environment(klass_key, &blk)
+        envobj = @environments[klass_key]
+        if envobj.nil?
+          #klass = self.class.constants.find{ |c| c.to_s == klass_key.to_s }
+          if self.class.const_defined?(klass_key)
+            envobj = @environments[klass_key] = Wakame.new_([self.class.to_s, klass_key.to_s].join('::'))
+          else
+            raise "Undefined VM Spec template : #{klass_key}"
+          end
+        end
+
+        envobj.instance_eval(&blk) if blk
+
+        envobj
+      end
+
+      class Template
+        def self.inherited(klass)
+          klass.class_eval {
+            def self.default_attr_values
+              @default_attr_values ||= {}
+            end
+            def self.def_attribute(name, default_value=nil)
+              default_attr_values[name.to_sym]= default_value
+              attr_accessor(name)
+            end
+          }
+        end
+        
+        def initialize
+          @attribute_keys=[]
+          self.class.default_attr_values.each { |n, v|
+            instance_variable_set("@#{n.to_s}", v)
+            #self.instance_eval %Q{ #{n} = #{v} }
+            @attribute_keys << n
+          }
+        end
+
+        def attrs
+          a={}
+          @attribute_keys.each { |k|
+            a[k.to_sym]=instance_variable_get("@#{k.to_s}")
+          }
+          a
+        end
+
+        def satisfy?(agent)
+          true
+        end
+      end
+
+      class EC2 < Template
+        AWS_VERSION=''
+        def_attribute :instance_type, 'm1.small'
+        def_attribute :availability_zone
+        def_attribute :key_name
+        def_attribute :security_groups, []
+      end
+
+      class StandAlone < Template
+      end
+    end
+
     class Property
       attr_accessor :check_time, :min_instance, :max_instance, :vm_spec
       attr_accessor :template
@@ -423,13 +472,18 @@ module Wakame
       def initialize(check_time=5)
         @check_time = check_time
         @min_instance = @max_instance = 1
-        @vm_spec = '__default__'
+        @vm_spec = VmSpec.define {
+          environment(:EC2) { |ec2|
+            ec2.instance_type = 'm1.small'
+            ec2.availability_zone = 'us-east-1c'
+            ec2.security_groups = ['default']
+          }
+          
+          environment(:StandAlone) {
+          }
+        }
       end
 
-      def eval_agent(agent)
-        true
-      end
-      
       def dump_status
         {:type => self.class.to_s, :min_instance => min_instance, :max_instance=> max_instance }
       end
@@ -449,6 +503,9 @@ module Wakame
       end
 
     end
+
+    Resource = Property
+
   end
 end
 
@@ -471,7 +528,7 @@ module Wakame
             register_rule(Rule::ClusterStatusMonitor.new)
             register_rule(Rule::LoadHistoryMonitor.new)
             register_rule(Rule::ReflectPropagation_LB_Subs.new)
-            register_rule(Rule::ScaleOutWhenHighLoad.new)
+            #register_rule(Rule::ScaleOutWhenHighLoad.new)
             #register_rule(Rule::ShutdownUnusedVM.new)
           }
 
@@ -486,9 +543,9 @@ module Wakame
           add_service(Apache_LB.new)
           add_service(MySQL_Master.new)
 
-          dg.set_dependency(Apache_WWW, Apache_LB)
-          dg.set_dependency(Apache_APP, Apache_LB)
-          dg.set_dependency(MySQL_Master, Apache_APP)
+          set_dependency(Apache_WWW, Apache_LB)
+          set_dependency(Apache_APP, Apache_LB)
+          set_dependency(MySQL_Master, Apache_APP)
 
           @rule_engine = RuleSet.new(self)
         }
@@ -606,11 +663,11 @@ module Wakame
         @listen_port = 80
         @listen_port_https = 443
         @template = ConfigurationTemplate::ApacheTemplate.new(:lb)
-        @elastic_ip = '174.129.234.105'
+        @elastic_ip = '174.129.218.202'
       end
 
       def after_start(svc)
-        vm_manipulator = Wakame.new_( Wakame.config.vm_manipulation_class )
+        vm_manipulator = VmManipulator.create
         Wakame.log.info("Associating the Elastic IP #{@elastic_ip} to #{svc.agent.agent_id}")
         vm_manipulator.associate_address(svc.agent.agent_id, @elastic_ip)
       end
@@ -651,7 +708,7 @@ module Wakame
       end
 
       def before_start(svc)
-        vm_manipulator = Wakame.new_( Wakame.config.vm_manipulation_class )
+        vm_manipulator = VmManipulator.create
         res = vm_manipulator.describe_volume(@ebs_volume)
         Wakame.log.debug("describe_volume(#{@ebs_volume}): #{res.inspect}")
 

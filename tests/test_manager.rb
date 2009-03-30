@@ -27,8 +27,7 @@ class TestManager < Test::Unit::TestCase
     5.times {
       EM.run{
         Wakame::Master.start
-        assert_equal(Wakame::Master, Wakame::Master.start.class) # Get cached instance returned
-        EM.next_tick { Wakame::Master.stop }
+        EM.add_timer(1) { Wakame::Master.stop }
       }
     }
   end
@@ -40,9 +39,9 @@ class TestManager < Test::Unit::TestCase
       jq = m.command_queue
 
       EM.next_tick {
-        jq.send_cmd(Wakame::Packets::Command::Nop.new, proc{Wakame::Master.stop})
+        jq.send_cmd(Wakame::Manager::Commands::Nop.new)
         EM.add_timer(3) {
-         Wakame::Master.stop
+          Wakame::Master.stop
         }
       }
     }
@@ -143,7 +142,6 @@ class TestManager < Test::Unit::TestCase
 
     def initialize()
       connect {
-        
         EM.add_timer(1){
           self.publish_to('ping', Marshal.dump(Wakame::Packets::Agent::Ping.new(MockAgent.new)))
         }
@@ -154,22 +152,46 @@ class TestManager < Test::Unit::TestCase
 
 
   def test_agent_monitor
+    flag_statchanged=false
+    flag_monitored=false
+
+    EM.next_tick {
+    Wakame::EH.subscribe(Wakame::Event::AgentStatusChanged) { |event|
+      flag_statchanged = true
+    }
+    Wakame::EH.subscribe(Wakame::Event::AgentMonitored) { |event|
+      flag_monitored = true
+    }
+
+    Wakame::EH.subscribe(Wakame::Event::AgentPong) { |event|
+      puts "#{event.class.to_s} has been received from #{event.agent.agent_id}"
+      assert_equal(1, master.agent_monitor.agents.size)
+      
+      EM.add_timer(1) {
+        Wakame::Master.stop
+        DummyResponder2.stop
+      }
+    }
+    }
+
     EM.run {
       master = Wakame::Master.start
       DummyResponder2.start
-
-      Wakame::EH.subscribe(Wakame::Event::AgentPong) { |event|
-        puts "#{event.class.to_s} has been received from #{event.agent.agent_id}"
-        assert_equal(1, master.agent_monitor.agents.size)
-
-        EM.add_timer(1) {
-          Wakame::Master.stop
-          DummyResponder2.stop
-        }
-      }
-
+EM.add_periodic_timer(1) {
+next
+          buf = ''
+          buf << "<--- RUNNING THREADS --->\n"
+          ThreadGroup::Default.list.each { |i|
+            buf << "#{i.inspect} #{i[:name].to_s}\n"
+          }
+          buf << ">--- RUNNING THREADS ---<\n"
+          puts buf
+}
 
     }
+
+    assert(flag_monitored)
+    assert(flag_statchanged)
   end
   
   

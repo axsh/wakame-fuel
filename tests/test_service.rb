@@ -27,4 +27,29 @@ class TestService < Test::Unit::TestCase
       assert(svc.property.is_a?(Apache_LB))
     }
   end
+
+
+  def test_vmspec
+    spec = VmSpec.define {
+      environment(:EC2) { |ec2|
+        ec2.instance_type = 'm1.small'
+        ec2.availability_zone = 'us-east-c1'
+        ec2.security_groups << 'default'
+      }
+      
+      environment(:StandAlone) {
+      }
+    }
+
+
+    Wakame.config.vm_environment = :EC2
+    p spec.current.attrs
+    Wakame.config.vm_environment = :StandAlone
+    p spec.current.attrs
+
+    assert_raise(RuntimeError) {
+      Wakame.config.vm_environment = :EC3
+      spec.current.attrs
+    }
+  end
 end

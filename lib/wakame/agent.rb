@@ -5,7 +5,6 @@ require 'eventmachine'
 require 'mq'
 require 'thread'
 require 'mutex_m'
-require 'sync'
 require 'forwardable'
 
 require 'wakame'
@@ -25,17 +24,12 @@ module Wakame
 
     attr_reader :timers
     def initialize 
-      extend(Sync_m)
       @timers = {}
       @svcs = {}
     end
     
     def monitors(&blk)
-      l = nil
-      self.synchronize {
-        l = @svcs.dup
-      }
-      l.each { |k,v|
+      @svcs.each { |k,v|
         blk.call(v) if blk
       }
     end
@@ -51,18 +45,15 @@ module Wakame
     end
 
     def register(runner, check_time=nil)
-      self.synchronize {
         raise "Duplicate service registration : #{runner.property.class}"  if is_monitored?(runner)
         node = Node.new(runner, self)
 
         @svcs[runner.instance_id]=node
         @timers[runner.instance_id]=CheckerTimer.new((check_time || runner.property.check_time), node)
         log.debug("#{runner.property.class.to_s} has been registered in monitor")
-      }
     end
 
     def unregister(instance_id)
-      self.synchronize {
         raise "Can not find the instance : #{instance_id}"  unless is_monitored?(instance_id)
         node = @svcs[instance_id]
 
@@ -71,7 +62,6 @@ module Wakame
         t.cancel if t
         @timers.delete(instance_id)
         log.debug("#{node.runner.property.class} has been unregistered from monitor")
-      }
     end
 
     def suspend_monitor
@@ -89,7 +79,6 @@ module Wakame
 
       def initialize(runner, svc_mon)
         raise TypeError unless runner.is_a?(ServiceRunner)
-        extend(Sync_m)
         @runner = runner
         @assigned_status = @status = Service::STATUS_UNKNOWN
         @status_changed_at = Time.now
@@ -106,18 +95,16 @@ module Wakame
       end
 
       def status=(status)
-        self.synchronize {
-          if @status != status
-            prev_status = @status
-            @status = status
-            @status_changed_at = Time.now
-            log.debug "Service status changed : #{runner.property.class} id=#{runner.instance_id} : #{prev_status} -> #{@status}"
-
-            event = Event::ServiceStatusChanged.new(@runner.instance_id, @runner.property, @status, prev_status)
-            event.time = @status_changed_at.dup
-            EH.fire_event(event)
-          end
-        }
+        if @status != status
+          prev_status = @status
+          @status = status
+          @status_changed_at = Time.now
+          log.debug "Service status changed : #{runner.property.class} id=#{runner.instance_id} : #{prev_status} -> #{@status}"
+          
+          event = Event::ServiceStatusChanged.new(@runner.instance_id, @runner.property, @status, prev_status)
+          event.time = @status_changed_at.dup
+          EH.fire_event(event)
+        end
         self.status
       end
 
@@ -240,6 +227,11 @@ module Wakame
     def initialize(opts={})
       collect_system_info
 
+      EM.barrier {
+        Wakame.log.info("Binding thread info for EventHandler.")
+        EventHandler.instance.bind_thread(Thread.current)
+      }
+
       connect(opts) {
 
         EM.add_periodic_timer(10) { 
@@ -324,6 +316,8 @@ module Wakame
       ping = Packets::Agent::Ping.new(self, services)
       publish_to('ping', Marshal.dump(ping))
     end
+
+
 
     private
     def collect_system_info

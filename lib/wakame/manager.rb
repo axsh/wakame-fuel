@@ -6,8 +6,7 @@ require 'eventmachine'
 require 'amqp'
 require 'mq'
 require 'thread'
-require 'mutex_m'
-require 'drb/drb'
+require 'emdrb'
 
 require 'wakame'
 require 'wakame/amqp_client'
@@ -22,62 +21,35 @@ require 'wakame/configuration_template'
 module Wakame
   
   class CommandQueue
-    include Wakame
-    
-    attr_reader :master, :last_command
-
+    attr_reader :master
 
     def initialize(master)
       @master = master
-      @queue_id = gen_id
-      @cmd_queue = Queue.new
 
-      @cmd_t = Thread.start {
-        log.debug "Started command queue thread: #{Thread.current.inspect} waiting=#{@cmd_queue.num_waiting}"
-        
-        while cmd = @cmd_queue.pop
-          @last_command = cmd = cmd[0]
-          begin 
-            process_command(cmd)
-          rescue => e
-            log.error(e)
-            raise e
-          end
-        end
-      }
-      @cmd_t[:name]="#{self.class} command queue"
+      #DRb.start_service(Wakame.config.drb_command_server_uri, Manager::CommandDelegator.new(self))
+      @drb_server = DRb.start_drbserver(Wakame.config.drb_command_server_uri, Manager::CommandDelegator.new(self))
+    end
 
-      DRb.start_service(Wakame.config.drb_command_server_uri, Manager::CommandDelegator.new(self))
+    def shutdown
+      #DRb.stop_service()
+      @drb_server.stop_service()
     end
 
     def send_cmd(cmd)
-      @cmd_queue.push([cmd])
-    end
-
-    private
-    def process_command(command)
-      log.debug "Start process_command(#{command.inspect}) on #{Thread.current.inspect}"
-
-      EH.fire_event(Event::CommandReceived.new(command))
+      begin 
+        EH.fire_event(Event::CommandReceived.new(cmd))
+      rescue => e
+        Wakame.log.error(e)
+      end
     end
     
   end
-
-
-
-
-  class InstanceMonitor
-    def initialize(master)
-      @master = master
-      
-    end
-  end
-
 
   class AgentMonitor
     include Wakame
 
     class Agent
+      include ThreadImmutable
       STATUS_DOWN=0
       STATUS_UP=1
       STATUS_UNKNOWN=2
@@ -85,10 +57,11 @@ module Wakame
 
       MASTER_LOCAL_AGENT_ID='__local__'
 
-      attr_accessor :agent_id, :status, :uptime, :last_ping_at, :attr, :services
+      attr_accessor :agent_id, :uptime, :last_ping_at, :attr, :services
+      thread_immutable_methods :agent_id=, :uptime=, :last_ping_at=, :attr=, :services=
 
       def initialize
-        extend(Sync_m)
+        bind_thread
         @services = {}
       end
 
@@ -99,6 +72,8 @@ module Wakame
       def [](key)
         attr[key]
       end
+
+      attr_reader :status
 
       def status=(status)
         if @status != status
@@ -112,6 +87,7 @@ module Wakame
         end
         @status
       end
+      thread_immutable_methods :status=
       
       def has_service_type?(key)
         svc_class = case key
@@ -137,86 +113,77 @@ module Wakame
       
     end
 
-
+    include ThreadImmutable
     attr_reader :agents, :master, :gc_period
     def initialize(master)
-      extend(Sync_m)
+      bind_thread
       @master = master
       @agents = {}
-      @agents.extend(Sync_m)
       @services = {}
       @agent_timeout = 31.to_f
       @agent_kill_timeout = @agent_timeout * 2
       @gc_period = 20.to_f
 
       # GC event trigger for agent timer & status
-      agent_timeout = proc {
+      calc_agent_timeout = proc {
         #log.debug("Started agent GC : agents.size=#{@agents.size}, mutex locked=#{@agents.locked?.to_s}")
-        @agents.synchronize {
-          #base_time = Time.now
-          kill_list=[]
-          @agents.each { |agent_id, agent|
-            next if agent.status == AgentMonitor::Agent::STATUS_DOWN
-            #diff_time = base_time - agent.last_ping_at
-            diff_time = Time.now - agent.last_ping_at
-            #log.debug "AgentMonitor GC : #{agent_id}: #{diff_time}"
-            if diff_time > @agent_timeout.to_f
-              agent.status = AgentMonitor::Agent::STATUS_TIMEOUT
-            end
-
-            if diff_time > @agent_kill_timeout.to_f
-              kill_list << agent_id
-            end
-          }
-
-          kill_list.each { |agent_id|
-              agent = @agents.delete(agent_id)
-              EH.fire_event(Event::AgentUnMonitored.new(agent)) unless agent.nil?
-          }
-          #log.debug("Finished agent GC")
+        kill_list=[]
+        @agents.each { |agent_id, agent|
+          next if agent.status == AgentMonitor::Agent::STATUS_DOWN
+          diff_time = Time.now - agent.last_ping_at
+          #log.debug "AgentMonitor GC : #{agent_id}: #{diff_time}"
+          if diff_time > @agent_timeout.to_f
+            agent.status = AgentMonitor::Agent::STATUS_TIMEOUT
+          end
+          
+          if diff_time > @agent_kill_timeout.to_f
+            kill_list << agent_id
+          end
         }
+        
+        kill_list.each { |agent_id|
+          agent = @agents.delete(agent_id)
+          EH.fire_event(Event::AgentUnMonitored.new(agent)) unless agent.nil?
+        }
+        #log.debug("Finished agent GC")
       }
-      @agent_timeout_timer = EventMachine::PeriodicTimer.new(@gc_period, proc {
-                                                               EM.defer agent_timeout
-                                                             })
-
+      
+      @agent_timeout_timer = EventMachine::PeriodicTimer.new(@gc_period, calc_agent_timeout)
       
       master.add_subscriber('ping') { |data|
         ping = Marshal.load(data)
-
+        
         # Common member variables to be updated
         set_report_values = proc { |agent|
           agent.status = AgentMonitor::Agent::STATUS_UP
           agent.uptime = 0
           agent.last_ping_at = Time.new
-
+          
           agent.attr = ping.attr
-
+          
           agent.services.clear
           ping.services.each { |i|
             agent.services[i[:instance_id]] = Service::ServiceInstance.instance_collection[i[:instance_id]] || next
           }
         }
-
-        @agents.synchronize {
-          agent = @agents[ping.agent_id]
-          if agent.nil?
-            agent = Agent.new
-            agent.agent_id = ping.agent_id
-
-            set_report_values.call(agent)
-
-            @agents[ping.agent_id]=agent
-            EH.fire_event(Event::AgentMonitored.new(agent))
-          else
-            set_report_values.call(agent)
-          end
-
-
-          EH.fire_event(Event::AgentPong.new(agent))
-        }
+        
+        agent = @agents[ping.agent_id]
+        if agent.nil?
+          agent = Agent.new
+          agent.agent_id = ping.agent_id
+          
+          set_report_values.call(agent)
+          
+          @agents[ping.agent_id]=agent
+          EH.fire_event(Event::AgentMonitored.new(agent))
+        else
+          set_report_values.call(agent)
+        end
+        
+        
+        EH.fire_event(Event::AgentPong.new(agent))
       }
-
+      
       master.add_subscriber('agent_event') { |data|
         event_response = Marshal.load(data) # Packet::EventResponse
         event = event_response.event
@@ -225,11 +192,11 @@ module Wakame
           svc_inst = Service::ServiceInstance.instance_collection[event.instance_id]
           if svc_inst
             svc_inst.set_status(event.status, event.time)
-
+            
             tmp_event = Event::ServiceStatusChanged.new(event.instance_id, svc_inst.property, event.status, event.previous_status)
             tmp_event.time = event.time
             EH.fire_event(tmp_event)
-
+            
             if event.previous_status != Service::STATUS_ONLINE && event.status == Service::STATUS_ONLINE
               tmp_event = Event::ServiceOnline.new(event.instance_id, svc_inst.property)
               tmp_event.time = event.time
@@ -244,16 +211,16 @@ module Wakame
           EH.fire_event(event)
         end
       }
-
+    
       #EH.subscribe(Event::AgentPong) { |event|
       #  event.agent.services.each { |svc_id, svc|
       #    svc = Service::ServiceInstance.instance_collection[svc_id] || next
       #    svc.bind_agent(event.agent)
       #  }
       #}
-
+      
     end
-
+    
 
     def bind_agent(service_instance, &filter)
       agent_id, agent = @agents.find { |agent_id, agent|
@@ -293,7 +260,6 @@ module Wakame
     attr_reader :command_queue, :agent_monitor, :configuration, :service_cluster, :attr
 
     def initialize(opts={})
-      super()
       pre_setup
 
       connect(opts) {
@@ -315,6 +281,10 @@ module Wakame
     end
 
 
+    def cleanup
+      @command_queue.shutdown
+    end
+
     private
     def collect_system_info
       @attr = Wakame.new_( Wakame.config.vm_manipulation_class ).fetch_local_attrs
@@ -322,8 +292,11 @@ module Wakame
 
     def pre_setup
       collect_system_info
-      
 
+      EM.barrier {
+        Wakame.log.info("Binding thread info for EventHandler.")
+        EventHandler.instance.bind_thread(Thread.current)
+      }
     end
 
     def post_setup
@@ -334,7 +307,6 @@ module Wakame
       @service_cluster = Service::WebCluster.new(self)
       # @service_cluster.rule_engine = Manager::RuleEngine.new(self, cluster) {
       # }
-
 
     end
 

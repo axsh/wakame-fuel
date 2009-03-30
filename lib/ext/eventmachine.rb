@@ -1,36 +1,58 @@
 
-module EventMachine
-  def self::defer op, callback = nil
-    @need_threadqueue ||= 0
-    if @need_threadqueue == 0
-      @need_threadqueue = 1
-      require 'thread'
-      @threadqueue = Queue.new
-      @resultqueue = Queue.new
-      @thread_g = ThreadGroup.new
-      20.times {|ix|
-        t = Thread.new {
-          my_ix = ix
-          loop {
-            op,cback = @threadqueue.pop
-            begin
-              result = op.call
-              @resultqueue << [result, cback]
-            rescue => e
-              puts "#{e} in EM defer thread pool : #{Thread.current}"
-              raise e
-            ensure
-              EventMachine.signal_loopbreak
-            end
-          }
-        }
-        @thread_g.add(t)
-      }
-    end
-    
-    @threadqueue << [op,callback]
-  end
+require 'thread'
 
+module EventMachine
+#   def self::defer op, callback = nil
+#     @need_threadqueue ||= 0
+#     if @need_threadqueue == 0
+#       @need_threadqueue = 1
+#       require 'thread'
+#       @threadqueue = Queue.new
+#       @resultqueue = Queue.new
+#       @thread_g = ThreadGroup.new
+#       20.times {|ix|
+#         t = Thread.new {
+#           my_ix = ix
+#           loop {
+#             op,cback = @threadqueue.pop
+#             begin
+#               result = op.call
+#               @resultqueue << [result, cback]
+#             rescue => e
+#               puts "#{e} in EM defer thread pool : #{Thread.current}"
+#               raise e
+#             ensure
+#               EventMachine.signal_loopbreak
+#             end
+#           }
+#         }
+#         @thread_g.add(t)
+#       }
+#     end
+#
+#     @threadqueue << [op,callback]
+#   end
+
+  # Redefine EM's threadpool
+  def self.spawn_threadpool
+    until @threadpool.size == 20
+      thread = Thread.new {
+        loop {
+          op, cback = *@threadqueue.pop
+          begin
+            result = op.call
+            @resultqueue << [result, cback]
+          rescue => e
+            puts "#{e} in EM defer thread pool : #{Thread.current}"
+          ensure
+            EventMachine.signal_loopbreak
+          end
+        }
+      }
+      @threadpool << thread
+    end
+  end
+  
   # 0.12.2 is missing the stub method in pure_ruby backend.
   if EventMachine.library_type == :pure_ruby
     class Connection
@@ -38,6 +60,32 @@ module EventMachine
         # No-op for the time being
       end
     end
+  end
+
+
+  
+  def self.barrier(&blk)
+    # Presumably, Thread.main will return the EM main loop thread.
+    if Thread.current == Thread.main
+        return blk.call
+    end
+
+    q = Queue.new
+    
+    self.next_tick {
+      begin
+        res = blk.call
+        q << [true, res]
+      rescue => e
+        q << [false, e]
+      end
+    }
+    
+    res = q.shift
+    if res[0] == false && res[1].is_a?(Exception)
+      raise res[1]
+    end
+    res[1]
   end
 
 end

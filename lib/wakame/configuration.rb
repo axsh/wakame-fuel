@@ -16,6 +16,7 @@ module Wakame
       :ssh_private_key => nil,
       :drb_command_server_uri => 'druby://localhost:12345',
       :vm_manipulation_class => nil,
+      :vm_environment => nil,
       :amqp_server_uri => nil,
       :unused_vm_live_period => 60 * 10,
       :eventmachine_use_epoll => true
@@ -54,6 +55,7 @@ module Wakame
         config.config_template_root = File.join(config.root, "config", "template")
         config.config_root = '/home/wakame/config'
         config.vm_manipulation_class = 'Wakame::VmManipulator::EC2'
+        config.vm_environment = :EC2
 
         config.ssh_private_key = '/home/wakame/config/root.id_rsa'
 
@@ -69,6 +71,7 @@ module Wakame
         config.config_template_root = File.join(config.root, "config", "template")
         config.config_root = File.join('home', 'wakame', 'config')
         config.vm_manipulation_class = 'Wakame::VmManipulator::StandAlone'
+        config.vm_environment = :StandAlone
         config.amqp_server_uri = 'amqp://localhost/'
       end
     end

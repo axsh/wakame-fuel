@@ -54,7 +54,6 @@ module Wakame
           end
             
           begin
-            @instance.cleanup()
             unless @instance.amqp_client.nil?
               @instance.close { end_proc.call }
             else
@@ -126,17 +125,13 @@ module Wakame
     end
 
 
-
-    #def initialize
-    #  raise 'has to be put in EM.run context' unless EM.reactor_running?
-    #end
-
     def cleanup
     end
 
     def close(&blk)
       closing_proc = proc {
         begin
+          cleanup
           yield if block_given?
         ensure
           @amqp_client = nil
@@ -185,7 +180,7 @@ module Wakame
 
       q = amq.queue(name, opts)
       q.bind( exchange_name, opts ).subscribe {|data|
-        EM.defer proc {
+        EM.next_tick {
           unless queue_subscribers[name].nil?
             queue_subscribers[name].synchronize {
               queue_subscribers[name].each { |p|
