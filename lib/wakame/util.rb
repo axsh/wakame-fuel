@@ -92,3 +92,93 @@ __E__
   end
 
 end
+
+
+
+module AttributeHelper
+
+  PRIMITIVE_CLASSES=[NilClass, TrueClass, FalseClass, Numeric, String, Time, Symbol]
+
+  module ClassMethods
+    def attr_attributes
+      @attr_attributes ||= {}
+    end
+
+    def def_attribute(name, default_value=nil)
+      attr_attributes[name.to_sym]= {:default=>default_value}
+      class_eval <<-__E__
+      def #{name}=(v)
+        @#{name}=v
+      end
+        
+      def #{name}
+        if @#{name}.nil?
+          retrieve_attr_attribute { |a|
+            if a.has_key?(:#{name})
+              @#{name} = a[:#{name}][:default]
+              break
+            end
+          }
+        end
+        @#{name}
+      end
+
+      public :#{name}, :#{name}=
+      __E__
+    end
+    
+  end
+
+  private
+  def self.included(klass)
+    klass.extend ClassMethods
+  end
+
+
+  public
+  def dump_attrs(root=nil)
+    if root.nil? 
+      root = self
+    end
+
+    return dump_internal(root)
+  end
+  #thread_immutable_method :dump_attrs if self.kind_of?(ThreadImmutable)
+  #module_function :dump_attrs
+
+
+  private
+  def retrieve_attr_attribute(&blk)
+    self.class.ancestors.each { |klass|
+      blk.call(klass.attr_attributes) if klass.include?(AttributeHelper)
+    }
+  end
+
+  def dump_internal(root)
+    case root
+    when AttributeHelper
+      t={}
+      t[:type] = root.class.to_s
+
+      retrieve_attr_attribute { |a|
+        a.each_key {|k| t[k] = dump_internal(root.__send__(k.to_sym)) }
+      }
+      t
+    when Array
+      root.collect { |a| dump_internal(a) }
+    when Hash
+      t={}
+      root.each {|k,v| t[k] = dump_internal(v) }
+      t
+    else
+      if PRIMITIVE_CLASSES.any?{|p| root.kind_of?(p) }
+        root
+      #elsif root.respond_to?(:dump_attrs)
+        #dump_internal(root.dump_attrs)
+      else
+        raise TypeError, "#{root.class} does not support to dump attributes"
+      end
+    end
+  end
+
+end
