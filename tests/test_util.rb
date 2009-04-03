@@ -41,4 +41,21 @@ class TestUtilClass < Test::Unit::TestCase
     assert(b.f == nil)
     assert_equal( {:type=>'TestUtilClass::B', :a=>1, :b=>2, :c=>[], :d=>30, :e=>'aaa', :f=>nil}, b.dump_attrs)
   end
+
+
+
+  A={23=>1, 38=>3, 2837=>1, 3727=>4, 937=>1, 184=>5, 328=>2, 8939=>1}
+  def test_sorted_hash1
+    s = SortedHash.new
+    
+    A.keys.sort_by{rand}.each { |k|
+      s[k]=A[k]
+    }
+    
+    assert_equal(A.keys.sort, s.keys)
+    
+    s.clear
+    assert_equal([], s.keys)
+
+  end
 end

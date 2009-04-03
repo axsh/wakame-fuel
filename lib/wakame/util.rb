@@ -182,3 +182,64 @@ module AttributeHelper
   end
 
 end
+
+
+class SortedHash < Hash
+  def initialize
+    @keyorder=[]
+  end
+  
+
+  def store(key, value)
+    raise TypeError, "#{key} is not Comparable" unless key.kind_of?(Comparable)
+    if has_key?(key)
+      ret = super(key, value)
+    else
+      ret = super(key, value)
+      @keyorder << key
+      @keyorder.sort!
+      
+    end
+    ret
+  end
+
+  def []=(key, value)
+    store(key, value)
+  end
+
+  def delete(key, &blk)
+    if has_key?(key)
+      @keyorder.delete(key)
+      super(key, &blk)
+    end
+  end
+
+  def keys
+    @keyorder
+  end
+
+  def each(&blk)
+    @keyorder.each { |k|
+      blk.call(k, self[k])
+    }
+  end
+
+
+  def clear
+    super
+    @keyorder.clear
+  end
+
+  def inspect
+    str = "{"
+    str << @keyorder.collect{|k| "#{k}=>#{self[k]}" }.join(', ')
+    str << "}"
+    str
+  end
+
+  def invert
+    raise NotImplementedError
+  end
+
+end
+
