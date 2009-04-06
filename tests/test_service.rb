@@ -13,10 +13,15 @@ class TestService < Test::Unit::TestCase
   include Wakame::Service
 
   def test_dg
-    c = WebCluster.new
-    c.dg.bfs{ |s|
+    c = WebCluster.new(nil)
+    c.dg.each_level{ |s|
       p s
     }
+
+    p c.dg.levels
+
+    p c.dg.children(MySQL_Master)
+    p c.dg.parents(Apache_APP)
   end
 
 

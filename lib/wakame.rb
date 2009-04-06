@@ -22,6 +22,7 @@ module Wakame
   autoload :Event, 'wakame/event'
   autoload :Service, 'wakame/service'
   autoload :Rule, 'wakame/rule'
+  autoload :Graph, 'wakame/graph'
 
   def gen_id(str=nil)
     Digest::SHA1.hexdigest( (str.nil? ? rand.to_s : str) )

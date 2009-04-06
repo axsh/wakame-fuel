@@ -21,6 +21,7 @@ module Wakame
     STATUS_FAIL = 3
     STATUS_STARTING = 4
     STATUS_STOPPING = 5
+    STATUS_RELOADING = 6
 
     class ServiceCluster
       class << self
@@ -65,8 +66,7 @@ module Wakame
       def set_dependency(prop_name1, prop_name2)
         prop1 = @properties[prop_name1.to_s]
         prop2 = @properties[prop_name2.to_s]
-        
-        return if !(prop1.nil? || prop2.nil?) && prop1 != prop2
+        return unless prop1.is_a?(Property) && prop2.is_a?(Property) && prop1 != prop2
         @dg.set_dependency(prop_name1.to_s, prop_name2.to_s)
       end
       thread_immutable_methods :set_dependency
@@ -235,11 +235,8 @@ module Wakame
     
     class DependencyGraph
       
-      require 'rgl/adjacency'
-      require 'rgl/traversal'
-      
       def initialize(service_cluster)
-        @graph = RGL::DirectedAdjacencyGraph.new
+        @graph = Graph.new
         @graph.add_vertex(0)
         @service_cluster = service_cluster
         @nodes = {}
@@ -249,35 +246,87 @@ module Wakame
       def add_object(obj)
         @nodes[obj.hash] = obj
         @graph.add_edge(0, obj.hash)
-        return self
+        self
       end
       
       def set_dependency(parent_obj, child_obj)
         return if parent_obj == child_obj
         @graph.add_edge(parent_obj.hash, child_obj.hash)
-        
         @graph.remove_edge(0, child_obj.hash) if @graph.has_edge?(0, child_obj.hash)
+        self
       end
       
       def size
         @graph.size - 1
       end
+
+      def parents(obj)
+        obj = case obj
+               when Class
+                 obj.to_s.hash
+               when String
+                 obj.hash
+               else
+                 raise ArgumentError
+               end
+        @graph.parents(obj).collect { |hashid| property_obj(hashid) }
+      end
+
+      def children(obj)
+        obj = case obj
+               when Class
+                 obj.to_s.hash
+               when String
+                 obj.hash
+               else
+                 raise ArgumentError
+               end
+        @graph.children(obj).collect { |hashid| property_obj(hashid) }
+      end
       
-      
-      def bfs(&blk)
-        l=[]
-        bfs = @graph.bfs_iterator(0)
-        bfs.each { |hashid|
-          next if hashid == 0
-          l << hashid
+      def levels(root=nil)
+        root = case root
+               when nil
+                 0
+               when Class
+                 root.to_s.hash
+               when String
+                 root.hash
+               else
+                 raise ArgumentError
+               end
+        n=[]
+        @graph.level_layout(root).each { |l|
+          next if l.size == 1 && l[0] == 0
+          n << l.collect { |hashid| property_obj(hashid)}
+          #n << l.collect { |hashid| @nodes[hashid].to_s }
         }
-        
-        l.each { |hashid|
-          blk.call(@service_cluster.properties[@nodes[hashid]]) if blk
+        n
+      end
+      
+      def each_level(root=nil, &blk)
+        root = case root
+               when nil
+                 0
+               when Class
+                 root.to_s.hash
+               when String
+                 root.hash
+               else
+                 raise ArgumentError
+               end
+        @graph.level_layout(root).each { |l|
+          l.each { |hashid|
+            next if hashid == 0
+            blk.call(@service_cluster.properties[@nodes[hashid]])
+          }
         }
       end
       
-      
+      private
+      def property_obj(hashid)
+        @service_cluster.properties[@nodes[hashid]]
+      end
     end
     
     
@@ -382,7 +431,6 @@ module Wakame
         {:type => self.class.to_s, :status => status, :property => property.class.to_s, :instance_id => instance_id}
       end
       thread_immutable_methods :dump_status
-
       
     end
 
@@ -502,6 +550,11 @@ module Wakame
       def after_stop(service_instance)
       end
 
+      def on_child_changed(action, svc_inst)
+      end
+      def on_parent_changed(action, svc_inst)
+      end
+
     end
 
     Resource = Property
@@ -527,7 +580,7 @@ module Wakame
             register_rule(Rule::MaintainSshKnownHosts.new)
             register_rule(Rule::ClusterStatusMonitor.new)
             register_rule(Rule::LoadHistoryMonitor.new)
-            register_rule(Rule::ReflectPropagation_LB_Subs.new)
+            #register_rule(Rule::ReflectPropagation_LB_Subs.new)
             #register_rule(Rule::ScaleOutWhenHighLoad.new)
             #register_rule(Rule::ShutdownUnusedVM.new)
           }
@@ -666,6 +719,11 @@ module Wakame
         @elastic_ip = '174.129.218.202'
       end
 
+      def on_child_changed(action, svc_inst)
+        action.deploy_configuration(svc_inst)
+        action.trigger_action(ReloadService.new(svc_inst))
+      end
+
       def after_start(svc)
         vm_manipulator = VmManipulator.create
         Wakame.log.info("Associating the Elastic IP #{@elastic_ip} to #{svc.agent.agent_id}")
@@ -723,7 +781,7 @@ module Wakame
           res = vm_manipulator.attach_volume(svc.agent.agent_id, @ebs_volume, @ebs_device)
           Wakame.log.debug(res.inspect)
         else
-          raise "The EBS volume is not ready for attach: #{@ebs_volume}"
+          raise "The EBS volume is not ready to attach: #{@ebs_volume}"
         end
 
       end

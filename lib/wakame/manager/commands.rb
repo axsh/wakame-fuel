@@ -77,13 +77,25 @@ module Wakame
       end
 
       def action_status
+        walk_subactions = proc { |a, level|
+          res = a.dump_attrs
+          unless a.subactions.empty?
+            res[:subactions] = a.subactions.collect { |s|
+              walk_subactions.call(s, level + 1)
+            }
+          end
+          res
+        }
+
         EM.barrier {
           result = {}
           Master.instance.service_cluster.rule_engine.active_jobs.each { |id, v|
             result[id]={:actions=>[], :created_at=>v[:created_at], :src_rule=>v[:src_rule].class.to_s}
             v[:actions].each { |a|
-              result[id][:actions] << {:type=>a.class.to_s, :status=>a.status}
+              result[id][:actions] << a.dump_attrs
             }
+
+            result[id][:root_action] = walk_subactions.call(v[:root_action], 0)
           }
 
           result

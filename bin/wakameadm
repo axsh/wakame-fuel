@@ -151,11 +151,9 @@ __E__
 Running Actions : <%= status.size %> action(s)
 <%- if status.size > 0 -%>
 <%- status.each { |id, j| -%>
-  JOB <%= id %> :
-    start : <%= j[:created_at] %>
-    <%- j[:actions].each { |a| -%>
-    <%= a[:type] %> (<%= a[:status] %>)
-    <%- } -%>
+JOB <%= id %> :
+  start : <%= j[:created_at] %>
+  <%= tree_subactions(j[:root_action]) %>
 <%- } -%>
 <%- end -%>
 __E__
@@ -164,7 +162,19 @@ __E__
   def print_action_status(status)
     puts ERB.new(ACTION_STATUS_TMPL, nil, '-').result(binding)
   end
-  
+
+
+  def tree_subactions(root, level=0)
+    str= ("  " * level) + "#{root[:type]} (#{root[:status]})"
+    unless root[:subactions].nil?
+      root[:subactions].each { |a|
+        str << "\n  "
+        str << tree_subactions(a, level + 1)
+      }
+    end
+    str
+  end
+
 end
 
 

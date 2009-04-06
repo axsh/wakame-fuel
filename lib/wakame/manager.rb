@@ -6,7 +6,7 @@ require 'eventmachine'
 require 'amqp'
 require 'mq'
 require 'thread'
-require 'emdrb'
+require 'drb/drb'
 
 require 'wakame'
 require 'wakame/amqp_client'
@@ -26,13 +26,13 @@ module Wakame
     def initialize(master)
       @master = master
 
-      #DRb.start_service(Wakame.config.drb_command_server_uri, Manager::CommandDelegator.new(self))
-      @drb_server = DRb.start_drbserver(Wakame.config.drb_command_server_uri, Manager::CommandDelegator.new(self))
+      DRb.start_service(Wakame.config.drb_command_server_uri, Manager::CommandDelegator.new(self))
+      #@drb_server = DRb.start_drbserver(Wakame.config.drb_command_server_uri, Manager::CommandDelegator.new(self))
     end
 
     def shutdown
-      #DRb.stop_service()
-      @drb_server.stop_service()
+      DRb.stop_service()
+      #@drb_server.stop_service()
     end
 
     def send_cmd(cmd)

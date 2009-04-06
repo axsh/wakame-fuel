@@ -39,6 +39,7 @@ module Wakame
         @rules = []
         
         @active_jobs = {}
+        @job_history = []
         instance_eval(&blk) if blk
       end
 
@@ -52,7 +53,7 @@ module Wakame
 
       def create_job_context(rule)
         job_id = Wakame.gen_id
-        @active_jobs[job_id] = {:actions=>[], :src_rule=>rule, :created_at=>Time.now}
+        @active_jobs[job_id] = {:actions=>[], :src_rule=>rule, :created_at=>Time.now, :root_action=>nil}
         job_id
       end
       
@@ -64,26 +65,29 @@ module Wakame
 
           begin
             
-            EH.fire_event(Event::JobStart.new(action.job_id)) if job_context[:actions].empty?
+            if job_context[:root_action].nil?
+              job_context[:root_action] = action
+              EH.fire_event(Event::JobStart.new(action.job_id))
+            end
             job_context[:actions] << action
             
 
             EM.defer proc {
-              res = begin
-                      action.status = :running
-                      Wakame.log.debug("Start action : #{action.class.to_s} triggered by Rule [#{action.rule.class}]")
-                      EH.fire_event(Event::ActionStart.new(action))
-                      action.run
-                      Wakame.log.debug("Complete action : #{action.class.to_s}")
-                      EH.fire_event(Event::ActionComplete.new(action))
-                    rescue => e
-                      Wakame.log.error(e)
-                      Wakame.log.debug("Failed action : #{action.class.to_s}")
-                      EH.fire_event(Event::ActionFailed.new(action, e))
-                      next e
-                    ensure
-                      action.status = :complete
-                    end
+              begin
+                action.status = :running
+                Wakame.log.debug("Start action : #{action.class.to_s} triggered by Rule [#{action.rule.class}]")
+                EH.fire_event(Event::ActionStart.new(action))
+                action.run
+                Wakame.log.debug("Complete action : #{action.class.to_s}")
+                EH.fire_event(Event::ActionComplete.new(action))
+              rescue => e
+                Wakame.log.error(e)
+                Wakame.log.debug("Failed action : #{action.class.to_s}")
+                EH.fire_event(Event::ActionFailed.new(action, e))
+                res = e
+              ensure
+                action.status = :complete
+              end
               res
             }, proc { |res|
 
@@ -101,7 +105,7 @@ module Wakame
               end
 
               if job_completed
-                @active_jobs.delete(action.job_id)
+                @job_history << @active_jobs.delete(action.job_id)
               end
             }
           rescue => e
@@ -141,31 +145,27 @@ module Wakame
       RuleEngine::FORWARD_ATTRS.each { |i|
         def_delegator :rule, i.to_sym
       }
+      include AttributeHelper
+      include ThreadImmutable
 
-      attr_accessor :job_id
+      def_attribute :job_id
+      def_attribute :status, :ready
+      def_attribute :parent_action
 
       attr_reader :rule
 
-      def status
-        @status ||= :ready
-      end
-
       def status=(status)
         if @status != status
-          job_context = rule.rule_engine.active_jobs[self.job_id]
-          if job_context
-            job_context[:actions].each { |a|
-              a.notify_queue.push 1
-            }
-          end
+          @status = status
+          # Notify to observers after updating the attribute
+          notify
         end
-        @status = status
+        @status
       end
 
-      def nested_actions
-        @nested_actions ||= []
+      def subactions
+        @subactions ||= []
       end
-      alias :subactions :nested_actions
 
       def bind_triggered_rule(rule)
         @rule = rule
@@ -176,7 +176,8 @@ module Wakame
           succ_proc = opts[:success] || opts[:succ]
           fail_proc = opts[:fail]
         end
-        nested_actions << subaction
+        subactions << subaction
+        subaction.parent_action = self
         #subaction.observers << self
 
         async_trigger_action(subaction, succ_proc, fail_proc)
@@ -188,27 +189,44 @@ module Wakame
         
         #timeout(sec.nil? ? nil : sec) {
           until all_subactions_complete?
-            #Wakame.log.debug "#{self.class} all_subactions_complete?=#{all_subactions_complete?}"
-            notify_queue.shift
+            Wakame.log.debug "#{self.class} all_subactions_complete?=#{all_subactions_complete?}"
+            src = notify_queue.deq
+            Wakame.log.debug "#{self.class} notified by #{src.class}, all_subactions_complete?=#{all_subactions_complete?}"
+            #sleep 0.2
           end
         #}
       end
 
       def all_subactions_complete?
         subactions.each { |a|
-          Wakame.log.debug("#{a.class}.status=#{a.status}")
+          #Wakame.log.debug("#{a.class}.status=#{a.status}")
           return false unless a.status == :complete && a.all_subactions_complete?
         }
         true
       end
 
-      #def observers
-      #  @observers ||= []
-      #end
-
       def notify_queue
         @notify_queue ||= Queue.new
       end
+
+      def notify(src=nil)
+        #Wakame.log.debug("#{self.class}.notify() has been called")
+        src = self if src.nil?
+        notify_queue.clear if notify_queue.size > 0
+        notify_queue.enq(src) #if notify_queue.num_waiting > 0
+        unless parent_action.nil?
+          parent_action.notify(src)
+        end
+        
+        #job_context = rule.rule_engine.active_jobs[self.job_id]
+        #if job_context
+        #  job_context[:actions].each { |a|
+        #    a.notify(src)
+        #  }
+        #end
+        
+      end
+
 
       def run
         
@@ -525,6 +543,7 @@ module Wakame
 #       end
 
       def deploy_configuration(service_instance)
+        Wakame.log.debug("Begin: #{self.class}.deploy_configuration(#{service_instance.property.class})")
         templ = service_instance.property.template
         templ.pre_render
         templ.render(service_instance)
@@ -533,12 +552,11 @@ module Wakame
         src_path = templ.sync_src
         src_path.sub!('/$', '') if File.directory? src_path
 
-        Wakame.shell.transact { 
-          Wakame.log.debug("rsync -e 'ssh -i #{Wakame.config.ssh_private_key} -o \"UserKnownHostsFile #{Wakame.config.ssh_known_hosts}\"' -au #{src_path} root@#{agent.agent_ip}:#{Wakame.config.config_root}/")
-          system("rsync -e 'ssh -i #{Wakame.config.ssh_private_key} -o \"UserKnownHostsFile #{Wakame.config.ssh_known_hosts}\"' -au #{src_path} root@#{agent.agent_ip}:#{Wakame.config.config_root}/" )
-        }
+        Wakame.log.debug("rsync -e 'ssh -i #{Wakame.config.ssh_private_key} -o \"UserKnownHostsFile #{Wakame.config.ssh_known_hosts}\"' -au #{src_path} root@#{agent.agent_ip}:#{Wakame.config.config_root}/")
+        system("rsync -e 'ssh -i #{Wakame.config.ssh_private_key} -o \"UserKnownHostsFile #{Wakame.config.ssh_known_hosts}\"' -au #{src_path} root@#{agent.agent_ip}:#{Wakame.config.config_root}/" )
 
         templ.post_render
+        Wakame.log.debug("End: #{self.class}.deploy_configuration(#{service_instance.property.class})")
       end
     end
 
@@ -603,9 +621,10 @@ module Wakame
             raise "Failed to arrange the agent #{@svc_prop.class}"
           end
           
-          trigger_action(StartService.new(svc),{:success=>proc{
-                             EH.fire_event(Event::ServicePropagated.new(svc))
-                           }})
+          #trigger_action(StartService.new(svc),{:success=>proc{
+          #                   EH.fire_event(Event::ServicePropagated.new(svc))
+          #                 }})
+          trigger_action(StartService.new(svc))
         }
       end
 
@@ -633,8 +652,13 @@ module Wakame
 
     class ClusterShutdownAction < Action
       def run
-        service_cluster.dg.bfs { |svc_prop|
-          trigger_action(DestroyInstancesAction.new(svc_prop))
+        levels = service_cluster.dg.levels
+
+        levels.reverse.each { |lv|
+          lv.each { |svc_prop|
+            trigger_action(DestroyInstancesAction.new(svc_prop))
+          }
+          flush_subactions
         }
 
         flush_subactions
@@ -645,7 +669,7 @@ module Wakame
       end
     end
 
-    class ClusterResumeAction < Action
+    class ClusterLaunchAction < Action
       include BasicActionSet
 
       def run
@@ -658,14 +682,14 @@ module Wakame
           service_cluster.launch
         }
 
-        order = []
-        service_cluster.dg.bfs { |svc_prop|
-          order << svc_prop
-        }
+        Wakame.log.debug("ClushterLaunchAction: Resource Launch Order: " + service_cluster.dg.levels.collect {|lv| '['+ lv.collect{|prop| "#{prop.class}" }.join(', ') + ']' }.join(', '))
 
-        order.reverse.each { |svc_prop|
-          trigger_action(PropagateInstancesAction.new(svc_prop))
+        service_cluster.dg.levels.each { |lv|
+          lv.each { |svc_prop|
+            trigger_action(PropagateInstancesAction.new(svc_prop))
+          }
           flush_subactions
+          Wakame.log.debug("#{self.class}: DG level next")
         }
       end
 
@@ -895,8 +919,12 @@ module Wakame
       def run
         raise "Agent is not bound on this service : #{@service_instance}" if @service_instance.agent.nil?
         raise "The assigned agent for the service instance #{@service_instance.instance_id} is not online."  unless @service_instance.agent.status == AgentMonitor::Agent::STATUS_UP
+
+        # Skip to act when the service is having below status.
+        if @service_instance.status == Service::STATUS_STARTING || @service_instance.status == Service::STATUS_ONLINE
+          raise "Canceled as the service is being or already ONLINE: #{@service_instance.property}"
+        end
         
-        deploy_configuration(@service_instance)
         master.send_agent_command(Packets::Agent::ServiceReload.new(@service_instance.instance_id), @service_instance.agent.agent_id)
       end
     end
@@ -918,7 +946,6 @@ module Wakame
         if @service_instance.status == Service::STATUS_STARTING || @service_instance.status == Service::STATUS_ONLINE
           raise "Canceled as the service is being or already ONLINE: #{@service_instance.property}"
         end
-
         EM.barrier {
           @service_instance.status = Service::STATUS_STARTING
         }
@@ -936,8 +963,35 @@ module Wakame
         }
         
         @service_instance.property.after_start(@service_instance)
+
+        EM.barrier {
+          Wakame.log.debug("Child nodes: #{@service_instance.property.class}: " + service_cluster.dg.children(@service_instance.property.class).inspect)
+          service_cluster.dg.children(@service_instance.property.class).each { |svc_prop|
+            Wakame.log.debug("Spreading DG child changed: #{@service_instance.property.class} -> #{svc_prop.class}")
+            trigger_action(CallChildChangeAction.new(svc_prop))
+          }
+        }
+
       end
     end
+
+    class CallChildChangeAction < Action
+      include BasicActionSet
+
+      def initialize(resource)
+        @resource = resource
+        #@parent_instance = parent_instance
+      end
+      
+      def run
+        Wakame.log.debug("CallChildChangeAction: run: #{@resource.class}")
+        service_cluster.each_instance(@resource.class) { |svc_inst|
+          next if svc_inst.status != Service::STATUS_ONLINE
+          @resource.on_parent_changed(self, svc_inst)
+        }
+      end
+    end
+
 
     class StopService < Action
       include BasicActionSet
@@ -958,6 +1012,15 @@ module Wakame
         EM.barrier {
           @service_instance.status = Service::STATUS_STOPPING
         }
+        
+        EM.barrier {
+          Wakame.log.debug("Child nodes: #{@service_instance.property.class}: " + service_cluster.dg.children(@service_instance.property.class).inspect)
+          service_cluster.dg.children(@service_instance.property.class).each { |svc_prop|
+            trigger_action(CallChildChangeAction.new(svc_prop))
+          }
+        }
+
+        flush_subactions()
 
         @service_instance.property.before_stop(@service_instance)
         
@@ -1152,7 +1215,7 @@ module Wakame
         EH.subscribe(Event::CommandReceived) { |event|
           case event.command
           when Manager::Commands::ClusterLaunch
-            trigger_action(ClusterResumeAction.new)
+            trigger_action(ClusterLaunchAction.new)
 
           when Manager::Commands::ClusterShutdown
             if service_cluster.status != Service::ServiceCluster::STATUS_OFFLINE
