@@ -1196,6 +1196,23 @@ module Wakame
       end
     end
 
+
+    class InstanceCountUpdate < Rule
+      def register_hooks
+        EH.subscribe(Event::InstanceCountChanged) { |event|
+          next if service_cluster.status == ServiceCluster::STATUS_OFFLINE
+
+          if event.increased?
+            Wakame.log.debug("#{self.class}: trigger PropagateInstancesAction.new(#{event.resource.class})")
+            #trigger_action(PropagateInstancesAction.new(event.resource))
+          elsif event.decreased?
+            Wakame.log.debug("#{self.class}: trigger DestroyInstancesAction.new(#{event.resource.class})")
+            #trigger_action(DestoryInstancesAction.new(event.resource))
+          end
+        }
+      end
+    end
+
     class DeployConfigAllAction < Action
       def initialize(property=nil)
         @property = property

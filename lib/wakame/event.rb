@@ -348,5 +348,25 @@ module Wakame
     class AgentShutdown < Base; end
     class MasterShutdown < Base; end
 
+    class InstanceCountChanged < Base
+      attr_reader :resource, :prev_min, :min, :prev_max, :max
+      def initialize(resource, prev_min, prev_max, min, max)
+        @resource = resource
+        @prev_min = prev_min
+        @prev_max = prev_max
+        @min = min
+        @max = max
+      end
+
+      def increased?
+        @prev_min < @min
+      end
+
+      def decreased?
+        @prev_max > @max
+      end
+    end
+
+
   end
 end

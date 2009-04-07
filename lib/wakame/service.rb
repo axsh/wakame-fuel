@@ -7,6 +7,7 @@ require 'wakame/manager'
 require 'wakame/event'
 require 'wakame/configuration_template'
 require 'wakame/util'
+require 'wakame/manager/scheduler'
 
 module Wakame
   module Service
@@ -115,7 +116,8 @@ module Wakame
 
       def propagate(property_name, agent=nil)
         prop = @properties[property_name.to_s] || raise("Unknown property name: #{property_name.to_s}")
-        if instance_count(property_name) >= prop.max_instance
+        instnum = instance_count(property_name) 
+        if instnum >= prop.max_instance
           Wakame.log.info("#{prop.class} has been reached max_instance limit: max=#{prop.max_instance}")
           raise ServicePropagationError, "#{prop.class} has been reached to max_instance limit" 
         end
@@ -514,12 +516,12 @@ module Wakame
     end
 
     class Property
-      attr_accessor :check_time, :min_instance, :max_instance, :vm_spec
-      attr_accessor :template
+      attr_accessor :check_time, :vm_spec
+      attr_accessor :template, :instance_counter
+      attr_reader :duplicable
 
       def initialize(check_time=5)
         @check_time = check_time
-        @min_instance = @max_instance = 1
         @vm_spec = VmSpec.define {
           environment(:EC2) { |ec2|
             ec2.instance_type = 'm1.small'
@@ -530,7 +532,18 @@ module Wakame
           environment(:StandAlone) {
           }
         }
+
+        @instance_counter = ConstantCounter.new(1, 1)
+        @duplicable = true
       end
+
+      def min_instance
+        instance_counter.min
+      end
+      def max_instance
+        instance_counter.max
+      end
+
 
       def dump_status
         {:type => self.class.to_s, :min_instance => min_instance, :max_instance=> max_instance }
@@ -559,6 +572,42 @@ module Wakame
 
     Resource = Property
 
+    class InstanceCounter
+      include AttributeHelper
+      def_attribute :min, 1
+      def_attribute :max, 1
+    end
+
+
+    class ConstantCounter < InstanceCounter
+      def initialize(min, max)
+        @min = min
+        @max = max
+      end
+    end
+
+    class TimedCounter < InstanceCounter
+      def initialize(seq, resource)
+        @sequence = seq
+        @resource = resource
+        @timer = Manager::Scheduler::SequenceTimer.new(seq)
+        @timer.add_observer(self)
+      end
+
+      def update(*args)
+        new_count = args[0]
+        #if self.min > new_count || self.max < new_count
+        if self.min != new_count || self.max != new_count
+          prev_min = self.min
+          prev_max = self.max
+
+          self.max = self.min = new_count
+          EH.fire_event(Event::InstanceCountChanged.new(@resource, prev_min, prev_max, self.min, self.max))
+        end
+
+      end
+    end
+
   end
 end
 
@@ -580,6 +629,7 @@ module Wakame
             register_rule(Rule::MaintainSshKnownHosts.new)
             register_rule(Rule::ClusterStatusMonitor.new)
             register_rule(Rule::LoadHistoryMonitor.new)
+            register_rule(Rule::InstanceCountUpdate.new)
             #register_rule(Rule::ReflectPropagation_LB_Subs.new)
             #register_rule(Rule::ScaleOutWhenHighLoad.new)
             #register_rule(Rule::ShutdownUnusedVM.new)
@@ -678,7 +728,13 @@ module Wakame
       def initialize
         super()
         @listen_port = 8001
-        @max_instance = 5
+        #@instance_counter.max = 5
+        ms = Manager::Scheduler::PerMinuteSequence.new
+        ms[0]=1
+        ms[30]=5
+        @instance_counter = TimedCounter.new(Manager::Scheduler::LoopSequence.new(ms),
+                                             self)
+
         @template = ConfigurationTemplate::ApacheTemplate.new(:app)
       end
 
@@ -726,8 +782,8 @@ module Wakame
 
       def after_start(svc)
         vm_manipulator = VmManipulator.create
-        Wakame.log.info("Associating the Elastic IP #{@elastic_ip} to #{svc.agent.agent_id}")
-        vm_manipulator.associate_address(svc.agent.agent_id, @elastic_ip)
+        #Wakame.log.info("Associating the Elastic IP #{@elastic_ip} to #{svc.agent.agent_id}")
+        #vm_manipulator.associate_address(svc.agent.agent_id, @elastic_ip)
       end
 
       def start
@@ -763,6 +819,8 @@ module Wakame
         @ebs_volume = 'vol-6ecf2807'
         @ebs_device = '/dev/sdd'
         @ebs_mount_option = 'noatime'
+
+        @duplicable = false
       end
 
       def before_start(svc)
