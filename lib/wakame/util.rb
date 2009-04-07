@@ -224,6 +224,21 @@ class SortedHash < Hash
     }
   end
 
+  def first_key
+    @keyorder.first
+  end
+
+  def first
+    self[first_key]
+  end
+
+  def last_key
+    @keyorder.last
+  end
+
+  def last
+    self[last_key]
+  end
 
   def clear
     super
