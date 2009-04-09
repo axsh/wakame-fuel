@@ -169,7 +169,16 @@ module Wakame
           @start_at = Time.at(time.tv_sec - (time.tv_sec % duration))
         end
 
+        require 'time'
+
         def set(offset_time, value)
+          offset_time = case offset_time
+                        when String
+                          t=Time.parse(offset_time)
+                          t.tv_sec % duration
+                        else
+                          offset_time
+                        end
           super(offset_time, value) if offset_time < duration
           self
         end
