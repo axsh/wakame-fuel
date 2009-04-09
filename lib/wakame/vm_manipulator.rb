@@ -65,7 +65,7 @@ module Wakame
       end
 
       def stop_instance(instance_id)
-        @ec2.terminate_instances()
+        @ec2.terminate_instances(:instance_id=>instance_id)
       end
 
       def check_status(instance_id, expected_status=:online)
