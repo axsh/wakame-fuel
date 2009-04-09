@@ -107,7 +107,7 @@ module Wakame
 
       def dump_status
         {:agent_id => @agent_id, :status => @status, :last_ping_at => @last_ping_at, :attr => attr.dup,
-          :services => services.collect{|id, svc| svc.dump_status }
+          :services => services.keys.dup
         }
       end
       

@@ -129,29 +129,49 @@ class Wakame::AdministratorCommandRunner
 
   STATUS_TMPL =<<__E__
 Cluster : <%= cluster[:name].to_s %> (<%= cluster[:status].to_s %>)
-<%- cluster[:properties].each { |v| -%>
-  <%= v[:type].to_s %> : <min=<%= v[:min_instance] %>, max=<%= v[:max_instance] %>>
-  <%- unless v[:instances].empty? -%>
-  <%- v[:instances].each { |s| -%>
-     <%= s[:instance_id] %> (<%= s[:status] %>)
+<%- cluster[:properties].each { |prop, v| -%>
+  <%= v[:type].to_s %> : <min=<%= v[:min_instance] %>, max=<%= v[:max_instance] %>, type=<%= v[:instance_counter_class].split('::').last %>> 
+  <%- v[:instances].each { |id|
+         svc_inst = cluster[:instances][id]
+  -%>
+     <%= svc_inst[:instance_id] %> (<%= trans_svc_status(svc_inst[:status]) %>)
   <%- } -%>
-  <%- end -%>
 <%- } -%>
-<%- unless cluster[:instances].empty?  -%>
+<%- if cluster[:instances].size > 0  -%>
 
 Instances :
   <%- cluster[:instances].each { |k, v| -%>
-  <%= v[:instance_id] %> : <%= v[:property] %> (<%= v[:status] %>)
+  <%= v[:instance_id] %> : <%= v[:property] %> (<%= trans_svc_status(v[:status]) %>)
+    <%- if v[:agent_id ] -%>
+    On VM instance: <%= v[:agent_id ]%>
+    <%- end -%>
   <%- } -%>
 <%- end -%>
-<%- unless agent_monitor[:agents].empty? -%>
+<%- if agent_monitor[:agents].size > 0 -%>
 
 Agents :
   <%- agent_monitor[:agents].each { |a| -%>
   <%= a[:agent_id] %> : <%= a[:attr][:local_ipv4] %>, <%= a[:attr][:public_ipv4] %> load=<%= a[:attr][:uptime] %>, <%= (Time.now - a[:last_ping_at]).to_i %> sec(s) (<%= a[:status] %>)
+    <%- if a[:services].size > 0 -%>
+    Services (<%= a[:services].size %>): <%= a[:services].collect{|id| cluster[:instances][id][:property] }.join(', ') %>
+    <%- end -%>
   <%- } -%>
 <%- end -%>
 __E__
+
+  SVC_STATUS_MSG={
+    Wakame::Service::STATUS_OFFLINE=>'Offline',
+    Wakame::Service::STATUS_ONLINE=>'ONLINE',
+    Wakame::Service::STATUS_UNKNOWN=>'Unknown',
+    Wakame::Service::STATUS_FAIL=>'Fail',
+    Wakame::Service::STATUS_STARTING=>'Starting...',
+    Wakame::Service::STATUS_STOPPING=>'Stopping...',
+    Wakame::Service::STATUS_RELOADING=>'Reloading...',
+    Wakame::Service::STATUS_MIGRATING=>'Migrating...',
+  }
+  def trans_svc_status(stat)
+    SVC_STATUS_MSG[stat]
+  end
 
   def print_status(status)
     sc = cluster = status[:service_cluster]

@@ -625,7 +625,6 @@ module Wakame
             end
           }
 
-          # The list is empty means that this action is called to propagate a new service instance instead of just starting scheduled instances.
           if @svc_prop.max_instance < online_svc.size
             online_svc.delete_if { |svc|
               svc.agent.agent_id == master.attr[:instance_id]
@@ -634,6 +633,7 @@ module Wakame
             (online_svc.size - @svc_prop.max_instance).times {
               svc_to_stop << online_svc.shift
             }
+            Wakame.log.debug("#{self.class}: online_svc.size=#{online_svc.size}, svc_to_stop.size=#{svc_to_stop.size}")
           end
         }
 
@@ -641,7 +641,7 @@ module Wakame
           trigger_action(StopService.new(svc_inst))
         }
       end
-    end      
+    end
 
     class PropagateInstancesAction < Action
       include BasicActionSet
@@ -656,7 +656,7 @@ module Wakame
 
         EM.barrier {
           # First, look for the service instances which are already created in the cluster. Then they will be scheduled to start the services later.
-          online_svc = 0
+          online_svc = []
           service_cluster.each_instance(@svc_prop.class) { |svc_inst|
             if svc_inst.status == Service::STATUS_ONLINE || svc_inst.status == Service::STATUS_STARTING
               online_svc << svc_inst
@@ -1337,8 +1337,8 @@ module Wakame
 
     class InstanceCountUpdate < Rule
       def register_hooks
-        EH.subscribe(Event::InstanceCountChanged) { |event|
-          next if service_cluster.status == ServiceCluster::STATUS_OFFLINE
+        event_subscribe(Event::InstanceCountChanged) { |event|
+          next if service_cluster.status == Service::ServiceCluster::STATUS_OFFLINE
 
           if event.increased?
             Wakame.log.debug("#{self.class}: trigger PropagateInstancesAction.new(#{event.resource.class})")

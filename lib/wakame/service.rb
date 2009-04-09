@@ -166,7 +166,6 @@ module Wakame
       end
 
       def each_instance(filter_prop_name=nil, &blk)
-        ary = nil
         prop_obj = nil
         if filter_prop_name.is_a? String
           filter_prop_name = Wakame.str2const(filter_prop_name)
@@ -183,6 +182,7 @@ module Wakame
           end
         end
 
+        ary = []
         if prop_obj.nil?
           ary = @services.dup
         else
@@ -190,7 +190,7 @@ module Wakame
           ary = Hash[*ary.flatten]
         end
 
-        ary.each {|k,v| blk.call v } if block_given? && ary
+        ary.each {|k,v| blk.call v } if block_given?
         ary
       end
       alias :select_instance :each_instance
@@ -220,17 +220,14 @@ module Wakame
 
 
       def dump_status
-        r = {:name => self.class.to_s, :status => self.status }
+        r = {:name => self.class.to_s, :status => self.status, :instances=>{}, :properties=>{} }
         
-        r[:instances]={}
         instances.each { |k, i|
           r[:instances][k]=i.dump_status
         }
-        r[:properties] = properties.collect { |k, i|
-          i.dump_status
-        }
-        r[:properties].each { |i|
-          i[:instances] = each_instance(i[:type]).collect{|k, v| v.dump_status } || []
+        properties.each { |k, i|
+          r[:properties][k] = i.dump_status
+          r[:properties][k][:instances] = each_instance(i.class).collect{|k, v| k }
         }
 
         r
@@ -448,7 +445,9 @@ module Wakame
       end
       
       def dump_status
-        {:type => self.class.to_s, :status => status, :property => property.class.to_s, :instance_id => instance_id}
+        ret = {:type => self.class.to_s, :status => status, :property => property.class.to_s, :instance_id => instance_id}
+        ret[:agent_id] = agent.agent_id if agent
+        ret
       end
       thread_immutable_methods :dump_status
       
@@ -564,7 +563,10 @@ module Wakame
 
 
       def dump_status
-        {:type => self.class.to_s, :min_instance => min_instance, :max_instance=> max_instance }
+        {:type => self.class.to_s, :min_instance => min_instance, :max_instance=> max_instance,
+          :duplicable=>duplicable,
+          :instance_counter_class => instance_counter.class.to_s
+        }
       end
 
       def start; end
@@ -608,8 +610,8 @@ module Wakame
       def initialize(seq, resource)
         @sequence = seq
         @resource = resource
-        @timer = Manager::Scheduler::SequenceTimer.new(seq)
-        @timer.add_observer(self)
+        timer = Manager::Scheduler::SequenceTimer.new(seq)
+        timer.add_observer(self)
       end
 
       def update(*args)
@@ -647,7 +649,7 @@ module Wakame
             register_rule(Rule::MaintainSshKnownHosts.new)
             register_rule(Rule::ClusterStatusMonitor.new)
             register_rule(Rule::LoadHistoryMonitor.new)
-            register_rule(Rule::InstanceCountUpdate.new)
+            #register_rule(Rule::InstanceCountUpdate.new)
             #register_rule(Rule::ReflectPropagation_LB_Subs.new)
             #register_rule(Rule::ScaleOutWhenHighLoad.new)
             #register_rule(Rule::ShutdownUnusedVM.new)
@@ -751,16 +753,16 @@ module Wakame
         #ms[0]=1
         #ms[30]=5
         ms[0]=1
-        ms["0:8:00"]=2
-        ms["0:11:00"]=3
-        ms["0:15:00"]=4
+        ms["0:2:00"]=2
+        ms["0:7:00"]=3
+        ms["0:14:00"]=4
         ms["0:18:00"]=1
         ms["0:35:00"]=2
         ms["0:40:00"]=3
         ms["0:45:00"]=4
         ms["0:50:00"]=1
-        # @instance_counter = TimedCounter.new(Manager::Scheduler::LoopSequence.new(ms), self)
-        @instance_counter.max = 5
+        @instance_counter = TimedCounter.new(Manager::Scheduler::LoopSequence.new(ms), self)
+        # @instance_counter.max = 5
 
         @template = ConfigurationTemplate::ApacheTemplate.new(:app)
       end
