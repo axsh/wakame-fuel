@@ -39,6 +39,16 @@ class Wakame::AdministratorCommandRunner
         sub_options[:prop_name] = tmp_args.shift
       }
     },
+    'migrate_service'=> {
+      :opt_parser => lambda { |parser|  },
+      :left_parser => proc {
+        raise CommandArgumentError, "Service instance ID has to be given " if tmp_args.size < 1
+        sub_options[:service_instance_id] = tmp_args.shift
+        if tmp_args.size == 1
+          sub_options[:agent_id] = tmp_args.shift
+        end
+      }
+    },
     'deploy_config' => {
     }
   }
@@ -76,6 +86,8 @@ class Wakame::AdministratorCommandRunner
       cmd.shutdown_cluster
     when 'propagate_service'
       cmd.propagate_service(@sub_options[:prop_name])
+    when 'migrate_service'
+      cmd.migrate_service(@sub_options[:service_instance_id], @sub_options[:agent_id])
     when 'deploy_config'
       cmd.deploy_config
     when 'status'

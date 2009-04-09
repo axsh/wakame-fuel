@@ -26,6 +26,14 @@ module Wakame
         end
       end
 
+      class MigrateService
+        attr_reader :service_instance, :agent
+        def initialize(svc_inst, agent=nil)
+          @service_instance = svc_inst
+          @agent = agent
+        end
+      end
+
     end
 
     class CommandDelegator
@@ -54,6 +62,21 @@ module Wakame
         end
 
         @command_queue.send_cmd(Commands::PropagateService.new(prop))
+      end
+      def migrate_service(svc_inst_id, agent_id=nil)
+        svc = master.service_cluster.instances[svc_inst_id]
+        if svc.nil?
+          raise "Unknown Service Instance: #{svc_inst_id}" 
+        end
+        agent = nil
+        if agent_id
+          agent = master.agent_monitor.agents.has_key?(agent_id)
+          if agent.nil?
+            raise "Unknown Agent: #{agent_id}" 
+          end
+        end
+
+        @command_queue.send_cmd(Commands::MigrateService.new(svc, agent))
       end
       def deploy_config(prop_name=nil)
         prop = nil
