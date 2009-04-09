@@ -23,6 +23,7 @@ module Wakame
     STATUS_STARTING = 4
     STATUS_STOPPING = 5
     STATUS_RELOADING = 6
+    STATUS_MIGRATING = 7
 
     class ServiceCluster
       class << self
@@ -90,7 +91,7 @@ module Wakame
             count += 1
           }
           
-          if p.min_instance - count > 0
+          if p.min_instance > count
             (p.min_instance - count).times {
               propagate(p.class)
             }
@@ -98,7 +99,6 @@ module Wakame
         }
       end
       thread_immutable_methods :launch
-
 
       def destroy(service_instance_id)
         raise("Unknown service instance : #{service_instance_id}") unless included_instance?(service_instance_id)
@@ -114,26 +114,44 @@ module Wakame
       end
       thread_immutable_methods :destroy
 
-      def propagate(property_name, agent=nil)
+      def propagate(property_name, force=false)
+        property_name = case property_name
+                        when Class, String
+                          property_name.to_s
+                        when Property
+                          property_name.class.to_s
+                        else
+                          raise ArgumentError
+                        end
         prop = @properties[property_name.to_s] || raise("Unknown property name: #{property_name.to_s}")
-        instnum = instance_count(property_name) 
-        if instnum >= prop.max_instance
-          Wakame.log.info("#{prop.class} has been reached max_instance limit: max=#{prop.max_instance}")
-          raise ServicePropagationError, "#{prop.class} has been reached to max_instance limit" 
+        if force == false
+          instnum = instance_count(property_name) 
+          if instnum >= prop.max_instance
+            Wakame.log.info("#{prop.class} has been reached max_instance limit: max=#{prop.max_instance}")
+            raise ServicePropagationError, "#{prop.class} has been reached to max_instance limit" 
+          end
         end
         
         svc_inst = Service::ServiceInstance.new(prop)
         svc_inst.bind_cluster(self)
-        svc_inst.bind_agent(agent) if agent
+        #svc_inst.bind_agent(agent) if agent
 
         @services[svc_inst.instance_id]=svc_inst
         svc_inst
       end
       thread_immutable_methods :propagate
 
-
       def instance_count(property_name=nil)
         return @services.size if property_name.nil?
+
+        property_name = case property_name
+                        when Class, String
+                          property_name.to_s
+                        when Property
+                          property_name.class.to_s
+                        else
+                          raise ArgumentError
+                        end
 
         raise "Unknown property name: #{property_name}" unless @properties.has_key?(property_name.to_s)
         c = 0
@@ -387,7 +405,7 @@ module Wakame
       
       def bind_agent(agent)
         return if agent.nil? || (@agent && agent.agent_id == @agent.agent_id)
-        raise "The agent (#{agent.agent_id}) has been assigned same service already: #{property.class}" if agent.has_service_type?(property.class)
+        raise "The agent (#{agent.agent_id}) was assigned same service already: #{property.class}" if agent.has_service_type?(property.class)
         
         # UboundAgent & BoundAgent event occured only when the different agent obejct is assigned.
         unbind_agent
@@ -400,7 +418,7 @@ module Wakame
       thread_immutable_methods :bind_agent
       
       def unbind_agent
-        return if @agent.nil?
+        return nil if @agent.nil?
         @agent.services.delete(instance_id)
         old_item = @agent
         @agent = nil
@@ -699,6 +717,7 @@ module Wakame
         super()
         @listen_port = 8000
         @template = ConfigurationTemplate::ApacheTemplate.new(:www)
+        @instance_counter.max = 5
       end
       
       def start
@@ -728,12 +747,20 @@ module Wakame
       def initialize
         super()
         @listen_port = 8001
-        #@instance_counter.max = 5
-        ms = Manager::Scheduler::PerMinuteSequence.new
+        ms = Manager::Scheduler::PerHourSequence.new
+        #ms[0]=1
+        #ms[30]=5
         ms[0]=1
-        ms[30]=5
-        @instance_counter = TimedCounter.new(Manager::Scheduler::LoopSequence.new(ms),
-                                             self)
+        ms["0:8:00"]=2
+        ms["0:11:00"]=3
+        ms["0:15:00"]=4
+        ms["0:18:00"]=1
+        ms["0:35:00"]=2
+        ms["0:40:00"]=3
+        ms["0:45:00"]=4
+        ms["0:50:00"]=1
+        # @instance_counter = TimedCounter.new(Manager::Scheduler::LoopSequence.new(ms), self)
+        @instance_counter.max = 5
 
         @template = ConfigurationTemplate::ApacheTemplate.new(:app)
       end
@@ -775,9 +802,9 @@ module Wakame
         @elastic_ip = '174.129.218.202'
       end
 
-      def on_child_changed(action, svc_inst)
+      def on_parent_changed(action, svc_inst)
         action.deploy_configuration(svc_inst)
-        action.trigger_action(ReloadService.new(svc_inst))
+        action.trigger_action(Rule::ReloadService.new(svc_inst))
       end
 
       def after_start(svc)
