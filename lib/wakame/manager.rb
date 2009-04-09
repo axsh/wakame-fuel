@@ -50,8 +50,8 @@ module Wakame
 
     class Agent
       include ThreadImmutable
-      STATUS_DOWN=0
-      STATUS_UP=1
+      STATUS_DOWN = STATUS_OFFLINE =0
+      STATUS_UP = STATUS_ONLINE =1
       STATUS_UNKNOWN=2
       STATUS_TIMEOUT=3
 
@@ -129,7 +129,7 @@ module Wakame
         #log.debug("Started agent GC : agents.size=#{@agents.size}, mutex locked=#{@agents.locked?.to_s}")
         kill_list=[]
         @agents.each { |agent_id, agent|
-          next if agent.status == AgentMonitor::Agent::STATUS_DOWN
+          next if agent.status == AgentMonitor::Agent::STATUS_OFFLINE
           diff_time = Time.now - agent.last_ping_at
           #log.debug "AgentMonitor GC : #{agent_id}: #{diff_time}"
           if diff_time > @agent_timeout.to_f
@@ -155,7 +155,7 @@ module Wakame
         
         # Common member variables to be updated
         set_report_values = proc { |agent|
-          agent.status = AgentMonitor::Agent::STATUS_UP
+          agent.status = AgentMonitor::Agent::STATUS_ONLINE
           agent.uptime = 0
           agent.last_ping_at = Time.new
           
@@ -237,6 +237,12 @@ module Wakame
       service_instance.unbind_agent
     end
 
+    def each_online(&blk)
+      @agents.each { |k, v|
+        next if v.status != Agent::STATUS_ONLINE
+        blk.call(v)
+      }
+    end
 
     def dump_status
       ag = []
