@@ -31,7 +31,12 @@ module Wakame
   def log
     @log ||= begin
                #log = Logger.new((Wakame.root||Dir.pwd) / "log.log")
-               out = ::Log4r::StdoutOutputter.new('stdout')
+               out = ::Log4r::StdoutOutputter.new('stdout',
+                                                  :formatter => Log4r::PatternFormatter.new(
+                                                                                            :pattern => "%d %C[%l]: %M",
+                                                                                            :date_format => "%Y/%m/%d %H:%M:%S"
+                                                                                            )
+                                                  )
                log = ::Log4r::Logger.new(File.basename($0.to_s))
                log.add(out)
                log
