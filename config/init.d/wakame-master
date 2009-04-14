@@ -38,12 +38,12 @@ start_master()
         exit 0
     }
     
-    start-stop-daemon --start --quiet --pidfile /var/run/wakame-master.pid --name wakame-master --startas $WAKAME_HOME/bin/wakame-master -- -u $USER $LSBNAMES
+    start-stop-daemon --start --quiet --pidfile /var/run/wakame/wakame-master.pid --name wakame-master --startas $WAKAME_HOME/bin/wakame-master -- -u $USER $LSBNAMES
     
 }
 stop_master()
 {
-    start-stop-daemon --stop --quiet --pidfile /var/run/wakame-master.pid --name wakame-master
+    start-stop-daemon --stop --quiet --pidfile /var/run/wakame/wakame-master.pid --name wakame-master
 }
 
 case "$1" in

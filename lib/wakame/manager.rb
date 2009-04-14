@@ -334,7 +334,7 @@ module Wakame
       @options = {
         :amqp_server => URI.parse('amqp://guest@localhost/'),
         :log_file => '/var/log/wakame-master.log',
-        :pid_file => '/var/run/wakame-master.pid',
+        :pid_file => '/var/run/wakame/wakame-master.pid',
         :daemonize => true
       }
 
@@ -349,7 +349,7 @@ module Wakame
         opts.separator ""
         opts.separator "Master options:"
         opts.on( "-p", "--pid PIDFILE", "pid file path" ) {|str| @options[:pid_file] = str }
-        opts.on( "-u", "--u UID", "user id for the running process" ) {|str| @options[:uid] = str }
+        opts.on( "-u", "--uid UID", "user id for the running process" ) {|str| @options[:uid] = str }
         opts.on( "-s", "--server AMQP_URI", "amqp server" ) {|str|
           begin 
             @options[:amqp_server] = URI.parse(str)
@@ -382,14 +382,14 @@ module Wakame
       else
         opts = nil
       end
+
+      change_privilege(@options[:uid]) if @options[:uid]
      
       setup_pidfile
 
       if @options[:daemonize]
         daemonize(@options[:log_file])
       end
-
-      change_privilege(@options[:uid]) if @options[:uid]
 
       EM.epoll if Wakame.config.eventmachine_use_epoll
       EM.run {

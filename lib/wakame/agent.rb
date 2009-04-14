@@ -491,7 +491,7 @@ module Wakame
       @options = {
         :amqp_server => URI.parse('amqp://guest@localhost/'),
         :log_file => '/var/log/wakame-agent.log',
-        :pid_file => '/var/run/wakame-agent.pid',
+        :pid_file => '/var/run/wakame/wakame-agent.pid',
         :daemonize => true
       }
 

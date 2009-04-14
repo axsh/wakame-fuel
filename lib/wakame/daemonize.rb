@@ -51,7 +51,7 @@ module Wakame
           raise "#{pid_file} already exists, seems like it's already running (process ID: #{pid}). " +
             "Stop the process or delete #{pid_file}."
         else
-          Wakame.log.info "Deleting stale PID file #{pid_file}"
+          Wakame.log.info "Deleting the stale PID file: #{pid_file}"
           remove_pidfile
         end
       end
@@ -79,6 +79,8 @@ module Wakame
     
     def remove_pidfile
       File.delete(pid_file) if pid_file && File.exists?(pid_file)
+    rescue => e
+      Wakame.log.error(e)
     end
     
   end

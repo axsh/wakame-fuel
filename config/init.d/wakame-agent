@@ -36,12 +36,12 @@ start_agent()
 	    opts="$opts -s $i"
 	done
     fi
-    start-stop-daemon --start --quiet --pidfile /var/run/wakame-agent.pid --name wakame-agent --startas $WAKAME_HOME/bin/wakame-agent -- $opts $LSBNAMES
+    start-stop-daemon --start --quiet --pidfile /var/run/wakame/wakame-agent.pid --name wakame-agent --startas $WAKAME_HOME/bin/wakame-agent -- $opts $LSBNAMES
 }
 
 stop_agent()
 {
-    start-stop-daemon --stop --quiet --pidfile /var/run/wakame-agent.pid --name wakame-agent
+    start-stop-daemon --stop --quiet --pidfile /var/run/wakame/wakame-agent.pid --name wakame-agent
 }
 
 case "$1" in
