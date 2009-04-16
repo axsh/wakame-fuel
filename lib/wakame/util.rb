@@ -78,7 +78,7 @@ __E__
 
   def bind_thread(thread=Thread.current)
     @target_thread = thread
-    puts "bound thread: #{@target_thread.inspect} to #{self.class} object"
+    #puts "bound thread: #{@target_thread.inspect} to #{self.class} object"
   end
 
   def thread_check
@@ -87,8 +87,13 @@ __E__
     raise IllegalCrossThreadMethodCall unless target_thread?
   end
 
-  def target_thread?
-    @target_thread == Thread.current
+  def target_thread?(t=Thread.current)
+    @target_thread == t
+  end
+
+
+  def target_thread
+    @target_thread
   end
 
 end

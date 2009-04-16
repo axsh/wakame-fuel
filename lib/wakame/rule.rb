@@ -9,6 +9,7 @@ require 'wakame/util'
 module Wakame
   module Rule
     class CancelActionError < StandardError; end
+    class CancelBroadcast < StandardError; end
 
     class RuleEngine
       include Wakame
@@ -50,21 +51,53 @@ module Wakame
         @rules << rule
       end
 
-
       def create_job_context(rule, root_action)
         root_action.job_id = job_id = Wakame.gen_id
 
-
         @active_jobs[job_id] = {
           :job_id=>job_id,
-          :actions=>[],
           :src_rule=>rule,
           :create_at=>Time.now,
           :start_at=>nil, 
+          :complete_at=>nil,
           :root_action=>root_action
         }
       end
-      
+
+      def cancel_action(job_id)
+        job_context = @active_jobs[job_id]
+        if job_context.nil?
+          Wakame.log.warn("JOB ID #{job_id} was not running.")
+          return
+        end
+        
+        return if job_context[:complete_at]
+
+        root_act = job_context[:root_action]
+
+        walk_subactions = proc { |a|
+          if a.status == :running && (a.target_thread && a.target_thread.alive?)
+            Wakame.log.debug "Raising CancelBroadcast exception: #{a.class} #{a.target_thread}(#{a.target_thread.status}), current=#{Thread.current}"
+            # Broadcast the special exception to all
+            a.target_thread.raise(CancelBroadcast)
+            # IMPORTANT: Ensure the worker thread to handle the exception.
+            #Thread.pass
+          end
+          a.subactions.each { |n|
+            walk_subactions.call(n)
+          }
+        }
+
+        begin
+          Thread.critical = true
+          walk_subactions.call(root_act)
+        ensure
+          Thread.critical = false
+            # IMPORTANT: Ensure the worker thread to handle the exception.
+            Thread.pass
+        end
+      end
+
       def run_action(action)
         job_context = @active_jobs[action.job_id]
         raise "The job session is killed.: job_id=#{action.job_id}" if job_context.nil?
@@ -77,43 +110,69 @@ module Wakame
               job_context[:start_at] = Time.new
               EH.fire_event(Event::JobStart.new(action.job_id))
             end
-            job_context[:actions] << action
-            
 
             EM.defer proc {
+              res = nil
               begin
+                action.bind_thread(Thread.current)
                 action.status = :running
                 Wakame.log.debug("Start action : #{action.class.to_s} triggered by Rule [#{action.rule.class}]")
                 EH.fire_event(Event::ActionStart.new(action))
-                action.run
+                begin
+                  action.run
+                ensure
+                  action.status = :complete
+                end
                 Wakame.log.debug("Complete action : #{action.class.to_s}")
                 EH.fire_event(Event::ActionComplete.new(action))
-              rescue => e
-                Wakame.log.error(e)
-                Wakame.log.debug("Failed action : #{action.class.to_s}")
+              rescue CancelBroadcast => e
+                Wakame.log.info("Received cancel signal: #{e}")
                 EH.fire_event(Event::ActionFailed.new(action, e))
                 res = e
+              rescue => e
+                Wakame.log.debug("Failed action : #{action.class.to_s} due to #{e}")
+                Wakame.log.error(e)
+                EH.fire_event(Event::ActionFailed.new(action, e))
+                # Escalate the cancelation to parents.
+                action.notify(e)
+                # Force cancel the current job when the root action ignored the elevated exception.
+                if action === job_context[:root_action]
+                  cancel_action(job_context[:job_id]) #rescue Wakame.log.error($!)
+                end
+                res = e
               ensure
-                action.status = :complete
+                action.bind_thread(nil)
               end
+
               res
             }, proc { |res|
+              unless @active_jobs.has_key?(job_context[:job_id])
+                next
+              end
+              
+              jobary = []
+              job_context[:root_action].walk_subactions {|a| jobary << a }
+              p jobary.collect{|a| {a.class.to_s=>a.status}}
 
               job_completed = false
-              if res.is_a? Exception
-                if job_context[:actions].all? { |act| act.status == :complete }
+              if res.is_a?(Exception)
+                if jobary.all? { |act| act.status == :complete }
+                  Wakame.log.info("Canceled all actions in JOB ID #{job_context[:job_id]}.") if res.is_a?(CancelBroadcast) 
                   EH.fire_event(Event::JobFailed.new(action.job_id, res))
+                  job_context[:exception]=res
                   job_completed = true
                 end
               else
-                if job_context[:actions].all? { |act| act.status == :complete }
+                if jobary.all? { |act| act.status == :complete }
                   EH.fire_event(Event::JobComplete.new(action.job_id))
                   job_completed = true
                 end
               end
 
               if job_completed
-                @job_history << @active_jobs.delete(action.job_id)
+                job_context[:complete_at]=Time.now
+                @job_history << job_context
+                @active_jobs.delete(job_context[:job_id])
               end
             }
           rescue => e
@@ -156,6 +215,7 @@ module Wakame
 
     end
 
+
     class Action
       extend Forwardable
       RuleEngine::FORWARD_ATTRS.each { |i|
@@ -178,6 +238,8 @@ module Wakame
         end
         @status
       end
+      thread_immutable_methods :status=
+
 
       def subactions
         @subactions ||= []
@@ -203,13 +265,17 @@ module Wakame
         job_context = rule.rule_engine.active_jobs[self.job_id]
         return if job_context.nil?
         
-        #timeout(sec.nil? ? nil : sec) {
+        timeout(sec.nil? ? nil : sec) {
           until all_subactions_complete?
             #Wakame.log.debug "#{self.class} all_subactions_complete?=#{all_subactions_complete?}"
             src = notify_queue.deq
+            # Exit the current action when a subaction notified exception.
+            if src.is_a?(Exception)
+              raise src
+            end
             #Wakame.log.debug "#{self.class} notified by #{src.class}, all_subactions_complete?=#{all_subactions_complete?}"
           end
-        #}
+        }
       end
 
       def all_subactions_complete?
@@ -232,19 +298,19 @@ module Wakame
         unless parent_action.nil?
           parent_action.notify(src)
         end
-        
-        #job_context = rule.rule_engine.active_jobs[self.job_id]
-        #if job_context
-        #  job_context[:actions].each { |a|
-        #    a.notify(src)
-        #  }
-        #end
-        
+      end
+
+
+      def walk_subactions(&blk)
+        blk.call(self)
+        self.subactions.each{ |a|
+          a.walk_subactions(&blk)
+        }
       end
 
 
       def run
-        
+        raise NotImplementedError
       end
 
 
@@ -335,7 +401,7 @@ module Wakame
 
         if found
           Wakame.log.warn("#{self.class}: Exisiting Job \"#{found[:job_id]}\" was kicked from this rule and it's still running. Skipping...")
-          return 
+          raise CancelActionError
         end
 
         rule_engine.create_job_context(self, action)
@@ -1338,6 +1404,7 @@ module Wakame
     class InstanceCountUpdate < Rule
       def register_hooks
         event_subscribe(Event::InstanceCountChanged) { |event|
+        #EH.subscribe(Event::InstanceCountChanged) { |event|
           next if service_cluster.status == Service::ServiceCluster::STATUS_OFFLINE
 
           if event.increased?
