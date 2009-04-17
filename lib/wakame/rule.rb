@@ -181,38 +181,6 @@ module Wakame
         }
       end
 
-      private
-      def run_action1(action)
-        begin
-          if action.class == Action::NestedAction
-            log.debug("Start nested action : #{action.original_action.class.to_s}")
-            EH.fire_event(Event::ActionStart.new(action.original_action)) 
-          else
-            log.debug("Start action : #{action.class.to_s} triggered by Rule [#{action.rule.class}]")
-            EH.fire_event(Event::ActionStart.new(action)) 
-          end
-          action.run
-          if action.class == Action::NestedAction
-            log.debug("Complete nested action : #{action.original_action.class.to_s}")
-            EH.fire_event(Event::ActionComplete.new(action.original_action))
-          else
-            log.debug("Complete action : #{action.class.to_s}")
-            EH.fire_event(Event::ActionComplete.new(action))
-          end
-        rescue => e
-          log.error(e)
-          EH.fire_event(Event::ActionFailed.new(action, e))
-        end
-      end
-
-
-      def on_root_action_triggered(job_context)
-        @active_jobs.each {
-
-        }
-      end
-
-
     end
 
 
@@ -337,40 +305,6 @@ module Wakame
         rule.rule_engine.run_action(action)
       end
 
-    end
-
-    class Action::NestedAction < Action
-      def initialize(action, cond, succ_proc, fail_proc)
-        @original_action = action
-        @cond = cond
-        @succ_proc = succ_proc
-        @fail_proc = fail_proc
-      end
-      
-      def original_action 
-        @original_action
-      end
-      
-      def job_id
-        @original_action.job_id 
-      end
-      def job_id=(job_id)
-        @original_action.job_id = job_id
-      end
-
-      def rule
-        @original_action.rule
-      end
-      
-      def bind_triggered_rule(rule)
-        @original_action.bind_triggered_rule(rule)
-      end
-      
-      def run
-        @original_action.run
-      ensure
-        @cond.signal
-      end
     end
 
 
@@ -630,17 +564,6 @@ module Wakame
         }
       end
 
-
-#       def bind_agent(service_instance, &filter)
-#         agent_id, agent = agent_monitor.agents.find { |agent_id, agent|
-          
-#           next false if agent.has_service_type?(service_instance.property.class)
-#           filter.call(agent)
-#         }
-#         return nil if agent.nil?
-#         service_instance.bind_agent(agent)
-#         agent
-#       end
 
       def deploy_configuration(service_instance)
         Wakame.log.debug("Begin: #{self.class}.deploy_configuration(#{service_instance.property.class})")
@@ -1248,40 +1171,6 @@ module Wakame
 
     end
 
-    class StopService_Old < Action
-      include BasicActionSet
-
-      def initialize(service_instance)
-        @service_instance = service_instance
-      end
-
-      def run
-        raise "Agent is not bound on this service : #{@service_instance}" if @service_instance.agent.nil?
-        
-        # Skip to act when the service is having below status.
-        if @service_instance.status == Service::STATUS_STOPPING || @service_instance.status == Service::STATUS_OFFLINE
-          raise "Canceled as the service is being or already OFFLINE: #{@service_instance.property}"
-        end
-        
-        @service_instance.status = Service::STATUS_STOPPING
-        
-        @service_instance.property.before_stop(@service_instance)
-        
-        master.send_agent_command(Packets::Agent::ServiceStop.new(@service_instance.instance_id), @service_instance.agent.agent_id)
-        
-        wait_condition { |cond|
-          cond.wait_event(Event::ServiceOffline) { |event|
-            if event.instance_id == @service_instance.instance_id
-              #service_cluster.destroy(event.instance_id)
-              next true
-            end
-          }
-        }
-
-        @service_instance.property.after_stop(@service_instance)
-      end
-    end
-
     class DeployConfigAllAction < Action
       def initialize(property=nil)
         @property = property
@@ -1300,89 +1189,6 @@ module Wakame
       }
     end
 
-
-    class ReflectPropagation_LB_Subs < Rule
-      class ReloadLoadBalancer < Action
-        include BasicActionSet
-
-        def run
-          target_svc = {}
-          service_cluster.each_instance(Service::WebCluster::HttpLoadBalanceServer) { |svc|
-            Wakame.log.debug("ReloadLoadBalancer: #{svc.property.class}, status=#{svc.status}")
-            next if svc.status != Service::STATUS_ONLINE
-
-            target_svc[svc.instance_id]=1
-            trigger_action(ReloadService.new(svc))
-          }
-          return if target_svc.empty?
-          
-          #wait_condition { |cond|
-          #  cond.wait_event(Event::ServiceOffline) { |event|
-          #    if event.instance_id == @service_instance.instance_id
-          #      next true
-          #    end
-          #  }
-          #}
-        end
-      end
-
-
-      def initialize
-      end
-
-      def register_hooks
-        event_subscribe(Event::ServicePropagated) { |event|
-          case event.service.service_property
-          when Service::Apache_APP, Service::Apache_WWW
-            trigger_action(MaintainSshKnownHosts::UpdateKnownHosts.new)
-            trigger_action(ReloadLoadBalancer.new)
-          end
-        }
-        
-      end
-
-    end
-
-
-    class CorrectAgentAssignedService < Rule
-      def register_hooks
-        event_subscribe(Event::AgentPong) { |event|
-          start_svcs, stop_svcs = calc_diff(event.agent.services, event.agent.reported_services)
-
-          start_svcs.each { |svc_id, svc|
-            trigger_action(StartService.new(svc))
-          }
-          stop_svcs.each { |svc_id, svc|
-            trigger_action(StopService.new(svc))
-          }
-        }
-      end
-
-      private
-      def calc_diff(assigned, reported)
-        a1 = assigned.values
-        a2 = reported.values
-        
-        tobe_started = []
-        tobe_stopped = []
-
-        overwrap = a1 & a2
-        assigned.each { |k,v|
-          unless overwrap.included?(v)
-            tobe_started << {k => v}
-          end
-        }
-        reported.each { |k,v|
-          unless overwrap.included?(v)
-            tobe_stopped << {k => v}
-          end
-        }
-        
-        [tobe_started, tobe_stopped]
-      end
-    end
-    
-    
     class ClusterStatusMonitor < Rule
       def register_hooks
         event_subscribe(Event::ServiceOnline) { |event|
@@ -1441,7 +1247,6 @@ module Wakame
         }
       end
     end
-
 
 
     class ProcessCommand < Rule
