@@ -130,7 +130,7 @@ class Wakame::AdministratorCommandRunner
   STATUS_TMPL =<<__E__
 Cluster : <%= cluster[:name].to_s %> (<%= cluster[:status].to_s %>)
 <%- cluster[:properties].each { |prop, v| -%>
-  <%= v[:type].to_s %> : <min=<%= v[:min_instance] %>, max=<%= v[:max_instance] %>, type=<%= v[:instance_counter_class].split('::').last %>> 
+  <%= v[:type].to_s %> : <current=<%= v[:instance_count] %> min=<%= v[:min_instances] %>, max=<%= v[:max_instances] %>, type=<%= v[:instance_counter_class].split('::').last %>> 
   <%- v[:instances].each { |id|
          svc_inst = cluster[:instances][id]
   -%>
@@ -152,7 +152,7 @@ Instances :
 Agents :
   <%- agent_monitor[:agents].each { |a| -%>
   <%= a[:agent_id] %> : <%= a[:attr][:local_ipv4] %>, <%= a[:attr][:public_ipv4] %> load=<%= a[:attr][:uptime] %>, <%= (Time.now - a[:last_ping_at]).to_i %> sec(s) (<%= a[:status] %>)
-    <%- if a[:services].size > 0 -%>
+    <%- if !a[:services].nil? && a[:services].size > 0 -%>
     Services (<%= a[:services].size %>): <%= a[:services].collect{|id| cluster[:instances][id][:property] }.join(', ') %>
     <%- end -%>
   <%- } -%>
