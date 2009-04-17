@@ -380,6 +380,7 @@ module Wakame
         def_delegator :@rule_engine, i
       }
 
+      include FilterChain
       include AttributeHelper
 
       def_attribute :enabled, true
@@ -417,7 +418,12 @@ module Wakame
       protected
       def event_subscribe(event_class, &blk)
         EventHandler.subscribe(event_class) { |event|
-          blk.call(event) if self.enabled 
+          begin
+            run_filter(self)
+            blk.call(event) if self.enabled 
+          rescue => e
+            Wakame.log.error(e)
+          end
         }
       end
 
@@ -673,7 +679,7 @@ module Wakame
 
     end
 
-    
+
 
     class DestroyInstancesAction < Action
       def initialize(svc_prop)
@@ -843,7 +849,7 @@ module Wakame
       end
       
       def register_hooks
-        EH.subscribe(LoadHistoryMonitor::AgentLoadHighEvent) { |event|
+        event_subscribe(LoadHistoryMonitor::AgentLoadHighEvent) { |event|
           if service_cluster.status != Service::ServiceCluster::STATUS_ONLINE
             Wakame.log.info("Service Cluster is not online yet. Skip to scaling out")
             next
@@ -863,7 +869,7 @@ module Wakame
           end
         }
 
-        EH.subscribe(LoadHistoryMonitor::AgentLoadNormalEvent) { |event|
+        event_subscribe(LoadHistoryMonitor::AgentLoadNormalEvent) { |event|
           next
 
           if service_cluster.status != Service::ServiceCluster::STATUS_ONLINE
@@ -922,17 +928,17 @@ module Wakame
       end
       
       def register_hooks
-        EH.subscribe(Event::AgentMonitored) { |event|
+        event_subscribe(Event::AgentMonitored) { |event|
           @agent_data[event.agent.agent_id]={:load_history=>[], :last_event=>:normal}
           service_cluster.properties.each { |klass, prop|
             @service_data[klass] ||= {:load_history=>[], :last_event=>:normal}
           }
         }
-        EH.subscribe(Event::AgentUnMonitored) { |event|
+        event_subscribe(Event::AgentUnMonitored) { |event|
           @agent_data.delete(event.agent.agent_id)
         }
 
-        EH.subscribe(Event::AgentPong) { |event|
+        event_subscribe(Event::AgentPong) { |event|
           calc_load(event.agent)
         }
       end
@@ -1010,11 +1016,11 @@ module Wakame
 
 
       def register_hooks
-        EH.subscribe(Event::AgentMonitored) { |event|
+        event_subscribe(Event::AgentMonitored) { |event|
           trigger_action(UpdateKnownHosts.new)
         }
 
-        EH.subscribe(Event::AgentUnMonitored) { |event|
+        event_subscribe(Event::AgentUnMonitored) { |event|
           trigger_action(UpdateKnownHosts.new)
         }
       end
@@ -1040,7 +1046,7 @@ module Wakame
 
     class ShutdownUnusedVM < Rule
       def register_hooks
-        EH.subscribe(Event::AgentPong) { |event|
+        event_subscribe(Event::AgentPong) { |event|
           if event.agent.services.empty? &&
               Time.now - event.agent.last_service_assigned_at > Wakame.config.unused_vm_live_period &&
               event.agent.agent_id != master.attr[:instance_id]
@@ -1276,6 +1282,25 @@ module Wakame
       end
     end
 
+    class DeployConfigAllAction < Action
+      def initialize(property=nil)
+        @property = property
+      end
+      
+      def run
+        service_cluster.each_instance { |svc|
+          trigger_action(ReloadService.new(svc))
+        }
+      end
+    end
+
+    class AfterClusterStart < Rule
+      append_filter { |rule|
+        rule.service_cluster.status == Service::ServiceCluster::STATUS_ONLINE
+      }
+    end
+
+
     class ReflectPropagation_LB_Subs < Rule
       class ReloadLoadBalancer < Action
         include BasicActionSet
@@ -1306,7 +1331,7 @@ module Wakame
       end
 
       def register_hooks
-        EH.subscribe(Event::ServicePropagated) { |event|
+        event_subscribe(Event::ServicePropagated) { |event|
           case event.service.service_property
           when Service::Apache_APP, Service::Apache_WWW
             trigger_action(MaintainSshKnownHosts::UpdateKnownHosts.new)
@@ -1321,7 +1346,7 @@ module Wakame
 
     class CorrectAgentAssignedService < Rule
       def register_hooks
-        EH.subscribe(Event::AgentPong) { |event|
+        event_subscribe(Event::AgentPong) { |event|
           start_svcs, stop_svcs = calc_diff(event.agent.services, event.agent.reported_services)
 
           start_svcs.each { |svc_id, svc|
@@ -1360,14 +1385,14 @@ module Wakame
     
     class ClusterStatusMonitor < Rule
       def register_hooks
-        EH.subscribe(Event::ServiceOnline) { |event|
+        event_subscribe(Event::ServiceOnline) { |event|
           update_cluster_status
         }
-        EH.subscribe(Event::ServiceOffline) { |event|
+        event_subscribe(Event::ServiceOffline) { |event|
           update_cluster_status
         }
 
-        EH.subscribe(Event::AgentTimedOut) { |event|
+        event_subscribe(Event::AgentTimedOut) { |event|
           svc_in_timedout_agent = service_cluster.instances.select { |k, i|
             if !i.agent.nil? && i.agent.agent_id == event.agent.agent_id
               i.status = Service::STATUS_FAIL
@@ -1401,10 +1426,9 @@ module Wakame
     end
 
 
-    class InstanceCountUpdate < Rule
+    class InstanceCountUpdate < AfterClusterStart
       def register_hooks
         event_subscribe(Event::InstanceCountChanged) { |event|
-        #EH.subscribe(Event::InstanceCountChanged) { |event|
           next if service_cluster.status == Service::ServiceCluster::STATUS_OFFLINE
 
           if event.increased?
@@ -1418,23 +1442,13 @@ module Wakame
       end
     end
 
-    class DeployConfigAllAction < Action
-      def initialize(property=nil)
-        @property = property
-      end
-      
-      def run
-        service_cluster.each_instance { |svc|
-          trigger_action(ReloadService.new(svc))
-        }
-      end
-    end
+
 
     class ProcessCommand < Rule
       require 'wakame/manager/commands'
       
       def register_hooks
-        EH.subscribe(Event::CommandReceived) { |event|
+        event_subscribe(Event::CommandReceived) { |event|
           case event.command
           when Manager::Commands::ClusterLaunch
             trigger_action(ClusterLaunchAction.new)

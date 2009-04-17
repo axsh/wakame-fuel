@@ -263,3 +263,46 @@ class SortedHash < Hash
 
 end
 
+
+module FilterChain
+  def self.included(klass)
+    klass.class_eval {
+      def self.filter_chain
+        @filter_chain ||= []
+      end
+      
+      def self.append_filter(&blk)
+        self.filter_chain << blk
+      end
+    }
+  end
+
+  def run_filter(pass_obj=nil)
+    retrieve_filter_chain { |filter_chain|
+      filter_chain.each { |filter_proc|
+        begin
+          ret = filter_proc.call(pass_obj)
+        rescue => e
+          ret = false
+        end
+
+        unless ret
+          raise 
+        end
+      }
+    }
+  end
+
+  private
+  def retrieve_filter_chain(&blk)
+    order = []
+    self.class.ancestors.each { |klass|
+      order << klass if klass.include?(FilterChain)
+    }
+
+    order.reverse.each { |klass|
+      blk.call(klass.filter_chain) 
+    }
+  end
+  
+end
