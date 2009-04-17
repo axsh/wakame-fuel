@@ -1082,7 +1082,7 @@ module Wakame
 
         deploy_configuration(@service_instance)
         
-        @service_instance.property.before_start(@service_instance)
+        @service_instance.property.before_start(@service_instance, self)
         
         master.send_agent_command(Packets::Agent::ServiceStart.new(@service_instance.instance_id, @service_instance.property), @service_instance.agent.agent_id)
         
@@ -1092,7 +1092,7 @@ module Wakame
           }
         }
         
-        @service_instance.property.after_start(@service_instance)
+        @service_instance.property.after_start(@service_instance, self)
 
         EM.barrier {
           Wakame.log.debug("Child nodes: #{@service_instance.property.class}: " + service_cluster.dg.children(@service_instance.property.class).inspect)
@@ -1152,7 +1152,7 @@ module Wakame
 
         flush_subactions()
 
-        @service_instance.property.before_stop(@service_instance)
+        @service_instance.property.before_stop(@service_instance, self)
         
         master.send_agent_command(Packets::Agent::ServiceStop.new(@service_instance.instance_id), @service_instance.agent.agent_id)
         
@@ -1162,7 +1162,7 @@ module Wakame
           }
         }
         
-        @service_instance.property.after_stop(@service_instance)
+        @service_instance.property.after_stop(@service_instance, self)
 
         EM.barrier {
           service_cluster.destroy(@service_instance.instance_id)
