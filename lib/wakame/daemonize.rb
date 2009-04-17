@@ -1,6 +1,7 @@
 
 
 require 'daemons/daemonize'
+require 'fileutils'
 
 module Process
   # Returns +true+ the process identied by +pid+ is running.
@@ -29,6 +30,10 @@ module Wakame
         Process.initgroups(user, target_gid)
         Process::GID.change_privilege(target_gid)
         Process::UID.change_privilege(target_uid)
+
+        if pid_file && File.exist?(pid_file)
+          File.chown(target_uid, target_gid, pid_file)
+        end
       end
     rescue Errno::EPERM => e
       Wakame.log.error("Couldn't change user and group to #{user}:#{group}: #{e}")
@@ -45,6 +50,15 @@ module Wakame
     def setup_pidfile
       #raise 'Please implement pid_file() method' unless respond_to? :pid_file
 
+      unless File.exist?(File.dirname(pid_file))
+        FileUtils.mkpath(File.dirname(pid_file))
+      end
+
+      open(pid_file, "w") { |f| f.write(Process.pid) }
+      File.chmod(0644, pid_file)
+    end
+
+    def daemonize(log_path)
       # Cleanup stale pidfile or prevent from multiple process running.
       if File.exist?(pid_file)
         if pid && Process.running?(pid)
@@ -55,15 +69,10 @@ module Wakame
           remove_pidfile
         end
       end
-      
-    end
 
-    def daemonize(log_path)
       ::Daemonize.daemonize(log_path, File.basename($0.to_s))
 
-      open(pid_file, "w") { |f| f.write(Process.pid) }
-      File.chmod(0644, pid_file)
-
+      setup_pidfile
       #Signal.trap('HUP') {}
     end
 

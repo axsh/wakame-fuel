@@ -539,8 +539,6 @@ module Wakame
         opts = nil
       end
      
-      setup_pidfile
-
       if @options[:daemonize]
         daemonize(@options[:log_file])
       end

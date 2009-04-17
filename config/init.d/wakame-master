@@ -16,7 +16,9 @@
 
 #WAKAME_HOME=/home/wakame
 WAKAME_HOME=/home/katsuo/wakame
-#test -f /usr/sbin/cron || exit 0
+USER=wakame
+GROUP=wakame
+PIDFILE=/var/run/wakame/wakame-master.pid
 
 #LSBNAMES='-l'  # Uncomment for LSB name support in /etc/cron.d/
 
@@ -25,11 +27,6 @@ WAKAME_HOME=/home/katsuo/wakame
 
 export GEM_HOME
 
-USER=wakame
-GROUP=wakame
-
-
-
 
 start_master()
 {
@@ -37,13 +34,21 @@ start_master()
 	log_daemon_msg "Canceled to start master process for Wakame"
         exit 0
     }
+    # Prepare the parent directory for the pidfile.
+    typeset pid_dir=`dirname $PIDFILE`
+    if su -c "test -w $pid_dir" $USER; then
+      :
+    else
+      mkdir -p $pid_dir
+      chown "$USER:$GROUP" $pid_dir
+    fi
     
-    start-stop-daemon --start --quiet --pidfile /var/run/wakame/wakame-master.pid --name wakame-master --startas $WAKAME_HOME/bin/wakame-master -- -u $USER $LSBNAMES
+    start-stop-daemon --start --quiet --pidfile $PIDFILE --name wakame-master --startas $WAKAME_HOME/bin/wakame-master -- -u $USER $LSBNAMES
     
 }
 stop_master()
 {
-    start-stop-daemon --stop --quiet --pidfile /var/run/wakame/wakame-master.pid --name wakame-master
+    start-stop-daemon --stop --quiet --pidfile $PIDFILE --name wakame-master
 }
 
 case "$1" in

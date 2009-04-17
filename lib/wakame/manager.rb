@@ -383,13 +383,12 @@ module Wakame
         opts = nil
       end
 
-      change_privilege(@options[:uid]) if @options[:uid]
-     
-      setup_pidfile
-
       if @options[:daemonize]
         daemonize(@options[:log_file])
       end
+
+      change_privilege(@options[:uid]) if @options[:uid]
+     
 
       EM.epoll if Wakame.config.eventmachine_use_epoll
       EM.run {

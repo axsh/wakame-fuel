@@ -16,7 +16,7 @@
 
 #WAKAME_HOME=/home/wakame
 WAKAME_HOME=/home/katsuo/wakame
-#test -f /usr/sbin/cron || exit 0
+PIDFILE=/var/run/wakame/wakame-agent.pid
 
 #LSBNAMES='-l'  # Uncomment for LSB name support in /etc/cron.d/
 
@@ -28,6 +28,11 @@ export GEM_HOME
 start_agent()
 {
     typeset user_data i
+    # Prepare the parent directory for the pidfile.
+    typeset pid_dir=`dirname $PIDFILE`
+    [ -d $pid_dir ] || {
+      mkdir -p /var/run/wakame
+    }
 
     user_data="`curl -s -f --retry 3 http://169.254.169.254/2008-02-01/user-data`"
     if [ "$?" = 0 -a -n "$user_data" ]; then
@@ -36,12 +41,12 @@ start_agent()
 	    opts="$opts -s $i"
 	done
     fi
-    start-stop-daemon --start --quiet --pidfile /var/run/wakame/wakame-agent.pid --name wakame-agent --startas $WAKAME_HOME/bin/wakame-agent -- $opts $LSBNAMES
+    start-stop-daemon --start --quiet --pidfile $PIDFILE --name wakame-agent --startas $WAKAME_HOME/bin/wakame-agent -- $opts $LSBNAMES
 }
 
 stop_agent()
 {
-    start-stop-daemon --stop --quiet --pidfile /var/run/wakame/wakame-agent.pid --name wakame-agent
+    start-stop-daemon --stop --quiet --pidfile $PIDFILE --name wakame-agent
 }
 
 case "$1" in
