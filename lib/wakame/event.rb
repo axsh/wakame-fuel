@@ -349,21 +349,19 @@ module Wakame
     class MasterShutdown < Base; end
 
     class InstanceCountChanged < Base
-      attr_reader :resource, :prev_min, :min, :prev_max, :max
-      def initialize(resource, prev_min, prev_max, min, max)
+      attr_reader :resource, :prev_count, :count
+      def initialize(resource, prev_count, count)
         @resource = resource
-        @prev_min = prev_min
-        @prev_max = prev_max
-        @min = min
-        @max = max
+        @prev_count = prev_count
+        @count = count
       end
 
       def increased?
-        @prev_min < @min
+        @prev_count < @count
       end
 
       def decreased?
-        @prev_max > @max
+        @prev_count > @count
       end
     end
 

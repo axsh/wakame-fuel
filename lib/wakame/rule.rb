@@ -620,12 +620,12 @@ module Wakame
             end
           }
 
-          if @svc_prop.max_instance < online_svc.size
+          if @svc_prop.instance_count < online_svc.size
             online_svc.delete_if { |svc|
               svc.agent.agent_id == master.attr[:instance_id]
             }
         
-            (online_svc.size - @svc_prop.max_instance).times {
+            (online_svc.size - @svc_prop.instance_count).times {
               svc_to_stop << online_svc.shift
             }
             Wakame.log.debug("#{self.class}: online_svc.size=#{online_svc.size}, svc_to_stop.size=#{svc_to_stop.size}")
@@ -661,9 +661,9 @@ module Wakame
           }
 
           # The list is empty means that this action is called to propagate a new service instance instead of just starting scheduled instances.
-          if @svc_prop.min_instance > online_svc.size + svc_to_start.size
-            Wakame.log.debug("#{self.class}: @svc_prop.min_instance - online_svc.size=#{@svc_prop.min_instance - online_svc.size}")
-            (@svc_prop.min_instance - (online_svc.size + svc_to_start.size)).times {
+          if @svc_prop.instance_count > online_svc.size + svc_to_start.size
+            Wakame.log.debug("#{self.class}: @svc_prop.instance_count - online_svc.size=#{@svc_prop.instance_count - online_svc.size}")
+            (@svc_prop.instance_count - (online_svc.size + svc_to_start.size)).times {
               svc_to_start << service_cluster.propagate(@svc_prop.class)
             }
           end

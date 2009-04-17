@@ -37,12 +37,12 @@ module ThreadImmutable
         if method_defined?(n)
           alias_method "#{n}_no_thread_check", n.to_sym
           
-          eval <<__E__
-def #{n}(*args, &blk)
-  thread_check
-  #{n}_no_thread_check(*args, &blk)
-end
-__E__
+          eval <<-__E__
+          def #{n}(*args, &blk)
+            thread_check
+            #{n}_no_thread_check(*args, &blk)
+          end
+          __E__
         end
       }
     end
@@ -120,7 +120,12 @@ module AttributeHelper
         if @#{name}.nil?
           retrieve_attr_attribute { |a|
             if a.has_key?(:#{name})
-              @#{name} = a[:#{name}][:default]
+              case a[:#{name}][:default]
+              when Proc
+                @#{name} = a[:#{name}][:default].call(self)
+              else
+                @#{name} = a[:#{name}][:default]
+              end
               break
             end
           }
