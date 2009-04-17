@@ -101,6 +101,7 @@ module Wakame
         res['return'] == 'true'
       end
 
+      # volume
       def describe_volume(vol_id)
         res = @ec2.describe_volumes(:volume_id=>vol_id)
         if res['volumeSet']['item'][0]['attachmentSet']
@@ -108,14 +109,50 @@ module Wakame
         else
           res['volumeSet']['item'][0]
         end
-      end      
-
+      end
+# >> @ec2.attach_volume(:instance_id => 'i-1fa1cd76', :volume_id => "vol-1f927176", :device=>'/dev/sde')
+#      => {"attachTime"=>"2009-04-17T05:46:18.000Z", "status"=>"attaching", "device"=>"/dev/sde", "requestId"=>"0fd3797b-b4f9-476b-8cb2-3e7401c6fae2", "instanceId"=>"i-1fa1cd76", "volumeId"=>"vol-1f927176", "xmlns"=>"http://ec2.amazonaws.com/doc/2008-12-01/"}
       def attach_volume(instance_id, vol_id, vol_dev)
         res = @ec2.attach_volume(:instance_id=>instance_id, :volume_id=>vol_id, :device=>vol_dev)
       end
       def detach_volume(vol_id)
         res = @ec2.detach_volume(:volume_id=>vol_id)
       end
+
+      # volume
+# >> @ec2.describe_volumes(:volume_id => "vol-c58360ac")
+#      => {"volumeSet"=>{"item"=>[{"status"=>"available", "size"=>"1", "snapshotId"=>nil, "availabilityZone"=>"us-east-1a", "attachmentSet"=>nil, "createTime"=>"2009-04-16T09:56:01.000Z", "volumeId"=>"vol-c58360ac"}]}, "requestId"=>"0e6d0923-eba8-425a-b939-87c7fe8e835e", "xmlns"=>"http://ec2.amazonaws.com/doc/2008-12-01/"}
+      def describe_volume(vol_id)
+        res = @ec2.describe_volumes(:volume_id=>vol_id)
+        res['volumeSet']['item'][0]
+      end
+      def create_volume(availability_zone, size)
+        res = @ec2.create_volume(:availability_zone=>availability_zone, :size=>size)
+      end
+# >> @ec2.create_volume(:availability_zone=>"us-east-1b", :snapshot_id=>"snap-27c1324e")
+#      => {"status"=>"creating", "size"=>"1", "snapshotId"=>"snap-27c1324e", "requestId"=>"f3a0ddbf-9eb8-4594-b43e-8486459a0168", "availabilityZone"=>"us-east-1b", "createTime"=>"2009-04-17T05:44:58.000Z", "volumeId"=>"vol-1f927176", "xmlns"=>"http://ec2.amazonaws.com/doc/2008-12-01/"}
+      def create_volume_from_snapshot(availability_zone, snapshot_id)
+        res = @ec2.create_volume(:availability_zone=>availability_zone, :snapshot_id=>snapshot_id)
+      end
+      def delete_volume(vol_id)
+        res = @ec2.delete_volume(:volume_id=>vol_id)
+      end
+
+      # snapshot
+      def describe_snapshot(snapshot_id)
+        res = @ec2.describe_snapshots(:snapshot_id=>snapshot_id)
+        res['snapshotSet']['item'][0]
+      end
+
+# >> @ec2.create_snapshot(:volume_id => 'vol-c58360ac')
+#      => {"status"=>"pending", "snapshotId"=>"snap-18c13271", "requestId"=>"9d1d586a-44b7-4edd-b94a-aaccb54e888d", "progress"=>nil, "startTime"=>"2009-04-16T10:13:37.000Z", "volumeId"=>"vol-c58360ac", "xmlns"=>"http://ec2.amazonaws.com/doc/2008-12-01/"}
+      def create_snapshot(vol_id)
+        res = @ec2.create_snapshot(:volume_id=>vol_id)
+      end
+      def delete_snapshot(snapshot_id)
+        res = @ec2.delete_snapshot(:snapshot_id=>snapshot_id)
+      end
+
 
       def request_internal_aws(key)
         require 'open-uri'
