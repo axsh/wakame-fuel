@@ -900,10 +900,14 @@ module Wakame
         vm_manipulator = VmManipulator.create
         res = vm_manipulator.describe_volume(@ebs_volume)
         Wakame.log.debug("describe_volume(#{@ebs_volume}): #{res.inspect}")
+        ec2_instance_id=nil
+        if res['attachmentSet']
+          ec2_instance_id = res['attachmentSet']['item'][0]['instanceId']
+        end
 
-        if res['status'] == 'attached' && res['instanceId'] == svc.agent.agent_id
+        if res['status'] == 'in-use' && ec2_instance_id == svc.agent.agent_id
           # Nothin to be done
-        elsif res['status'] == 'attached' && res['instanceId'] != svc.agent.agent_id
+        elsif res['status'] == 'in-use' && ec2_instance_id != svc.agent.agent_id
           vm_manipulator.detach_volume(@ebs_volume)
           sleep 1.0
           res = vm_manipulator.attach_volume(svc.agent.agent_id, @ebs_volume, @ebs_device)
