@@ -1,43 +1,50 @@
 = Wakame
 
-* FIX (url)
+* http://wakame.rubyforge.org/
 
 == DESCRIPTION:
 
-FIX (describe your package)
+* Wakame is a framework to simplify the complex virtual machine manipulation over multiple instances in Clound envrionment. This project aims to provide the management/monitoring services with server/daemon configuration set to build scalable web applications.
 
 == FEATURES/PROBLEMS:
 
-* FIX (list of features or problems)
+* 
 
 == SYNOPSIS:
 
-  FIX (code sample of usage)
+  
 
 == REQUIREMENTS:
 
-* FIX (list of requirements)
+* eventmachine
+* amqp
+* daemons
+* amazon-ec2
+* log4r
+* hoe
 
 == INSTALL:
 
-* FIX (sudo gem install, anything else)
+* 
 
 == LICENSE:
 
-(The Apache License)
+(Apache License, Version 2.0)
 
+Copyright (c) 2009 axsh co., LTD
 Copyright (c) 2009 Masahiro Fujiwara <m-fujiwara at axsh dot net>
 
-Permission is hereby granted, free of charge, to any person obtaining
-a copy of this software and associated documentation files (the
-'Software'), to deal in the Software without restriction, including
-without limitation the rights to use, copy, modify, merge, publish,
-distribute, sublicense, and/or sell copies of the Software, and to
-permit persons to whom the Software is furnished to do so, subject to
-the following conditions:
+Licensed under the Apache License, Version 2.0 (the "License");
+you may not use this file except in compliance with the License.
+You may obtain a copy of the License at
 
-The above copyright notice and this permission notice shall be
-included in all copies or substantial portions of the Software.
+    http://www.apache.org/licenses/LICENSE-2.0
+
+Unless required by applicable law or agreed to in writing, software
+distributed under the License is distributed on an "AS IS" BASIS,
+WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+See the License for the specific language governing permissions and
+limitations under the License.
 
 THE SOFTWARE IS PROVIDED 'AS IS', WITHOUT WARRANTY OF ANY KIND,
 EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF

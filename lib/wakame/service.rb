@@ -845,7 +845,7 @@ module Wakame
         @listen_port = 80
         @listen_port_https = 443
         @template = ConfigurationTemplate::ApacheTemplate.new(:lb)
-        @elastic_ip = '174.129.218.202'
+        @elastic_ip = ''
       end
 
       def on_parent_changed(action, svc_inst)
@@ -889,7 +889,7 @@ module Wakame
 
         @mysqld_datadir = File.expand_path('data', @basedir)
         @mysqld_log_bin = File.expand_path('mysql-bin.log', @mysqld_datadir)
-        @ebs_volume = 'vol-6ecf2807'
+        @ebs_volume = ''
         @ebs_device = '/dev/sdd'
         @ebs_mount_option = 'noatime'
 

@@ -26,6 +26,8 @@ namespace :ec2 do
     raise 'This task requires root privilege.' unless Process.uid == 0
     raise 'Required key files counld not be detected: /mnt/cert.pem or /mnt/pk.pem'  unless File.exist?('/mnt/cert.pem') && File.exist?('/mnt/pk.pem')
 
+    #sh("/etc/init.d/rabbitmq-server stop") rescue puts $!
+
     bundle_tmpdir='/mnt/wakame-bundle'
     # If the arg was not set, it tries to overwrite the running image.
     manifest_path= args.manifest_path || request_metadata_url('ami-manifest-path')
@@ -56,6 +58,7 @@ namespace :ec2 do
     arch = res['imagesSet']['item'][0]['architecture']
 
     begin
+#puts bundle_tmpdir
       FileUtils.mkpath(bundle_tmpdir) unless File.exist?(bundle_tmpdir)
 
       sh("ec2-bundle-vol --batch -d '#{bundle_tmpdir}' -p '#{manifest_basename}' -c /mnt/cert.pem -k /mnt/pk.pem -u '#{account_no}' -r '#{arch}'")
@@ -63,7 +66,7 @@ namespace :ec2 do
       res = ec2.register_image(:image_location=>manifest_path)
       puts "New AMI ID for #{manifest_path}: #{res['imageId']}"
     ensure
-      FileUtils.rm_rf(bundle_tmpdir) if File.exist?(bundle_tmpdir)
+      FileUtils.rm_rf(bundle_tmpdir) if !bundle_tmpdir.nil? && File.exist?(bundle_tmpdir)
     end
   end
 
@@ -103,7 +106,7 @@ namespace :ec2 do
         end
       }
       
-      sh("mkfs.ext3 #{ATTACH_DEV}")
+      sh("echo 'y' | mkfs.ext3 -q #{ATTACH_DEV}")
       
       begin
         FileUtils.mkpath(TMP_MNT) unless File.exist?(TMP_MNT)

@@ -13,6 +13,7 @@ module Wakame
       :config_template_root => nil,
       :config_tmp_root => nil,
       :config_root => nil,
+      :load_paths => [],
       :ssh_private_key => nil,
       :drb_command_server_uri => 'druby://localhost:12345',
       :vm_manipulation_class => nil,
@@ -59,9 +60,8 @@ module Wakame
 
         config.ssh_private_key = '/home/wakame/config/root.id_rsa'
 
-        config.aws_access_key = '1TE7T2475AY1YM8DZQ82'
-        config.aws_secret_key = 'OyqnC6beLDN623TsZLIqNRHQ+agim3GqlZtzABir'
-        config.ec2_ami_id = 'ami-8f9176e6'
+        config.aws_access_key = ''
+        config.aws_secret_key = ''
       end
     end
 

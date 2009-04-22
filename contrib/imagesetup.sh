@@ -1,17 +1,16 @@
 #!/bin/bash
 
+[ $UID -eq 0 ] || { echo "Run with root user."; exit 1; }
 
 apt-get update;
-apt-get upgrade;
+apt-get -y upgrade;
+
+apt-get -y install apache2-mpm-prefork libapache2-mod-rpaf
+apt-get -y install mysql-server mysql-client
+apt-get -y install erlang-nox
+apt-get -y install unzip zip rsync libopenssl-ruby libhmac-ruby rubygems irb ri rdoc sysstat
+
 apt-get clean
-
-
-apt-get install apache2-mpm-prefork libapache2-mod-rpaf
-apt-get install mysql-server mysql-client
-apt-get install erlang-nox
-
-
-apt-get install unzip zip rsync libopenssl-ruby libhmac-ruby
 
 (cd /tmp;
 wget http://www.rabbitmq.com/releases/rabbitmq-server/v1.5.4/rabbitmq-server_1.5.4-1_all.deb;
@@ -19,13 +18,38 @@ dpkg -i rabbitmq-server_1.5.4-1_all.deb;
 )
 
 
-adduser --system --disabled-password --disabled-login wakame wakame
+if ! getent group wakame >/dev/null; then
+    addgroup --system wakame
+fi
+
+if ! getent passwd wakame >/dev/null; then
+    adduser --system --ingroup wakame --disabled-password wakame
+fi
+
+mkdir /home/wakame/config
+chown wakame:wakame /home/wakame/config
+mkdir /home/wakame/mysql
+mkdir /home/wakame/mysql/data
+mkdir /home/wakame/mysql/data-slave
+chown mysql:mysql /home/wakame/mysql/data /home/wakame/mysql/data-slave
+
+if ! grep GEM_HOME /etc/environemnt >/dev/null; then
+    cat <<EOF > /etc/environment
+GEM_HOME=/usr/local/gems
+EOF
+fi
+
+cat <<EOF > /etc/default/wakame
+WAKAME_HOME=/home/wakame/corelib
+GEM_HOME=/usr/local/gems
+EOF
 
 update-rc.d -f apache2 remove
 update-rc.d -f mysql remove
 update-rc.d -f mysql-ndb remove
 update-rc.d -f mysql-ndb-mgm remove
-update-rc.d -f rabbitmq-server remove
+# Disable apparmor
+update-rc.d -f apparmor remove
 
 cat <<EOF > /usr/local/bin/passenger_ruby.sh
 #!/bin/sh
@@ -33,4 +57,15 @@ export GEM_PATH="/usr/local/gems"
 exec /usr/bin/ruby $@
 EOF
 chmod 755 /usr/local/bin/passenger_ruby.sh
+
+# Create root ssh key
+ssh-keygen -t rsa -f /home/wakame/config/root.id_rsa
+chown wakame:wakame /home/wakame/config/root.id_rsa /home/wakame/config/root.id_rsa.pub
+cat /home/wakame/config/root.id_rsa.pub >> /root/.ssh/authorized_keys
+
+#gem install rake rails eventmachine amqp log4r daemons passenger hoe amazon-ec2 --no-ri --no-rdoc
+#(cd $GEM_HOME/gems/passenger-*; rake)
+
+#update-rc.d wakame-master defaults 41
+#update-rc.d wakame-agent defaults 40
 

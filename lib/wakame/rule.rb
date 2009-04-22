@@ -533,6 +533,7 @@ module Wakame
         Wakame.log.debug("#{self.class} called start_instance(#{image_id})")
         
         attr[:user_data] = "node=agent\namqp_server=amqp://#{master.attr[:local_ipv4]}/"
+        Wakame.log.debug("user_data: #{attr[:user_data]}")
 
         res = vm_manipulator.start_instance(image_id, attr)
         inst_id = res[:instance_id]
