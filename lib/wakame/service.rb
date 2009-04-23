@@ -853,7 +853,7 @@ module Wakame
         @listen_port = 80
         @listen_port_https = 443
         @template = ConfigurationTemplate::ApacheTemplate.new(:lb)
-        @elastic_ip = '174.129.218.202'
+        @elastic_ip = ''
       end
 
       def on_parent_changed(action, svc_inst)
@@ -899,7 +899,7 @@ module Wakame
         @mysqld_port = 3306
         @mysqld_datadir = File.expand_path('data', @basedir)
         @mysqld_log_bin = File.expand_path('mysql-bin.log', @mysqld_datadir)
-        @ebs_volume = 'vol-38bc5f51'
+        @ebs_volume = ''
         @ebs_device = '/dev/sdm'
         @ebs_mount_option = 'noatime'
 
@@ -919,11 +919,14 @@ module Wakame
         end
 
         Wakame.log.debug("describe_volume(#{@ebs_volume}): #{res.inspect}")
-        Wakame.log.debug("instanceId: #{svc.agent.agent_id}, #{res.instanceId}")
+        ec2_instance_id=nil
+        if res['attachmentSet']
+          ec2_instance_id = res['attachmentSet']['item'][0]['instanceId']
+        end
 
-        if ec2_instance_id  == svc.agent.agent_id && (res['status'] == 'attached' || res['status'] == 'in-use')
+        if res['status'] == 'in-use' && ec2_instance_id == svc.agent.agent_id
           # Nothin to be done
-        elsif res['status'] == 'attached' && ec2_instance_id != svc.agent.agent_id
+        elsif res['status'] == 'in-use' && ec2_instance_id != svc.agent.agent_id
           vm_manipulator.detach_volume(@ebs_volume)
           sleep 1.0
           res = vm_manipulator.attach_volume(svc.agent.agent_id, @ebs_volume, @ebs_device)

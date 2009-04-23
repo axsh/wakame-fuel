@@ -14,8 +14,6 @@
 #                    security and more powerful configuration options.
 ### END INIT INFO
 
-#WAKAME_HOME=/home/wakame
-WAKAME_HOME=/home/katsuo/wakame
 USER=wakame
 GROUP=wakame
 PIDFILE=/var/run/wakame/wakame-master.pid
@@ -25,8 +23,7 @@ PIDFILE=/var/run/wakame/wakame-master.pid
 . /lib/lsb/init-functions
 [ -f /etc/default/wakame ] && . /etc/default/wakame
 
-export GEM_HOME
-
+export GEM_HOME WAKAME_HOME
 
 start_master()
 {

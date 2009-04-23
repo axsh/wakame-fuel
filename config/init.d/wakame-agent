@@ -14,8 +14,6 @@
 #                    security and more powerful configuration options.
 ### END INIT INFO
 
-#WAKAME_HOME=/home/wakame
-WAKAME_HOME=/home/katsuo/wakame
 PIDFILE=/var/run/wakame/wakame-agent.pid
 
 #LSBNAMES='-l'  # Uncomment for LSB name support in /etc/cron.d/
@@ -23,7 +21,7 @@ PIDFILE=/var/run/wakame/wakame-agent.pid
 . /lib/lsb/init-functions
 [ -f /etc/default/wakame ] && . /etc/default/wakame
 
-export GEM_HOME
+export GEM_HOME WAKAME_HOME
 
 start_agent()
 {

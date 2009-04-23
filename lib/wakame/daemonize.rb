@@ -26,14 +26,14 @@ module Wakame
       target_gid = Etc.getgrnam(group).gid
 
       if uid != target_uid || gid != target_gid
+        if pid_file && File.exist?(pid_file) && uid == 0
+          File.chown(target_uid, target_gid, pid_file)
+        end
+
         # Change process ownership
         Process.initgroups(user, target_gid)
         Process::GID.change_privilege(target_gid)
         Process::UID.change_privilege(target_uid)
-
-        if pid_file && File.exist?(pid_file)
-          File.chown(target_uid, target_gid, pid_file)
-        end
       end
     rescue Errno::EPERM => e
       Wakame.log.error("Couldn't change user and group to #{user}:#{group}: #{e}")

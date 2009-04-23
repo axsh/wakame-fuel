@@ -533,6 +533,7 @@ module Wakame
         Wakame.log.debug("#{self.class} called start_instance(#{image_id})")
         
         attr[:user_data] = "node=agent\namqp_server=amqp://#{master.attr[:local_ipv4]}/"
+        Wakame.log.debug("user_data: #{attr[:user_data]}")
 
         res = vm_manipulator.start_instance(image_id, attr)
         inst_id = res[:instance_id]
@@ -625,7 +626,7 @@ module Wakame
               svc.agent.agent_id == master.attr[:instance_id]
             }
         
-            (online_svc.size - @svc_prop.instance_count).times {
+            ((online_svc.size - @svc_prop.instance_count) + 1).times {
               svc_to_stop << online_svc.shift
             }
             Wakame.log.debug("#{self.class}: online_svc.size=#{online_svc.size}, svc_to_stop.size=#{svc_to_stop.size}")
@@ -635,6 +636,7 @@ module Wakame
         svc_to_stop.each { |svc_inst|
           trigger_action(StopService.new(svc_inst))
         }
+        flush_subactions
       end
     end
 
@@ -690,11 +692,9 @@ module Wakame
             raise "Failed to arrange the agent #{@svc_prop.class}"
           end
           
-          #trigger_action(StartService.new(svc),{:success=>proc{
-          #                   EH.fire_event(Event::ServicePropagated.new(svc))
-          #                 }})
           trigger_action(StartService.new(svc))
         }
+        flush_subactions
       end
 
       private
@@ -1264,7 +1264,9 @@ module Wakame
             end
             
           when Manager::Commands::PropagateService
-            trigger_action(PropagateInstancesAction.new(event.command.property))
+            EM.barrier {
+              event.command.property.instance_counter.instance_count += 1
+            }
           when Manager::Commands::MigrateService
             trigger_action(MigrateServiceAction.new(event.command.service_instance, 
                                                     event.command.agent
