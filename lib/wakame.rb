@@ -16,6 +16,7 @@ Shell.debug = false
 Shell.verbose = false
 
 module Wakame
+  VERSION='0.3.0'
   autoload :Agent, 'wakame/agent'
   autoload :Daemonize, 'wakame/daemonize'
   autoload :Util, 'wakame/util'
@@ -23,7 +24,6 @@ module Wakame
   autoload :Service, 'wakame/service'
   autoload :Rule, 'wakame/rule'
   autoload :Graph, 'wakame/graph'
-  VERSION='0.2.0'
 
   def gen_id(str=nil)
     Digest::SHA1.hexdigest( (str.nil? ? rand.to_s : str) )
