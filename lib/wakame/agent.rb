@@ -321,7 +321,7 @@ module Wakame
 
     private
     def collect_system_info
-      @attr = Wakame.new_( Wakame.config.vm_manipulation_class ).fetch_local_attrs
+      @attr = VmManipulator::EC2::MetadataService.fetch_local_attrs
     end
 
     def collect_ip_info1

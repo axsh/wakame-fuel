@@ -69,3 +69,11 @@ cat /home/wakame/config/root.id_rsa.pub >> /root/.ssh/authorized_keys
 #update-rc.d wakame-master defaults 41
 #update-rc.d wakame-agent defaults 40
 
+# 
+# /root/.ssh/authorized_keys /root/.bash_history
+# /home/ubuntu/.ssh/authorized_keys /home/ubuntu/.bash_history
+# Clear logs
+# rm -f /var/log/apache2/* /var/log/rabbitmq/* /var/log/wakame-* /var/log/*.gz
+# cat /dev/null > /var/log/lastlog
+# cat /dev/null > /var/log/wtmp
+# cat /dev/null > /var/log/authlog

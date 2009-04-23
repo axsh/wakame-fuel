@@ -698,16 +698,16 @@ module Wakame
 
       def initialize(master, &blk)
         super(master) {
-#          add_service(Apache_WWW.new)
-#          add_service(Apache_APP.new)
-#          add_service(Apache_LB.new)
+          add_service(Apache_WWW.new)
+          add_service(Apache_APP.new)
+          add_service(Apache_LB.new)
           add_service(MySQL_Master.new)
-          add_service(MySQL_Slave.new)
+#          add_service(MySQL_Slave.new)
 
-#          set_dependency(Apache_WWW, Apache_LB)
-#          set_dependency(Apache_APP, Apache_LB)
-#          set_dependency(MySQL_Master, Apache_APP)
-          set_dependency(MySQL_Master, MySQL_Slave)
+          set_dependency(Apache_WWW, Apache_LB)
+          set_dependency(Apache_APP, Apache_LB)
+          set_dependency(MySQL_Master, Apache_APP)
+#          set_dependency(MySQL_Master, MySQL_Slave)
 
           @rule_engine = RuleSet.new(self)
         }

@@ -16,7 +16,7 @@ Shell.debug = false
 Shell.verbose = false
 
 module Wakame
-  VERSION='0.3.0'
+  VERSION='0.3.1'
   autoload :Agent, 'wakame/agent'
   autoload :Daemonize, 'wakame/daemonize'
   autoload :Util, 'wakame/util'

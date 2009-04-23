@@ -58,15 +58,15 @@ namespace :ec2 do
     arch = res['imagesSet']['item'][0]['architecture']
 
     begin
-#puts bundle_tmpdir
-      FileUtils.mkpath(bundle_tmpdir) unless File.exist?(bundle_tmpdir)
+      FileUtils.rm_rf(bundle_tmpdir) if File.exist?(bundle_tmpdir)
+      FileUtils.mkpath(bundle_tmpdir)
 
       sh("ec2-bundle-vol --batch -d '#{bundle_tmpdir}' -p '#{manifest_basename}' -c /mnt/cert.pem -k /mnt/pk.pem -u '#{account_no}' -r '#{arch}'")
       sh("ec2-upload-bundle -d '#{bundle_tmpdir}' -b '#{s3bucket}' -m '#{File.join(bundle_tmpdir, manifest_basename + '.manifest.xml')}' -a '#{AWS_ACCESS_KEY}' -s '#{AWS_SECRET_KEY}'")
       res = ec2.register_image(:image_location=>manifest_path)
       puts "New AMI ID for #{manifest_path}: #{res['imageId']}"
     ensure
-      FileUtils.rm_rf(bundle_tmpdir) if !bundle_tmpdir.nil? && File.exist?(bundle_tmpdir)
+      FileUtils.rm_rf(bundle_tmpdir) if File.exist?(bundle_tmpdir)
     end
   end
 

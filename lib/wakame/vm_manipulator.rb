@@ -48,6 +48,7 @@ module Wakame
     end
 
     class EC2 < Base
+
       require 'EC2'
 
       def initialize()
@@ -153,23 +154,30 @@ module Wakame
         res = @ec2.delete_snapshot(:snapshot_id=>snapshot_id)
       end
 
+      module MetadataService
+        def query_metadata_uri(key)
+          require 'open-uri'
+          open("http://169.254.169.254/2008-02-01/meta-data/#{key}") { |f|
+            return f.readline
+          }
+        end
+        module_function :query_metadata_uri
+        public :query_metadata_uri
 
-      def request_internal_aws(key)
-        require 'open-uri'
-        open("http://169.254.169.254/2008-02-01/meta-data/#{key}") { |f|
-          return f.readline
-        }
+        def fetch_local_attrs
+          attrs = {}
+          %w[instance-id instance-type local-ipv4 local-hostname public-hostname public-ipv4 ami-id].each { |key|
+            rkey = key.tr('-', '_')
+            attrs[rkey.to_sym]=query_metadata_uri(key)
+          }
+          attrs
+        end
+        module_function :fetch_local_attrs
+        public :fetch_local_attrs
+        
       end
 
-      def fetch_local_attrs
-        attrs = {}
-        %w[instance-id instance-type local-ipv4 local-hostname public-hostname public-ipv4 ami-id].each { |key|
-          rkey = key.tr('-', '_')
-          attrs[rkey.to_sym]=request_internal_aws(key)
-        }
-        attrs
-      end
-
+      include MetadataService
     end
 
   end
