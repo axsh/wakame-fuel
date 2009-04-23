@@ -18,14 +18,14 @@
 # Remember to edit /etc/mysql/debian.cnf when changing the socket location.
 [client]
 port		= <%= property.mysqld_port %>
-socket		= /var/run/mysqld/mysqld.sock
+socket		= /var/run/mysqld/mysqld-slave.sock
 
 # Here is entries for some specific programs
 # The following values assume you have at least 32M ram
 
 # This was formally known as [safe_mysqld]. Both versions are currently parsed.
 [mysqld_safe]
-socket		= /var/run/mysqld/mysqld.sock
+socket		= /var/run/mysqld/mysqld-slave.sock
 nice		= 0
 
 [mysqld]
@@ -40,8 +40,8 @@ nice		= 0
 #
 
 user		= mysql
-pid-file	= /var/run/mysqld/mysqld.pid
-socket		= /var/run/mysqld/mysqld.sock
+pid-file	= /var/run/mysqld/mysqld-slave.pid
+socket		= /var/run/mysqld/mysqld-slave.sock
 port		= <%= property.mysqld_port %>
 basedir		= /usr
 datadir		= <%= property.mysqld_datadir %>
@@ -72,13 +72,13 @@ query_cache_size        = 16M
 #
 # Both location gets rotated by the cronjob.
 # Be aware that this log type is a performance killer.
-log		= /var/log/mysql/mysql.log
-log_error       = /var/log/mysql/mysql-error.log
+log		= /var/log/mysql/mysql-slave.log
+log_error       = /var/log/mysql/mysql-slave-error.log
 #
 # Error logging goes to syslog. This is a Debian improvement :)
 #
 # Here you can see queries with especially long duration
-log_slow_queries	= /var/log/mysql/mysql-slow.log
+log_slow_queries	= /var/log/mysql/mysql-slave-slow.log
 long_query_time = 2
 #log-queries-not-using-indexes
 #
@@ -86,7 +86,10 @@ long_query_time = 2
 # note: if you are setting up a replication slave, see README.Debian about
 #       other settings you may need to change.
 server-id		= <%= property.mysqld_server_id %>
-log_bin			= <%= property.mysqld_log_bin %>
+relay-log		= <%= property.mysqld_datadir %>/mysqld-relay-bin
+relay-log-index		= <%= property.mysqld_datadir %>/mysqld-relay-bin
+read_only
+
 #expire_logs_days	= 10
 #max_binlog_size         = 100M
 #binlog_do_db		= include_database_name

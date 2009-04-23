@@ -59,8 +59,8 @@ module Wakame
 
         config.ssh_private_key = '/home/wakame/config/root.id_rsa'
 
-        config.aws_access_key = '1TE7T2475AY1YM8DZQ82'
-        config.aws_secret_key = 'OyqnC6beLDN623TsZLIqNRHQ+agim3GqlZtzABir'
+        config.aws_access_key = '0ANXN53JBA57BREGQV82'
+        config.aws_secret_key = '0u0aQldgyxpEwjZ9Kh9uLhrRO0QavdPwOSu+E+Pp'
         config.ec2_ami_id = 'ami-8f9176e6'
       end
     end

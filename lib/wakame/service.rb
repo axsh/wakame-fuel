@@ -698,14 +698,16 @@ module Wakame
 
       def initialize(master, &blk)
         super(master) {
-          add_service(Apache_WWW.new)
-          add_service(Apache_APP.new)
-          add_service(Apache_LB.new)
+#          add_service(Apache_WWW.new)
+#          add_service(Apache_APP.new)
+#          add_service(Apache_LB.new)
           add_service(MySQL_Master.new)
+          add_service(MySQL_Slave.new)
 
-          set_dependency(Apache_WWW, Apache_LB)
-          set_dependency(Apache_APP, Apache_LB)
-          set_dependency(MySQL_Master, Apache_APP)
+#          set_dependency(Apache_WWW, Apache_LB)
+#          set_dependency(Apache_APP, Apache_LB)
+#          set_dependency(MySQL_Master, Apache_APP)
+          set_dependency(MySQL_Master, MySQL_Slave)
 
           @rule_engine = RuleSet.new(self)
         }
@@ -733,6 +735,12 @@ module Wakame
 
       def each_www(&blk)
         each_instance(HttpAssetServer) { |n|
+          blk.call(n)
+        }
+      end
+
+      def each_mysql(&blk)
+        each_instance(MySQL_Master) { |n|
           blk.call(n)
         }
       end
@@ -880,17 +888,19 @@ module Wakame
     end
 
     class MySQL_Master < Property
-      attr_reader :basedir, :mysqld_datadir, :mysqld_log_bin, :ebs_volume, :ebs_device
+      attr_reader :basedir, :mysqld_datadir, :mysqld_port, :mysqld_server_id, :mysqld_log_bin, :ebs_volume, :ebs_device
 
       def initialize
         super()
         @template = ConfigurationTemplate::MySQLTemplate.new()
         @basedir = '/home/wakame/mysql'
 
+        @mysqld_server_id = 1 # static
+        @mysqld_port = 3306
         @mysqld_datadir = File.expand_path('data', @basedir)
         @mysqld_log_bin = File.expand_path('mysql-bin.log', @mysqld_datadir)
-        @ebs_volume = 'vol-6ecf2807'
-        @ebs_device = '/dev/sdd'
+        @ebs_volume = 'vol-38bc5f51'
+        @ebs_device = '/dev/sdm'
         @ebs_mount_option = 'noatime'
 
         @duplicable = false
@@ -899,18 +909,38 @@ module Wakame
       def before_start(svc, action)
         vm_manipulator = VmManipulator.create
         res = vm_manipulator.describe_volume(@ebs_volume)
-        Wakame.log.debug("describe_volume(#{@ebs_volume}): #{res.inspect}")
 
-        if res['status'] == 'attached' && res['instanceId'] == svc.agent.agent_id
+        # $ echo "GRANT REPLICATION SLAVE, REPLICATION CLIENT, RELOAD ON *.* TO 'wakame-repl'@'%' IDENTIFIED BY 'wakame-slave';" | /usr/bin/mysql -h#{mysql_master_ip} -uroot
+
+        # in-use:
+        ec2_instance_id = nil
+        if res["attachmentSet"]
+          ec2_instance_id = res["attachmentSet"]['item'][0]["instanceId"]
+        end
+
+        Wakame.log.debug("describe_volume(#{@ebs_volume}): #{res.inspect}")
+        Wakame.log.debug("instanceId: #{svc.agent.agent_id}, #{res.instanceId}")
+
+        if ec2_instance_id  == svc.agent.agent_id && (res['status'] == 'attached' || res['status'] == 'in-use')
           # Nothin to be done
-        elsif res['status'] == 'attached' && res['instanceId'] != svc.agent.agent_id
+        elsif res['status'] == 'attached' && ec2_instance_id != svc.agent.agent_id
           vm_manipulator.detach_volume(@ebs_volume)
           sleep 1.0
           res = vm_manipulator.attach_volume(svc.agent.agent_id, @ebs_volume, @ebs_device)
           Wakame.log.debug(res.inspect)
+          # sync
+          3.times do |i|
+            system("/bin/sync")
+            sleep 1.0
+          end
         elsif res['status'] == 'available'
           res = vm_manipulator.attach_volume(svc.agent.agent_id, @ebs_volume, @ebs_device)
           Wakame.log.debug(res.inspect)
+          # sync
+          3.times do |i|
+            system("/bin/sync")
+            sleep 1.0
+          end
         else
           raise "The EBS volume is not ready to attach: #{@ebs_volume}"
         end
@@ -922,6 +952,11 @@ module Wakame
         if mount_point_dev != @ebs_device
           Wakame.log.debug("Mounting EBS volume: #{@ebs_device} as #{@mysqld_datadir} (with option: #{@ebs_mount_option})")
           system("/bin/mount -o #{@ebs_mount_option} #{@ebs_device} #{@mysqld_datadir}")
+          # sync
+          3.times do |i|
+            system("/bin/sync")
+            sleep 1.0
+          end
         end
         system(Wakame.config.root + "/config/init.d/mysql start")
       end
@@ -937,6 +972,172 @@ module Wakame
       end
     end
 
+    class MySQL_Slave < Property
+      attr_reader :basedir, :mysqld_datadir, :mysqld_port, :mysqld_server_id, :mysqld_log_bin, :ebs_volume, :ebs_device
+
+      def initialize
+        super()
+        @template = ConfigurationTemplate::MySQLSlaveTemplate.new()
+        @basedir = '/home/wakame/mysql'
+
+        @mysqld_server_id = 2 # dynamic
+        @mysqld_port = 3307
+        @mysqld_datadir = File.expand_path('data-slave', @basedir)
+
+        @ebs_volume = 'vol-38bc5f51'  # master volume_id
+        @ebs_device = '/dev/sdn'      # slave mount point
+        @ebs_mount_option = 'noatime'
+
+        @mysqld_master_host = '10.249.2.115'
+        @mysqld_master_user = 'wakame-repl'
+        @mysqld_master_pass = 'wakame-slave'
+        @mysqld_master_port = 3306
+        @mysqld_master_datadir = File.expand_path('data', @basedir)
+
+        @duplicable = false
+      end
+
+      def before_start(svc, action)
+        vm_manipulator = VmManipulator.create
+
+        Wakame.log.debug("mkdir #{@mysqld_datadir}")
+        system("[ -d #{@mysqld_datadir} ] || mkdir -p #{@mysqld_datadir}")
+        Wakame.log.debug("[ -b #{@ebs_device} ]")
+        system("[ -b #{@ebs_device} ]")
+        if $? == 0
+          Wakame.log.debug("The EBS volume(slave) device is not ready to attach: #{@ebs_device}")
+          return
+        end
+
+        volume_map = vm_manipulator.describe_volume(@ebs_volume)
+        Wakame.log.debug("describe_volume(#{@ebs_volume}): #{volume_map.inspect}")
+        if volume_map['status'] == 'in-use'
+          # Nothin to be done
+        else
+          Wakame.log.debug("The EBS volume(slave) is not ready to attach: #{@ebs_volume}")
+          return
+        end
+
+        system("echo show master status | /usr/bin/mysql -h#{@mysqld_master_host} -P#{@mysqld_master_port} -u#{@mysqld_master_user}  -p#{@mysqld_master_pass}")
+        if $? != 0
+          raise "Can't connect mysql master: #{@mysqld_master_host}:#{@mysqld_master_port}"
+        end
+
+        system("echo 'FLUSH TABLES WITH READ LOCK;' | /usr/bin/mysql -h#{@mysqld_master_host} -P#{@mysqld_master_port} -u#{@mysqld_master_user}  -p#{@mysqld_master_pass} -s")
+        master_status = `echo show master status | /usr/bin/mysql -h#{@mysqld_master_host} -P#{@mysqld_master_port} -u#{@mysqld_master_user}  -p#{@mysqld_master_pass} -s`.to_s.split(/\t/)[0..1]
+#        p master_status
+
+        # mysql/data/master.info
+        master_infos = []
+        master_infos << 14
+        master_infos << master_status[0]
+        master_infos << master_status[1]
+        master_infos << @mysqld_master_host
+        master_infos << @mysqld_master_user
+        master_infos << @mysqld_master_pass
+        master_infos << @mysqld_master_port
+        master_infos << 60
+        master_infos << 0
+        master_infos << ""
+        master_infos << ""
+        master_infos << ""
+        master_infos << ""
+        master_infos << ""
+        master_infos << ""
+
+        tmp_output_basedir = File.expand_path(Wakame.gen_id, "/tmp")
+        FileUtils.mkdir_p tmp_output_basedir
+        master_info = File.expand_path('master.info', tmp_output_basedir)
+        file = File.new(master_info, "w")
+        file.puts(master_infos.join("\n"))
+        file.chmod(0664)
+        file.close
+
+        3.times do |i|
+          system("/bin/sync")
+          sleep 1.0
+        end
+
+        Wakame.log.debug("scp -i #{Wakame.config.ssh_private_key} -o \"UserKnownHostsFile #{Wakame.config.ssh_known_hosts}\" #{master_info} root@#{@mysqld_master_host}:#{@mysqld_master_datadir}/" )
+        system("scp -i #{Wakame.config.ssh_private_key} -o \"UserKnownHostsFile #{Wakame.config.ssh_known_hosts}\" #{master_info} root@#{@mysqld_master_host}:#{@mysqld_master_datadir}/" )
+        Wakame.log.debug("ssh -i #{Wakame.config.ssh_private_key} -o \"UserKnownHostsFile #{Wakame.config.ssh_known_hosts}\" root@#{@mysqld_master_host} chown mysql:mysql #{@mysqld_master_datadir}/master.info" )
+        system("ssh -i #{Wakame.config.ssh_private_key} -o \"UserKnownHostsFile #{Wakame.config.ssh_known_hosts}\" root@#{@mysqld_master_host} chown mysql:mysql #{@mysqld_master_datadir}/master.info" )
+
+        3.times do |i|
+          system("/bin/sync")
+          sleep 1.0
+        end
+
+        FileUtils.rm_rf tmp_output_basedir
+
+        # 2. snapshot
+        Wakame.log.debug("create_snapshot (#{@ebs_volume})")
+        snapshot_map = vm_manipulator.create_snapshot(@ebs_volume)
+        16.times do |i|
+          Wakame.log.debug("describe_snapshot(#{snapshot_map.snapshotId}) ... #{i}")
+          snapshot_map = vm_manipulator.describe_snapshot(snapshot_map["snapshotId"])
+          if snapshot_map["status"] == "completed"
+            break
+          end
+          sleep 1.0
+        end
+        if snapshot_map["status"] != "completed"
+          raise "#{snapshot_map.snapshotId} status is #{snapshot_map.status}"
+        end
+
+        # 3. unlock mysql-master
+        system("echo 'UNLOCK TABLES;' | /usr/bin/mysql -h#{@mysqld_master_host} -P#{@mysqld_master_port} -u#{@mysqld_master_user}  -p#{@mysqld_master_pass}")
+
+        # create volume /dev/xxxx
+        Wakame.log.debug("create_volume_from_snapshot(#{volume_map.availabilityZone}, #{snapshot_map.snapshotId})")
+        created_volume_from_snapshot_map = vm_manipulator.create_volume_from_snapshot(volume_map["availabilityZone"], snapshot_map["snapshotId"])
+        volume_from_snapshot_map = created_volume_from_snapshot_map
+        16.times do |i|
+          Wakame.log.debug("describe_snapshot(#{snapshot_map.snapshotId}) ... #{i}")
+          volume_from_snapshot_map = vm_manipulator.describe_snapshot(snapshot_map["snapshotId"])
+          if volume_from_snapshot_map["status"] == "completed"
+            break
+          end
+          sleep 1.0
+        end
+        if volume_from_snapshot_map["status"] != "completed"
+          raise "#{volume_from_snapshot_map.snapshotId} status is #{volume_from_snapshot_map.status}"
+        end
+
+        # attach volume
+        attach_volume_map = vm_manipulator.attach_volume(svc.agent.agent_id, created_volume_from_snapshot_map["volumeId"], @ebs_device)
+        16.times do |i|
+          Wakame.log.debug("describe_volume(#{attach_volume_map.volumeId}) ... #{i}")
+          attach_volume_map = vm_manipulator.describe_volume(created_volume_from_snapshot_map["volumeId"])
+          if attach_volume_map["status"] == "in-use"
+            break
+          end
+          sleep 1.0
+        end
+        if attach_volume_map["status"] != "in-use"
+          raise "#{attach_volume_map.volumeId} status is #{attach_volume_map.status}"
+        end
+      end
+        
+      def start
+        mount_point_dev=`df "#{@mysqld_datadir}" | awk 'NR==2 {print $1}'`
+        if mount_point_dev != @ebs_device
+          Wakame.log.debug("Mounting EBS volume: #{@ebs_device} as #{@mysqld_datadir} (with option: #{@ebs_mount_option})")
+          system("/bin/mount -o #{@ebs_mount_option} #{@ebs_device} #{@mysqld_datadir}")
+        end
+        system(Wakame.config.root + "/config/init.d/mysql-slave start")
+      end
+      
+      def check
+        system("/usr/bin/mysqladmin --defaults-file=/home/wakame/config/mysql-slave/my-slave.cnf ping > /dev/null")
+        return false if $? != 0
+        true
+      end
+      
+      def stop
+        system(Wakame.config.root + "/config/init.d/mysql-slave stop")
+      end
+    end
     
   end
 end
