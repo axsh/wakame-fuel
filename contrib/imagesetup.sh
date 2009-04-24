@@ -59,7 +59,7 @@ EOF
 chmod 755 /usr/local/bin/passenger_ruby.sh
 
 # Create root ssh key
-ssh-keygen -t rsa -f /home/wakame/config/root.id_rsa
+ssh-keygen -t rsa -N '' -f /home/wakame/config/root.id_rsa
 chown wakame:wakame /home/wakame/config/root.id_rsa /home/wakame/config/root.id_rsa.pub
 cat /home/wakame/config/root.id_rsa.pub >> /root/.ssh/authorized_keys
 
@@ -73,7 +73,5 @@ cat /home/wakame/config/root.id_rsa.pub >> /root/.ssh/authorized_keys
 # /root/.ssh/authorized_keys /root/.bash_history
 # /home/ubuntu/.ssh/authorized_keys /home/ubuntu/.bash_history
 # Clear logs
-# rm -f /var/log/apache2/* /var/log/rabbitmq/* /var/log/wakame-* /var/log/*.gz
-# cat /dev/null > /var/log/lastlog
-# cat /dev/null > /var/log/wtmp
-# cat /dev/null > /var/log/authlog
+# logrotate -f /etc/logrotate.conf
+# rm -f /var/log/apache2/* /var/log/rabbitmq/* /var/log/wakame-* /var/log/*.gz /var/log/*.0 /var/log/*.1
