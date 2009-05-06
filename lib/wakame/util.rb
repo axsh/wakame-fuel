@@ -1,5 +1,6 @@
 
 
+require 'digest/sha1'
 require 'hmac-sha1'
 
 module Wakame
@@ -11,8 +12,65 @@ module Wakame
       
       "|1|#{[key].pack('m').chop}|#{[HMAC::SHA1.digest(key, hostname)].pack('m').chop}"
     end
-
     module_function :ssh_known_hosts_hash
+
+
+    def gen_id(str=nil)
+      Digest::SHA1.hexdigest( (str.nil? ? rand.to_s : str) )
+    end
+    module_function :gen_id
+
+
+    def build_const(name)
+      name.to_s.split(/::/).inject(Object) {|c,name| c.const_get(name) }
+    end
+    module_function :build_const
+
+    
+    def new_(class_or_str)
+      if class_or_str.is_a? Class
+        class_or_str.new
+      else
+        c = build_const(class_or_str.to_s)
+        c.new
+      end
+    end
+    module_function :new_
+
+
+    # Copied from http://github.com/ezmobius/nanite/
+    ##
+    # Convert to snake case.
+    #
+    #   "FooBar".snake_case           #=> "foo_bar"
+    #   "HeadlineCNNNews".snake_case  #=> "headline_cnn_news"
+    #   "CNN".snake_case              #=> "cnn"
+    #
+    # @return [String] Receiver converted to snake case.
+    #
+    # @api public
+    def snake_case(const)
+      const = const.to_s
+      return const.downcase if const =~ /^[A-Z]+$/
+      const.gsub(/([A-Z]+)(?=[A-Z][a-z]?)|\B[A-Z]/, '_\&') =~ /_*(.*)/
+      return $+.downcase
+    end
+    module_function :snake_case
+
+    # Copied from http://github.com/ezmobius/nanite/
+    ##
+    # Convert a constant name to a path, assuming a conventional structure.
+    #
+    #   "FooBar::Baz".to_const_path # => "foo_bar/baz"
+    #
+    # @return [String] Path to the file containing the constant named by receiver
+    #   (constantized string), assuming a conventional structure.
+    #
+    # @api public
+    def to_const_path(const)
+      snake_case(const).gsub(/::/, "/")
+    end
+    module_function :to_const_path
 
   end
 end
@@ -109,6 +167,30 @@ module AttributeHelper
       @attr_attributes ||= {}
     end
 
+    def attr(name, assignable=false)
+      attr_attributes[name.to_sym]={}
+      attr_without_trap(name, assignable)
+    end
+    
+    # Override Object.attr_accessor to 
+    def attr_accessor(*args)
+      args.each { |name|
+        attr(name, true)
+      }
+    end
+    
+    def attr_reader(*args)
+      args.each { |name|
+        attr(name, false)
+      }
+    end
+    
+    def attr_writer(*args)
+      args.each { |name|
+        attr(name, true)
+      }
+    end
+
     def def_attribute(name, default_value=nil)
       attr_attributes[name.to_sym]= {:default=>default_value}
       class_eval <<-__E__
@@ -120,11 +202,12 @@ module AttributeHelper
         if @#{name}.nil?
           retrieve_attr_attribute { |a|
             if a.has_key?(:#{name})
-              case a[:#{name}][:default]
+              defval = a[:#{name}][:default]
+              case defval
               when Proc
-                @#{name} = a[:#{name}][:default].call(self)
+                @#{name} = defval.call(self)
               else
-                @#{name} = a[:#{name}][:default]
+                @#{name} = defval
               end
               break
             end
@@ -141,6 +224,9 @@ module AttributeHelper
 
   private
   def self.included(klass)
+    klass.class.class_eval {
+      alias :attr_without_trap :attr unless self.respond_to?(:attr_without_trap, true)
+    }
     klass.extend ClassMethods
   end
 

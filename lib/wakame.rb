@@ -1,19 +1,11 @@
 
-
 require 'rubygems'
-require 'log4r'
-require 'digest/sha1'
-require 'shell'
 
 require 'eventmachine'
 require 'ext/eventmachine'
 
-require 'wakame/configuration'
 # For debugging
 Thread.abort_on_exception = true 
-
-Shell.debug = false
-Shell.verbose = false
 
 module Wakame
   VERSION='0.3.1'
@@ -24,57 +16,34 @@ module Wakame
   autoload :Service, 'wakame/service'
   autoload :Rule, 'wakame/rule'
   autoload :Graph, 'wakame/graph'
+  autoload :Monitor, 'wakame/monitor'
+  autoload :Actor, 'wakame/actor'
+  autoload :Configuration, 'wakame/configuration'
+  autoload :Logger, 'wakame/logger'
+  #autoload :Initializer, 'wakame/initializer' # Do not autoload this class since the constant is used for the flag in bootstrap.
 
   def gen_id(str=nil)
-    Digest::SHA1.hexdigest( (str.nil? ? rand.to_s : str) )
+    Util.gen_id(str)
   end
 
   def log
-    @log ||= begin
-               #log = Logger.new((Wakame.root||Dir.pwd) / "log.log")
-               out = ::Log4r::StdoutOutputter.new('stdout',
-                                                  :formatter => Log4r::PatternFormatter.new(
-                                                                                            :pattern => "%d %C[%l]: %M",
-                                                                                            :date_format => "%Y/%m/%d %H:%M:%S"
-                                                                                            )
-                                                  )
-               log = ::Log4r::Logger.new(File.basename($0.to_s))
-               log.add(out)
-               log
-             end
+    Logger.log
   end
 
-  def shell
-    @sh ||= begin 
-              sh = Shell.cd(Wakame.config.root)
-              sh.system_path = %w[/bin /sbin /usr/bin /usr/sbin]
-              sh
-            end
-    @sh
-  end
-
-  module_function :gen_id, :log, :shell
+  module_function :gen_id, :log
 
   class << self
     def config
-      #@config ||= Wakame::Configuration.new(Wakame::Configuration::StandAlone.new)
-      @config ||= Wakame::Configuration.new(Wakame::Configuration::EC2.new)
+      Initializer.instance.configuration
     end
 
-    def str2const(name)
-      name.to_s.split(/::/).inject(Object) {|c,name| c.const_get(name) }
+    def environment
+      config.environment
     end
 
-    
     def new_(class_or_str)
-      if class_or_str.is_a? Class
-        class_or_str.new
-      else
-        c = class_or_str.to_s.split(/::/).inject(Object) {|c,name| c.const_get(name) }
-        c.new
-      end
+      Util.new_(class_or_str)
     end
   end
 
 end
-
