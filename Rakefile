@@ -1,8 +1,9 @@
 # -*- ruby -*-
 
 %w[rubygems rake rake/clean fileutils hoe].each { |f| require f }
-require File.dirname(__FILE__) + '/config/boot'
-require File.dirname(__FILE__) + '/lib/wakame'
+$:.unshift "#{File.dirname(__FILE__)}/lib"
+#require File.dirname(__FILE__) + '/lib/wakame'
+require 'wakame'
 
 # Generate all the Rake tasks
 # Run 'rake -T' to see list of generated tasks (from gem root directory)
