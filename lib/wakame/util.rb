@@ -268,7 +268,7 @@ module AttributeHelper
       t
     else
       if PRIMITIVE_CLASSES.any?{|p| root.kind_of?(p) }
-        root
+        root.to_s
       #elsif root.respond_to?(:dump_attrs)
         #dump_internal(root.dump_attrs)
       else
