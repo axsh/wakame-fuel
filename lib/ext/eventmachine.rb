@@ -70,9 +70,13 @@ module EventMachine
         return blk.call
     end
 
+    raise "Eventmachine is not ready to accept the next_tick() call." unless self.reactor_running?
+
     q = Queue.new
-    
+    time_start = Time.now
+
     self.next_tick {
+    #self.add_timer(0) {
       begin
         res = blk.call
         q << [true, res]
@@ -82,6 +86,8 @@ module EventMachine
     }
     
     res = q.shift
+    time_elapsed = Time.now - time_start
+    Wakame.log.debug("EM.barrier: elapsed time for #{blk}: #{time_elapsed} sec (#{$eventmachine_library})") if time_elapsed > 0.05
     if res[0] == false && res[1].is_a?(Exception)
       raise res[1]
     end
