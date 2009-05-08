@@ -3,6 +3,8 @@ require 'rubygems'
 
 require 'eventmachine'
 require 'ext/eventmachine'
+require 'amqp'
+require 'mq'
 
 # For debugging
 Thread.abort_on_exception = true 
@@ -20,6 +22,7 @@ module Wakame
   autoload :Actor, 'wakame/actor'
   autoload :Configuration, 'wakame/configuration'
   autoload :Logger, 'wakame/logger'
+  autoload :Packets, 'wakame/packets'
   #autoload :Initializer, 'wakame/initializer' # Do not autoload this class since the constant is used for the flag in bootstrap.
 
   def gen_id(str=nil)

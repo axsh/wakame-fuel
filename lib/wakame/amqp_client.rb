@@ -124,7 +124,6 @@ module Wakame
       Thread.current[:mq]
     end
 
-
     def cleanup
     end
 
@@ -178,47 +177,30 @@ module Wakame
         end
       }
 
+      @queue_subscribers ||= {}
+
       q = amq.queue(name, opts)
       q.bind( exchange_name, opts ).subscribe {|data|
-        EM.next_tick {
-          unless queue_subscribers[name].nil?
-            queue_subscribers[name].synchronize {
-              queue_subscribers[name].each { |p|
-                p.call(data)
-              }
-            }
-          end
-        }
+        unless queue_subscribers[name].nil?
+          queue_subscribers[name].each { |p|
+            p.call(data)
+          }
+        end
       }
-      
     end
-
-    
 
     attr_reader :queue_subscribers
 
     def add_subscriber(queue_name, &blk)
       # @mq object can be used here as it is just for checing the member of defined queues.
       raise "Undefined queue name : #{queue_name}" unless @mq.queues.has_key?(queue_name)
-      if @queue_subscribers.nil?
-        @queue_subscribers = {}
-        @queue_subscribers.extend(Mutex_m)
-      end
-      
-      if @queue_subscribers[queue_name].nil?
-        @queue_subscribers.synchronize {
-          @queue_subscribers[queue_name] = []
-          @queue_subscribers[queue_name].extend(Mutex_m)
-        }
-      end
-
-      @queue_subscribers[queue_name].synchronize {
+      EM.barrier {
+        @queue_subscribers ||= {}
+        @queue_subscribers[queue_name] ||= []
+        
         @queue_subscribers[queue_name] << blk
       }
     end
-
-
-
 
     private
     def run_defered_callbacks

@@ -5,36 +5,37 @@ require 'ostruct'
 module Wakame
   # System wide configuration parameters
   class Configuration < OpenStruct
-    attr_reader :root_path
-    alias :root :root_path
 
     PARAMS = {
-      :master_local_agent_id => '__local__',
-      :config_template_root => nil,
-      :config_tmp_root => nil,
-      :config_root => nil,
+      #:config_template_root => nil,
+      #:config_tmp_root => nil,
+      #:config_root => nil,
       :load_paths => [],
       :ssh_private_key => nil,
       :drb_command_server_uri => 'druby://localhost:12345',
-      :vm_manipulation_class => nil,
       :vm_environment => nil,
       :amqp_server_uri => nil,
       :unused_vm_live_period => 60 * 10,
       :eventmachine_use_epoll => true
     }
 
-
-
-    def initialize(default_set, root_path=nil)
+    def initialize(env=WAKAME_ENV)
       super(PARAMS)
       if root_path.nil?
         root_path = Object.const_defined?(:WAKAME_ROOT) ? WAKAME_ROOT : '../'
       end
 
       @root_path = root_path
-      default_set.process(self)
+      #default_set.process(self)
+    end
+
+    def environment
+      ::WAKAME_ENV.to_sym
     end
     
+    def root_path
+      ::WAKAME_ROOT
+    end
 
     def ssh_known_hosts
       File.join(self.config_root, "ssh", "known_hosts")
@@ -44,6 +45,15 @@ module Wakame
       File.join(self.config_root, "tmp")
     end
 
+    def framework_root_path
+      defined?(::WAKAME_FRAMEWORK_ROOT) ? ::WAKAME_FRAMEWORK_ROOT : "#{root_path}/vendor/wakame"
+    end
+
+    def framework_paths
+      paths = %w(lib)
+
+      paths.map{|dir| File.join(framework_root_path, dir) }.select{|path| File.directory?(path) }
+    end
     # 
     class DefaultSet
       def process(config)
@@ -55,7 +65,6 @@ module Wakame
         super(config)
         config.config_template_root = File.join(config.root, "config", "template")
         config.config_root = '/home/wakame/config'
-        config.vm_manipulation_class = 'Wakame::VmManipulator::EC2'
         config.vm_environment = :EC2
 
         config.ssh_private_key = '/home/wakame/config/root.id_rsa'
@@ -70,7 +79,6 @@ module Wakame
         super(config)
         config.config_template_root = File.join(config.root, "config", "template")
         config.config_root = File.join('home', 'wakame', 'config')
-        config.vm_manipulation_class = 'Wakame::VmManipulator::StandAlone'
         config.vm_environment = :StandAlone
         config.amqp_server_uri = 'amqp://localhost/'
       end
@@ -78,21 +86,4 @@ module Wakame
 
   end
 
-
-
-
-
-  class ConfigurationLoader
-  end
-  
-  class RubyLoader < ConfigurationLoader
-    def initialize(rb_path)
-      @rb_path = rb_path
-    end
-    
-    def load()
-    end
-    
-  end
-  
 end

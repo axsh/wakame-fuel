@@ -1,9 +1,14 @@
 #!/usr/bin/ruby
 
-$:.unshift File.dirname(__FILE__) + '/../lib'
-require 'rubygems'
+$:.unshift(File.dirname(__FILE__) + '/../lib')
+$:.unshift(File.dirname(__FILE__))
 
+require 'setup_agent.rb'
+
+require 'rubygems'
 require 'test/unit'
+
+require 'wakame'
 require 'wakame/agent'
 
 class TestAgent < Test::Unit::TestCase
@@ -64,7 +69,6 @@ class TestAgent < Test::Unit::TestCase
       sleep 2
     end
   end
-
 
   ## This test dies when the test ran after another test.
   # The test process stops at sleep() in DummyService#check(). The hang seems to be occured in EM's C backend though check() method runs in EM.defer thread which is Ruby thread.
@@ -127,4 +131,103 @@ class TestAgent < Test::Unit::TestCase
       }
     }
   end
+
+
+  class DummyMaster
+    include Wakame::AMQPClient
+    include Wakame::QueueDeclare
+    
+    define_queue 'registry', 'registry'
+    define_queue 'ping', 'ping'
+    define_queue 'agent_event', 'agent_event'
+
+    def initialize()
+      connect()
+      @counters = {'registry'=>0,'ping'=>0,'agent_event'=>0, }
+      add_subscriber('registry') { |data|
+        p data
+        @counters['registry'] += 1
+      }
+
+      add_subscriber('ping') { |data|
+        p data
+        @counters['ping'] += 1
+      }
+
+      add_subscriber('agent_event') { |data|
+        p data
+        @counters['agent_event'] += 1
+      }
+    end
+
+    def debug_counters
+      @counters
+    end
+
+
+    def send_actor_request(agent_id, path, *args)
+      publish_to('agent_command', "agent_id.#{agent_id}", Wakame::Packets::Agent::ActorRequest.new(agent_id, path, *args).marshal)
+    end
+
+    
+  end
+
+  def test_agent_monitor
+    EM.run {
+      DummyMaster.start
+      agent = Wakame::Agent.start
+      EM.add_timer(5){ EM.stop }
+    }
+  end
+
+
+  def test_service_monitor
+    EM.run {
+      master = DummyMaster.start
+      agent = Wakame::Agent.start
+
+      svcmon = agent.find_monitor('/service')
+      svcmon.register('aaaaa', 'ls -l /usr')
+      svcmon.register('bbbbb', 'ls -l /dev')
+
+      assert(svcmon.checkers.keys.member?('aaaaa') && svcmon.checkers.keys.member?('bbbbb'))
+
+      EM.add_timer(8) {
+        svcmon.unregister('aaaaa')
+        svcmon.unregister('bbbbb')
+
+        svcmon.register('ccc', 'ls -l /var')
+
+        assert_equal(['ccc'], svcmon.checkers.keys)
+      }
+
+      EM.add_timer(15){ 
+        assert(master.debug_counters['agent_event'] > 2)
+        EM.stop
+      }
+    }
+  end
+
+
+  def test_actor
+    EM.run {
+      master = DummyMaster.start
+      agent = Wakame::Agent.start
+      EM.next_tick {
+        master.send_actor_request(agent.agent_id, '/service_monitor/register', ['12345', 'pidof ls'])
+        EM.add_timer(1) {
+          p agent.monitor_registry.find_monitor('/service').checkers.keys
+          assert_not_nil(agent.monitor_registry.find_monitor('/service').checkers['12345'])
+          EM.add_timer(4.5){
+            master.send_actor_request(agent.agent_id, '/service_monitor/unregister', ['12345'])
+            EM.add_timer(1) {
+              assert_nil(agent.monitor_registry.find_monitor('/service').checkers['12345'])
+              EM.stop
+            }
+          }
+        }
+      }
+    }
+  end
+
 end
