@@ -3,11 +3,8 @@
 require 'ostruct'
 
 require 'wakame'
-require 'wakame/manager'
-require 'wakame/event'
 require 'wakame/configuration_template'
 require 'wakame/util'
-require 'wakame/manager/scheduler'
 
 module Wakame
   module Service
@@ -24,6 +21,72 @@ module Wakame
     STATUS_STOPPING = 5
     STATUS_RELOADING = 6
     STATUS_MIGRATING = 7
+
+    class Agent
+      include ThreadImmutable
+      include AttributeHelper
+      STATUS_DOWN = STATUS_OFFLINE =0
+      STATUS_UP = STATUS_ONLINE =1
+      STATUS_UNKNOWN=2
+      STATUS_TIMEOUT=3
+      
+      attr_accessor :agent_id, :uptime, :last_ping_at, :attr, :services
+      thread_immutable_methods :agent_id=, :uptime=, :last_ping_at=, :attr=, :services=
+
+      def initialize(agent_id=nil)
+        bind_thread
+        @services = {}
+        @agent_id = agent_id
+      end
+
+      def agent_ip
+        attr[:local_ipv4]
+      end
+
+      def [](key)
+        attr[key]
+      end
+
+      attr_reader :status
+
+      def status=(status)
+        if @status != status
+          @status = status
+          ED.fire_event(Event::AgentStatusChanged.new(self))
+          # Send status specific event
+          case status
+          when STATUS_TIMEOUT
+            ED.fire_event(Event::AgentTimedOut.new(self))
+          end
+        end
+        @status
+      end
+      thread_immutable_methods :status=
+      
+      def has_service_type?(key)
+        svc_class = case key
+                    when Service::ServiceInstance
+                      key.property.class
+                    when Class
+                      key
+                    else
+                      nil
+                    end
+
+        services.any? { |k, v|
+          v.property.class == svc_class
+        }
+      end
+
+
+      #def dump_status
+      #  {:agent_id => @agent_id, :status => @status, :last_ping_at => @last_ping_at, :attr => attr.dup,
+      #    :services => services.keys.dup
+      #  }
+      #end
+      
+    end
+
 
     class ServiceCluster
       class << self
@@ -199,7 +262,7 @@ module Wakame
         if @status != new_status
           @status = new_status
           @status_changed_at = Time.now
-          EH.fire_event(Event::ClusterStatusChanged.new(instance_id, new_status))
+          ED.fire_event(Event::ClusterStatusChanged.new(instance_id, new_status))
         end
         @status
       end
@@ -380,7 +443,7 @@ module Wakame
           
           event = Event::ServiceStatusChanged.new(@instance_id, @service_property, @status, prev_status)
           event.time = @status_changed_at.dup
-          EH.fire_event(event)
+          ED.fire_event(event)
         end
         @status
       end
@@ -409,7 +472,7 @@ module Wakame
         @agent = agent
         @agent.services[instance_id]=self
         
-        EH.fire_event(Event::ServiceBoundAgent.new(self, agent))
+        ED.fire_event(Event::ServiceBoundAgent.new(self, agent))
         @agent
       end
       thread_immutable_methods :bind_agent
@@ -419,7 +482,7 @@ module Wakame
         @agent.services.delete(instance_id)
         old_item = @agent
         @agent = nil
-        EH.fire_event(Event::ServiceUnboundAgent.new(self, old_item))
+        ED.fire_event(Event::ServiceUnboundAgent.new(self, old_item))
         old_item
       end
       thread_immutable_methods :unbind_agent
@@ -428,7 +491,7 @@ module Wakame
         return if cluster.nil? || (@service_cluster && cluster.instance_id == @service_cluster.instance_id)
         unbind_cluster
         @service_cluster = cluster
-        EH.fire_event(Event::ServiceBoundCluster.new(self, cluster))
+        ED.fire_event(Event::ServiceBoundCluster.new(self, cluster))
       end
       thread_immutable_methods :bind_cluster
 
@@ -436,7 +499,7 @@ module Wakame
         return if @service_cluster.nil?
         old_item = @service_cluster
         @service_cluster = nil
-        EH.fire_event(Event::ServiceUnboundCluster.new(self, old_item))
+        ED.fire_event(Event::ServiceUnboundCluster.new(self, old_item))
       end
       thread_immutable_methods :unbind_cluster
       
@@ -571,7 +634,7 @@ module Wakame
         if @instance_count != count
           prev = @instance_count
           @instance_count = count
-          EH.fire_event(Event::InstanceCountChanged.new(@resource, prev, count))
+          ED.fire_event(Event::InstanceCountChanged.new(@resource, prev, count))
         end
       end
     end
@@ -580,7 +643,7 @@ module Wakame
       def initialize(seq, resource)
         @sequence = seq
         bind_resource(resource)
-        timer = Manager::Scheduler::SequenceTimer.new(seq)
+        timer = Scheduler::SequenceTimer.new(seq)
         timer.add_observer(self)
         @instance_count = 1
       end
@@ -594,7 +657,7 @@ module Wakame
         if @instance_count != count
           prev = @instance_count
           @instance_count = count
-          EH.fire_event(Event::InstanceCountChanged.new(@resource, prev, count))
+          ED.fire_event(Event::InstanceCountChanged.new(@resource, prev, count))
         end
         #if self.min > new_count || self.max < new_count
         #if self.min != new_count || self.max != new_count
@@ -602,7 +665,7 @@ module Wakame
         #  prev_max = self.max
 
         #  self.max = self.min = new_count
-        #  EH.fire_event(Event::InstanceCountChanged.new(@resource, prev_min, prev_max, self.min, self.max))
+        #  ED.fire_event(Event::InstanceCountChanged.new(@resource, prev_min, prev_max, self.min, self.max))
         #end
 
       end
@@ -795,7 +858,7 @@ module Wakame
         super()
         @listen_port = 8001
         @max_instances = 5
-        ms = Manager::Scheduler::PerHourSequence.new
+        ms = Scheduler::PerHourSequence.new
         #ms[0]=1
         #ms[30]=5
         ms[0]=1
@@ -814,7 +877,7 @@ module Wakame
         ms["0:49:00"]=4
         ms["0:53:00"]=1
         ms["0:57:00"]=4
-        # @instance_counter = TimedCounter.new(Manager::Scheduler::LoopSequence.new(ms), self)
+        # @instance_counter = TimedCounter.new(Scheduler::LoopSequence.new(ms), self)
 
         @template = ConfigurationTemplate::ApacheTemplate.new(:app)
       end
