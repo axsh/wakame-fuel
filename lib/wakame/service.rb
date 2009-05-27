@@ -698,16 +698,16 @@ module Wakame
 
       def initialize(master, &blk)
         super(master) {
-          add_service(Apache_WWW.new)
-          add_service(Apache_APP.new)
-          add_service(Apache_LB.new)
+#          add_service(Apache_WWW.new)
+#          add_service(Apache_APP.new)
+#          add_service(Apache_LB.new)
           add_service(MySQL_Master.new)
-#          add_service(MySQL_Slave.new)
+          add_service(MySQL_Slave.new)
 
-          set_dependency(Apache_WWW, Apache_LB)
-          set_dependency(Apache_APP, Apache_LB)
-          set_dependency(MySQL_Master, Apache_APP)
-#          set_dependency(MySQL_Master, MySQL_Slave)
+#          set_dependency(Apache_WWW, Apache_LB)
+#          set_dependency(Apache_APP, Apache_LB)
+#          set_dependency(MySQL_Master, Apache_APP)
+          set_dependency(MySQL_Master, MySQL_Slave)
 
           @rule_engine = RuleSet.new(self)
         }
@@ -899,7 +899,7 @@ module Wakame
         @mysqld_port = 3306
         @mysqld_datadir = File.expand_path('data', @basedir)
         @mysqld_log_bin = File.expand_path('mysql-bin.log', @mysqld_datadir)
-        @ebs_volume = ''
+        @ebs_volume = 'vol-274fad4e'
         @ebs_device = '/dev/sdm'
         @ebs_mount_option = 'noatime'
 
@@ -987,11 +987,11 @@ module Wakame
         @mysqld_port = 3307
         @mysqld_datadir = File.expand_path('data-slave', @basedir)
 
-        @ebs_volume = 'vol-38bc5f51'  # master volume_id
+        @ebs_volume = 'vol-274fad4e'  # master volume_id
         @ebs_device = '/dev/sdn'      # slave mount point
         @ebs_mount_option = 'noatime'
 
-        @mysqld_master_host = '10.249.2.115'
+        @mysqld_master_host = '127.0.0.1'
         @mysqld_master_user = 'wakame-repl'
         @mysqld_master_pass = 'wakame-slave'
         @mysqld_master_port = 3306
@@ -1061,10 +1061,10 @@ module Wakame
           sleep 1.0
         end
 
-        Wakame.log.debug("scp -i #{Wakame.config.ssh_private_key} -o \"UserKnownHostsFile #{Wakame.config.ssh_known_hosts}\" #{master_info} root@#{@mysqld_master_host}:#{@mysqld_master_datadir}/" )
-        system("scp -i #{Wakame.config.ssh_private_key} -o \"UserKnownHostsFile #{Wakame.config.ssh_known_hosts}\" #{master_info} root@#{@mysqld_master_host}:#{@mysqld_master_datadir}/" )
-        Wakame.log.debug("ssh -i #{Wakame.config.ssh_private_key} -o \"UserKnownHostsFile #{Wakame.config.ssh_known_hosts}\" root@#{@mysqld_master_host} chown mysql:mysql #{@mysqld_master_datadir}/master.info" )
-        system("ssh -i #{Wakame.config.ssh_private_key} -o \"UserKnownHostsFile #{Wakame.config.ssh_known_hosts}\" root@#{@mysqld_master_host} chown mysql:mysql #{@mysqld_master_datadir}/master.info" )
+        Wakame.log.debug("scp -i #{Wakame.config.ssh_private_key} -o \"StrictHostKeyChecking no\" -o \"UserKnownHostsFile #{Wakame.config.ssh_known_hosts}\" #{master_info} root@#{@mysqld_master_host}:#{@mysqld_master_datadir}/" )
+        system("scp -i #{Wakame.config.ssh_private_key} -o \"StrictHostKeyChecking no\" -o \"UserKnownHostsFile #{Wakame.config.ssh_known_hosts}\" #{master_info} root@#{@mysqld_master_host}:#{@mysqld_master_datadir}/" )
+        Wakame.log.debug("ssh -i #{Wakame.config.ssh_private_key} -o \"StrictHostKeyChecking no\" -o \"UserKnownHostsFile #{Wakame.config.ssh_known_hosts}\" root@#{@mysqld_master_host} chown mysql:mysql #{@mysqld_master_datadir}/master.info" )
+        system("ssh -i #{Wakame.config.ssh_private_key} -o \"StrictHostKeyChecking no\" -o \"UserKnownHostsFile #{Wakame.config.ssh_known_hosts}\" root@#{@mysqld_master_host} chown mysql:mysql #{@mysqld_master_datadir}/master.info" )
 
         3.times do |i|
           system("/bin/sync")
