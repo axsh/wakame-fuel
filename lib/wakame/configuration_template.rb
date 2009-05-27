@@ -73,6 +73,25 @@ module Wakame
       end
     end
 
+    class MySQLSlaveTemplate  < Base
+      def render(service_instance)
+        require 'erb'
+        
+        FileUtils.mkpath File.expand_path('mysql-slave', tmp_output_basedir)
+
+        ["mysql-slave/my-slave.cnf"].each { |path|
+          update(path) { |buf|
+            ERB.new(buf, nil, '-').result service_instance.export_binding
+          }
+        }
+      end
+
+      
+      def sync_src
+        File.join(@tmp_output_basedir, 'mysql-slave')
+      end
+    end
+
     class ApacheTemplate  < Base
       attr_accessor :suffix
 
