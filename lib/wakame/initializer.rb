@@ -24,6 +24,9 @@ module Wakame
     def process_master
       setup_load_paths
       setup_logger
+      load_cluster
+      load_resources
+      load_core_commands
     end
     
     def process_agent
@@ -32,7 +35,8 @@ module Wakame
     end
     
     def process_cli
-      #$LOAD_PATH.
+      setup_load_paths
+      load_core_commands
     end
 
     def setup_load_paths
@@ -61,10 +65,41 @@ module Wakame
 
 
     def setup_system_actors
-      
     end
 
     def load_system_monitors
+    end
+
+    def load_core_commands
+#       %w( cluster/commands ).each { |load_path|
+#         load_path = File.expand_path(load_path, configuration.root_path)
+#         matcher = /\A#{Regexp.escape(load_path)}(.*)\.rb\Z/
+#         Dir.glob("#{load_path}/**/*.rb").sort.each do |file|
+#           require file.sub(matcher, '\1')
+#         end
+#       }
+      %w(launch_cluster shutdown_cluster status action_status actor).each { |f|
+        require "wakame/command/#{f}"
+      }
+    end
+
+
+    def load_resources
+      load_path = File.expand_path('cluster/resources', configuration.root_path)
+      Dir.glob("#{load_path}/*/*.rb").sort.each do |file|
+        if file =~ %r{\A#{Regexp.escape(load_path)}/([^/]+)/([^/]+)\.rb\Z} && $1 == $2
+          Wakame.log.debug("Loading resource definition: #{file}")
+          load file
+        end
+        #require file.sub(matcher, '\1')
+      end
+      
+      
+    end
+
+
+    def load_cluster
+      load File.expand_path('cluster/cluster.rb', configuration.root_path)
     end
 
   end
