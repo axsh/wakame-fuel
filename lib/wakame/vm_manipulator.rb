@@ -27,9 +27,11 @@ module Wakame
     end
 
     class StandAlone < Base
+      INSTANCE_ID='__standalone__'
+
       def start_instance(attr)
         # Nothing to be done
-        {:instance_id => 'standalone'}
+        {:instance_id =>INSTANCE_ID}
       end
 
       def stop_instance(instance_id)
@@ -41,8 +43,8 @@ module Wakame
         expected_status == :online
       end
 
-      def fetch_local_attrs
-        attrs = {:instance_id=>'__stand_alone__', :local_ipv4=>'127.0.0.1', :local_hostname=>'localhost'}
+      def self.fetch_local_attrs
+        attrs = {:instance_id=>INSTANCE_ID, :local_ipv4=>'127.0.0.1', :local_hostname=>'localhost', :ami_id=>'localimage'}
         attrs
       end
     end
