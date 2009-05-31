@@ -11,6 +11,9 @@ module Wakame
       def boot_agent!
         boot!(:process_agent)
       end
+      def boot_cli!
+        boot!(:process_cli)
+      end
 
       def boot!(method=:process)
         unless booted?
