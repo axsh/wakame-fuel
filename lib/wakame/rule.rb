@@ -13,7 +13,6 @@ module Wakame
 
     class RuleEngine
       include Wakame
-      extend Forwardable
       
       FORWARD_ATTRS=[:command_queue, :agent_monitor, :service_cluster, :master]
 
@@ -108,7 +107,7 @@ module Wakame
             
             if job_context[:start_at].nil?
               job_context[:start_at] = Time.new
-              EH.fire_event(Event::JobStart.new(action.job_id))
+              ED.fire_event(Event::JobStart.new(action.job_id))
             end
 
             EM.defer proc {
@@ -117,25 +116,28 @@ module Wakame
                 action.bind_thread(Thread.current)
                 action.status = :running
                 Wakame.log.debug("Start action : #{action.class.to_s} triggered by Rule [#{action.rule.class}]")
-                EH.fire_event(Event::ActionStart.new(action))
+                ED.fire_event(Event::ActionStart.new(action))
                 begin
                   action.run
                 ensure
                   action.status = :complete
+                  action.completion_status = :succeeded
                 end
                 Wakame.log.debug("Complete action : #{action.class.to_s}")
-                EH.fire_event(Event::ActionComplete.new(action))
+                ED.fire_event(Event::ActionComplete.new(action))
               rescue CancelBroadcast => e
                 Wakame.log.info("Received cancel signal: #{e}")
-                EH.fire_event(Event::ActionFailed.new(action, e))
+                action.completion_status = :canceled
+                ED.fire_event(Event::ActionFailed.new(action, e))
                 res = e
               rescue => e
                 Wakame.log.debug("Failed action : #{action.class.to_s} due to #{e}")
+                action.completion_status = :failed
                 Wakame.log.error(e)
-                EH.fire_event(Event::ActionFailed.new(action, e))
-                # Escalate the cancelation to parents.
+                ED.fire_event(Event::ActionFailed.new(action, e))
+                # Escalate the cancelation event to parents.
                 action.notify(e)
-                # Force cancel the current job when the root action ignored the elevated exception.
+                # Force to cancel the current job when the root action ignored the elevated exception.
                 if action === job_context[:root_action]
                   cancel_action(job_context[:job_id]) #rescue Wakame.log.error($!)
                 end
@@ -147,8 +149,7 @@ module Wakame
               res
             }, proc { |res|
               unless @active_jobs.has_key?(job_context[:job_id])
-                next
-              end
+                next              end
               
               jobary = []
               job_context[:root_action].walk_subactions {|a| jobary << a }
@@ -158,13 +159,13 @@ module Wakame
               if res.is_a?(Exception)
                 if jobary.all? { |act| act.status == :complete }
                   Wakame.log.info("Canceled all actions in JOB ID #{job_context[:job_id]}.") if res.is_a?(CancelBroadcast) 
-                  EH.fire_event(Event::JobFailed.new(action.job_id, res))
+                  ED.fire_event(Event::JobFailed.new(action.job_id, res))
                   job_context[:exception]=res
                   job_completed = true
                 end
               else
                 if jobary.all? { |act| act.status == :complete }
-                  EH.fire_event(Event::JobComplete.new(action.job_id))
+                  ED.fire_event(Event::JobComplete.new(action.job_id))
                   job_completed = true
                 end
               end
@@ -194,6 +195,7 @@ module Wakame
 
       def_attribute :job_id
       def_attribute :status, :ready
+      def_attribute :completion_status
       def_attribute :parent_action
 
       attr_reader :rule
@@ -276,11 +278,18 @@ module Wakame
         }
       end
 
+      def actor_request(agent_id, path, *args)
+        master.actor_request(agent_id, path, *args)
+      end
+
+      def sync_actor_request(agent_id, path, *args)
+        request = actor_request(agent_id, path, *args).request
+        request.wait
+      end
 
       def run
         raise NotImplementedError
       end
-
 
       private
       def sync_trigger_action(action, succ_proc, fail_proc)
@@ -349,9 +358,12 @@ module Wakame
       def register_hooks
       end
 
+      def cleanup
+      end
+
       protected
       def event_subscribe(event_class, &blk)
-        EventHandler.subscribe(event_class) { |event|
+        EventDispatcher.subscribe(event_class) { |event|
           begin
             run_filter(self)
             blk.call(event) if self.enabled 
@@ -370,122 +382,6 @@ end
 module Wakame
   module Rule
     module BasicActionSet
-      
-      class ConditionalWait
-        class TimeoutError < StandardError; end
-        include ThreadImmutable
-
-        def initialize
-          @wait_queue = Queue.new
-          @wait_tickets = []
-          @poll_threads = []
-          @event_tickets = []
-        end
-        
-        def poll( period=5, max_retry=10, &blk)
-          wticket = Wakame.gen_id
-          @poll_threads << Thread.new {
-            retry_count = 0
-
-            begin
-              catch(:finish) {
-                while retry_count < max_retry
-                  start_at = Time.now
-                  if blk.call == true
-                    throw :finish
-                  end
-                  Thread.pass
-                  if period > 0
-                    t = Time.now - start_at
-                    sleep (period - t) if period > t
-                  end
-                  retry_count += 1
-                end
-              }
-            
-              if retry_count >= max_retry
-                Wakame.log.error('Over retry count')
-                raise 'Over retry count'
-              end
-
-            rescue => e
-              Wakame.log.error(e)
-              @wait_queue << [false, wticket, e]
-            else
-              @wait_queue << [true, wticket]
-            end
-          }
-          @poll_threads.last[:name]="#{self.class} poll"
-
-          @wait_tickets << wticket
-        end
-        thread_immutable_methods :poll
-        
-        def wait_event(event_class, &blk)
-          wticket = Wakame.gen_id
-          Wakame.log.debug("#{self.class} called wait_event(#{event_class}) on thread #{Thread.current} (target_thread=#{self.target_thread?}). has_blk=#{blk}")
-          ticket = EH.subscribe(event_class) { |event|
-            begin
-              if blk.call(event) == true
-                EH.unsubscribe(ticket)
-                @wait_queue << [true, wticket]
-              end
-            rescue => e
-              Wakame.log.error(e)
-              EH.unsubscribe(ticket)
-              @wait_queue << [false, wticket, e]
-            end
-          }
-          @event_tickets << ticket
-
-          @wait_tickets << wticket
-        end
-        thread_immutable_methods :wait_event
-
-        def wait_completion(tout=0)
-
-          unless @wait_tickets.empty?
-            Wakame.log.debug("#{self.class} waits for #{@wait_tickets.size} num of event(s)/polling(s).")
-
-            timeout(((tout > 0) ? tout : nil), TimeoutError) {
-              while @wait_tickets.size > 0 && q = @wait_queue.shift
-                @wait_tickets.delete(q[1])
-                
-                unless q[0]
-                  Wakame.log.debug("#{q[1]} failed with #{q[2]}")
-                  raise q[2]
-                end
-              end
-            }
-          end
-          
-        ensure
-          # Cleanup threads/event tickets
-          @poll_threads.each { |t|
-            begin
-              t.kill
-            rescue => e
-              Wakame.log.error(e)
-            end
-          }
-          @event_tickets.each { |t| EH.unsubscribe(t) }
-        end
-        thread_immutable_methods :wait_completion
-
-      end
-
-      def wait_condition(timeout=300, &blk)
-        cond = ConditionalWait.new
-        cond.bind_thread(Thread.current)
-
-        #cond.instance_eval(&blk)
-        blk.call(cond)
-        
-        cond.wait_completion(timeout)
-      end
-      
-
-
       class Lock
         def initialize
           @mutex = Mutex.new
@@ -525,16 +421,12 @@ module Wakame
         Lock.new
       end
 
-      def vm_manipulator
-        @vm_manipulator ||= VmManipulator.create
-      end
-
-      def start_instance(image_id, attr={})
+      def self.start_instance(image_id, attr={})
         Wakame.log.debug("#{self.class} called start_instance(#{image_id})")
         
         attr[:user_data] = "node=agent\namqp_server=amqp://#{master.attr[:local_ipv4]}/"
         Wakame.log.debug("user_data: #{attr[:user_data]}")
-
+        vm_manipulator = VmManipulator.create
         res = vm_manipulator.start_instance(image_id, attr)
         inst_id = res[:instance_id]
 
@@ -551,36 +443,41 @@ module Wakame
         inst_id
       end
 
-      def start_service(service_instance)
-        raise "Agent is not bound on this service : #{service_instance}" if service_instance.agent.nil?
-        Wakame.log.debug("#{self.class} called start_service(#{service_instance.property.class})")
+#       def self.start_service(service_instance)
+#         raise "Agent is not bound on this service : #{service_instance}" if service_instance.agent.nil?
+#         Wakame.log.debug("#{self.class} called start_service(#{service_instance.property.class})")
 
-        master.send_agent_command(Packets::Agent::ServiceStart.new(service_instance.instance_id, service_instance.property), service_instance.agent.agent_id)
+#         master.send_agent_command(Packets::ServiceStart.new(service_instance.instance_id, service_instance.property), service_instance.agent.agent_id)
 
-        wait_condition { |cond|
-          cond.wait_event(Event::ServiceStatusChanged) { |event|
-            Wakame.log.debug("service_instance.instance_id(=#{service_instance.instance_id}) == event.instance_id(=#{event.instance_id}) event.status=#{event.status}")
-            service_instance.instance_id == event.instance_id && event.status == Service::STATUS_ONLINE
-          }
-        }
-      end
+#         wait_condition { |cond|
+#           cond.wait_event(Event::ServiceStatusChanged) { |event|
+#             Wakame.log.debug("service_instance.instance_id(=#{service_instance.instance_id}) == event.instance_id(=#{event.instance_id}) event.status=#{event.status}")
+#             service_instance.instance_id == event.instance_id && event.status == Service::STATUS_ONLINE
+#           }
+#         }
+#       end
 
 
-      def deploy_configuration(service_instance)
-        Wakame.log.debug("Begin: #{self.class}.deploy_configuration(#{service_instance.property.class})")
-        templ = service_instance.property.template
-        templ.pre_render
-        templ.render(service_instance)
+      def self.deploy_configuration(service_instance)
+        Wakame.log.debug("Begin: #{self}.deploy_configuration(#{service_instance.property.class})")
 
-        agent = service_instance.agent
-        src_path = templ.sync_src
-        src_path.sub!('/$', '') if File.directory? src_path
+        begin
+          tmpl = Wakame::Template.new(service_instance)
+          tmpl.render_config
+          
+          agent = service_instance.agent
+          src_path = tmpl.tmp_basedir.dup
+          src_path.sub!('/$', '') if File.directory? src_path
+          
+          #Util.exec("rsync -e 'ssh -i #{Wakame.config.ssh_private_key} -o \"UserKnownHostsFile #{Wakame.config.ssh_known_hosts}\"' -au #{src_path} root@#{agent.agent_ip}:#{Wakame.config.config_root}/")
+          dest_path = File.expand_path("tmp/config/" + File.basename(tmpl.basedir), service_instance.agent.root_path)
+          Util.exec("rsync -au #{src_path}/ #{dest_path}")
+          
+        ensure
+          tmpl.cleanup if tmpl
+        end
 
-        Wakame.log.debug("rsync -e 'ssh -i #{Wakame.config.ssh_private_key} -o \"UserKnownHostsFile #{Wakame.config.ssh_known_hosts}\"' -au #{src_path} root@#{agent.agent_ip}:#{Wakame.config.config_root}/")
-        system("rsync -e 'ssh -i #{Wakame.config.ssh_private_key} -o \"UserKnownHostsFile #{Wakame.config.ssh_known_hosts}\"' -au #{src_path} root@#{agent.agent_ip}:#{Wakame.config.config_root}/" )
-
-        templ.post_render
-        Wakame.log.debug("End: #{self.class}.deploy_configuration(#{service_instance.property.class})")
+        Wakame.log.debug("End: #{self}.deploy_configuration(#{service_instance.property.class})")
       end
 
       def test_agent_candidate(svc_prop, agent)
@@ -603,8 +500,6 @@ module Wakame
 
     end
 
-
-
     class DestroyInstancesAction < Action
       def initialize(svc_prop)
         @svc_prop = svc_prop
@@ -621,12 +516,13 @@ module Wakame
             end
           }
 
-          if @svc_prop.instance_count < online_svc.size
+          svc_count = service_cluster.instance_count(@svc_prop)
+          if svc_count < online_svc.size
             online_svc.delete_if { |svc|
               svc.agent.agent_id == master.attr[:instance_id]
             }
         
-            ((online_svc.size - @svc_prop.instance_count) + 1).times {
+            ((online_svc.size - svc_count) + 1).times {
               svc_to_stop << online_svc.shift
             }
             Wakame.log.debug("#{self.class}: online_svc.size=#{online_svc.size}, svc_to_stop.size=#{svc_to_stop.size}")
@@ -641,12 +537,9 @@ module Wakame
     end
 
     class PropagateInstancesAction < Action
-      include BasicActionSet
-
       def initialize(svc_prop)
         @svc_prop = svc_prop
       end
-
 
       def run
         svc_to_start = []
@@ -663,35 +556,39 @@ module Wakame
           }
 
           # The list is empty means that this action is called to propagate a new service instance instead of just starting scheduled instances.
-          if @svc_prop.instance_count > online_svc.size + svc_to_start.size
-            Wakame.log.debug("#{self.class}: @svc_prop.instance_count - online_svc.size=#{@svc_prop.instance_count - online_svc.size}")
-            (@svc_prop.instance_count - (online_svc.size + svc_to_start.size)).times {
+          svc_count = service_cluster.instance_count(@svc_prop)
+          if svc_count > online_svc.size + svc_to_start.size
+            Wakame.log.debug("#{self.class}: @svc_prop.instance_count - online_svc.size=#{svc_count - online_svc.size}")
+            (svc_count - (online_svc.size + svc_to_start.size)).times {
               svc_to_start << service_cluster.propagate(@svc_prop.class)
             }
           end
         }
 
         svc_to_start.each { |svc|
-          # Try to arrange agent from existing agent pool.
-          if svc.agent.nil?
-            EM.barrier {
-              arrange_agent(svc)
-            }
+          if svc.property.require_agent
+            # Try to arrange agent from existing agent pool.
+            if svc.agent.nil?
+              EM.barrier {
+                arrange_agent(svc)
+              }
+            end
+            
+            # If the agent pool is empty, will start a new VM slice.
+            if svc.agent.nil?
+              p master.attr
+              inst_id = start_instance(master.attr[:ami_id], @svc_prop.vm_spec.current.attrs)
+              EM.barrier {
+                arrange_agent(svc, inst_id)
+              }
+            end
+            
+            if svc.agent.nil?
+              Wakame.log.error("Failed to arrange the agent #{svc.instance_id} (#{svc.property.class})")
+              raise "Failed to arrange the agent #{@svc_prop.class}"
+            end
           end
-          
-          # If the agent pool is empty, will start a new VM slice.
-          if svc.agent.nil?
-            inst_id = start_instance(master.attr[:ami_id], @svc_prop.vm_spec.current.attrs)
-            EM.barrier {
-              arrange_agent(svc, inst_id)
-            }
-          end
-          
-          if svc.agent.nil?
-            Wakame.log.error("Failed to arrange the agent #{svc.instance_id} (#{svc.property.class})")
-            raise "Failed to arrange the agent #{@svc_prop.class}"
-          end
-          
+
           trigger_action(StartService.new(svc))
         }
         flush_subactions
@@ -719,6 +616,11 @@ module Wakame
         end
       end
 
+      def test_agent_candidate(svc_prop, agent)
+        return false if agent.has_service_type?(svc_prop.class)
+        svc_prop.vm_spec.current.satisfy?(agent) 
+      end
+
     end
 
     class ClusterShutdownAction < Action
@@ -734,15 +636,13 @@ module Wakame
           flush_subactions
         }
 
-        agent_monitor.agents.each { |id, agent|
+        agent_monitor.registered_agents.each { |id, agent|
           trigger_action(ShutdownVM.new(agent))
         }
       end
     end
 
     class ClusterLaunchAction < Action
-      include BasicActionSet
-
       def run
         if service_cluster.status == Service::ServiceCluster::STATUS_ONLINE
           Wakame.log.info("The service cluster is up & running already")
@@ -872,9 +772,9 @@ module Wakame
         data[:load_history] << agent.attr[:uptime]
         Wakame.log.debug("Load History for agent \"#{agent.agent_id}\": " + data[:load_history].inspect )
         detect_threadshold(data, proc{
-                             EH.fire_event(AgentLoadHighEvent.new(agent, data[:load_history][-1]))
+                             ED.fire_event(AgentLoadHighEvent.new(agent, data[:load_history][-1]))
                            }, proc{
-                             EH.fire_event(AgentLoadNormalEvent.new(agent, data[:load_history][-1]))
+                             ED.fire_event(AgentLoadNormalEvent.new(agent, data[:load_history][-1]))
                            })
         
 #         service_cluster.services.each { |id, svc|
@@ -884,9 +784,9 @@ module Wakame
 #           data[:load_history] << agent.attr[:uptime]
 #           Wakame.log.debug("Load History for service \"#{svc.property.class}\": " + data[:load_history].inspect )
 #           detect_threadshold(data, proc{
-#                                EH.fire_event(ServiceLoadHighEvent.new(svc.property, data[:load_history][-1]))
+#                                ED.fire_event(ServiceLoadHighEvent.new(svc.property, data[:load_history][-1]))
 #                              }, proc{
-#                                EH.fire_event(ServiceLoadNormalEvent.new(svc.property, data[:load_history][-1]))
+#                                ED.fire_event(ServiceLoadNormalEvent.new(svc.property, data[:load_history][-1]))
 #                              })
 #         }
 
@@ -950,19 +850,18 @@ module Wakame
     end
 
     class ShutdownVM < Action
-      include BasicActionSet
-
       def initialize(agent)
         @agent = agent
       end
 
       def run
-        if @agent.agent_id == master.attr[:instance_id]
+        
+        if @agent.agent_id == master.master_local_agent_id
           Wakame.log.info("Skip to shutdown VM as the master is running on this node: #{@agent.agent_id}")
           return
         end
 
-        vm_manipulator.stop_instance(@agent[:instance_id])
+        VmManipulator.create.stop_instance(@agent[:instance_id])
       end
     end
 
@@ -981,29 +880,25 @@ module Wakame
     end
 
     class ReloadService < Action
-      include BasicActionSet
-
       def initialize(service_instance)
         @service_instance = service_instance
       end
 
       def run
         raise "Agent is not bound on this service : #{@service_instance}" if @service_instance.agent.nil?
-        raise "The assigned agent for the service instance #{@service_instance.instance_id} is not online."  unless @service_instance.agent.status == AgentMonitor::Agent::STATUS_UP
+        raise "The assigned agent for the service instance #{@service_instance.instance_id} is not online."  unless @service_instance.agent.status == Service::Agent::STATUS_ONLINE
 
         # Skip to act when the service is having below status.
         #if @service_instance.status == Service::STATUS_STARTING || @service_instance.status == Service::STATUS_ONLINE
         #  raise "Canceled as the service is being or already ONLINE: #{@service_instance.property}"
         #end
         
-        master.send_agent_command(Packets::Agent::ServiceReload.new(@service_instance.instance_id), @service_instance.agent.agent_id)
+        master.send_agent_command(Packets::ServiceReload.new(@service_instance.instance_id), @service_instance.agent.agent_id)
       end
     end
 
 
     class MigrateServiceAction < Action
-      include BasicActionSet
-
       def initialize(service_instance, dest_agent=nil)
         @service_instance = service_instance
         @destination_agent = dest_agent
@@ -1061,39 +956,26 @@ module Wakame
     end
     
     class StartService < Action
-      include BasicActionSet
-
       def initialize(service_instance)
-        agent = service_instance.agent.nil?
         @service_instance = service_instance
       end
 
       def run
-        raise "Agent is not bound on this service : #{@service_instance}" if @service_instance.agent.nil?
-        raise "The assigned agent for the service instance #{@service_instance.instance_id} is not online."  unless @service_instance.agent.status == AgentMonitor::Agent::STATUS_UP
+        raise "Agent is not bound on this service : #{@service_instance}" if @service_instance.property.require_agent && @service_instance.agent.nil?
+        raise "The assigned agent for the service instance #{@service_instance.instance_id} is not online."  unless @service_instance.agent.status == Service::Agent::STATUS_ONLINE
         
         # Skip to act when the service is having below status.
         if @service_instance.status == Service::STATUS_STARTING || @service_instance.status == Service::STATUS_ONLINE
           raise "Canceled as the service is being or already ONLINE: #{@service_instance.property}"
         end
         EM.barrier {
-          @service_instance.status = Service::STATUS_STARTING
+          @service_instance.update_status(Service::STATUS_STARTING)
         }
 
-        deploy_configuration(@service_instance)
-        
-        @service_instance.property.before_start(@service_instance, self)
-        
-        master.send_agent_command(Packets::Agent::ServiceStart.new(@service_instance.instance_id, @service_instance.property), @service_instance.agent.agent_id)
-        
-        wait_condition { |cond|
-          cond.wait_event(Event::ServiceOnline) { |event|
-            event.instance_id == @service_instance.instance_id
-          }
-        }
-        
-        @service_instance.property.after_start(@service_instance, self)
+        BasicActionSet.deploy_configuration(@service_instance)
 
+        @service_instance.resource.start(@service_instance, self)
+        
         EM.barrier {
           Wakame.log.debug("Child nodes: #{@service_instance.property.class}: " + service_cluster.dg.children(@service_instance.property.class).inspect)
           service_cluster.dg.children(@service_instance.property.class).each { |svc_prop|
@@ -1106,8 +988,6 @@ module Wakame
     end
 
     class CallChildChangeAction < Action
-      include BasicActionSet
-
       def initialize(resource)
         @resource = resource
         #@parent_instance = parent_instance
@@ -1124,15 +1004,13 @@ module Wakame
 
 
     class StopService < Action
-      include BasicActionSet
-
       def initialize(service_instance)
         @service_instance = service_instance
       end
 
 
       def run
-        raise "Agent is not bound on this service : #{@service_instance}" if @service_instance.agent.nil?
+        raise "Agent is not bound on this service : #{@service_instance}" if @service_instance.property.require_agent && @service_instance.agent.nil?
         
         # Skip to act when the service is having below status.
         if @service_instance.status == Service::STATUS_STOPPING || @service_instance.status == Service::STATUS_OFFLINE
@@ -1140,7 +1018,7 @@ module Wakame
         end
 
         EM.barrier {
-          @service_instance.status = Service::STATUS_STOPPING
+          @service_instance.update_status(Service::STATUS_STOPPING)
         }
         
         EM.barrier {
@@ -1152,17 +1030,17 @@ module Wakame
 
         flush_subactions()
 
-        @service_instance.property.before_stop(@service_instance, self)
+        @service_instance.property.stop(@service_instance, self)
         
-        master.send_agent_command(Packets::Agent::ServiceStop.new(@service_instance.instance_id), @service_instance.agent.agent_id)
+        #master.send_agent_command(Packets::ServiceStop.new(@service_instance.instance_id), @service_instance.agent.agent_id)
         
-        wait_condition { |cond|
-          cond.wait_event(Event::ServiceOffline) { |event|
-            event.instance_id == @service_instance.instance_id
-          }
-        }
+        #wait_condition { |cond|
+        #  cond.wait_event(Event::ServiceOffline) { |event|
+        #    event.instance_id == @service_instance.instance_id
+        #  }
+        #}
         
-        @service_instance.property.after_stop(@service_instance, self)
+        # @service_instance.property.after_stop(@service_instance, self)
 
         EM.barrier {
           service_cluster.destroy(@service_instance.instance_id)
@@ -1183,57 +1061,42 @@ module Wakame
       end
     end
 
-    class AfterClusterStart < Rule
-      append_filter { |rule|
-        rule.service_cluster.status == Service::ServiceCluster::STATUS_ONLINE
-      }
-    end
-
-    class ClusterStatusMonitor < Rule
-      def register_hooks
-        event_subscribe(Event::ServiceOnline) { |event|
-          update_cluster_status
+    module AfterClusterOnline
+      def self.included(klass)
+        klass.append_filter { |rule|
+          rule.service_cluster.status == Service::ServiceCluster::STATUS_ONLINE
         }
-        event_subscribe(Event::ServiceOffline) { |event|
-          update_cluster_status
-        }
-
-        event_subscribe(Event::AgentTimedOut) { |event|
-          svc_in_timedout_agent = service_cluster.instances.select { |k, i|
-            if !i.agent.nil? && i.agent.agent_id == event.agent.agent_id
-              i.status = Service::STATUS_FAIL
-            end
-          }
-          
-          update_cluster_status
-        }
-      end
-
-      private
-      def update_cluster_status
-        onlines = []
-        all_offline = false
-        onlines = service_cluster.instances.select { |k, i|
-          i.status == Service::STATUS_ONLINE
-        }
-        all_offline = service_cluster.instances.all? { |k, i|
-          i.status == Service::STATUS_OFFLINE
-        }
-        Wakame.log.debug "online instances: #{onlines.size}, assigned instances: #{service_cluster.instances.size}"
-        if service_cluster.instances.size == 0 || all_offline
-          service_cluster.status = Service::ServiceCluster::STATUS_OFFLINE
-        elsif onlines.size == service_cluster.instances.size
-          service_cluster.status = Service::ServiceCluster::STATUS_ONLINE
-        elsif onlines.size > 0
-          service_cluster.status = Service::ServiceCluster::STATUS_PARTIAL_ONLINE
-        end
-        
       end
     end
 
+    class InstanceCountUpdate < Rule
+      include AfterClusterOnline
 
-    class InstanceCountUpdate < AfterClusterStart
       def register_hooks
+        @instance_counters = {}
+        ms = Scheduler::PerHourSequence.new
+        #ms[0]=1
+        #ms[30]=5
+        ms[0]=1
+        ms["0:2:00"]=4
+        ms["0:5:00"]=1
+        ms["0:9:00"]=4
+        ms["0:13:00"]=1
+        ms["0:17:00"]=4
+        ms["0:21:00"]=1
+        ms["0:25:00"]=1
+        ms["0:29:00"]=1
+        ms["0:33:00"]=4
+        #ms["0:37:00"]=1
+        #ms["0:41:00"]=4
+        ms["0:45:00"]=1
+        ms["0:49:00"]=4
+        ms["0:53:00"]=1
+        ms["0:57:00"]=4
+        # @instance_counters[Apache_APP.to_s] = TimedCounter.new(Scheduler::LoopSequence.new(ms), self)
+
+
+
         event_subscribe(Event::InstanceCountChanged) { |event|
           next if service_cluster.status == Service::ServiceCluster::STATUS_OFFLINE
 
@@ -1248,10 +1111,37 @@ module Wakame
       end
     end
 
-
     class ProcessCommand < Rule
-      require 'wakame/manager/commands'
+      def register_hooks
+        @@command_thread ||= Thread.new {
+          while cmd = self.command_queue.deq_cmd
+            res = nil
+            begin
+              EM.barrier {
+                Wakame.log.debug("#{self.class}: Being processed the command: #{cmd.class}")
+                cmd.run(self)
+                res = cmd
+              }
+            rescue => e
+              Wakame.log.error(e)
+              res = e
+            ensure
+              self.command_queue.enq_result(res)
+            end
+          end
+        }
+        
+        #event_subscribe(Event::CommandReceived) { |event|
+        #  event.command.run(self)
+        #}
+      end
       
+      def cleanup
+        @@command_thread.kill if @@command_thread.alive?
+      end
+    end
+
+    class ProcessCommand2 < Rule
       def register_hooks
         event_subscribe(Event::CommandReceived) { |event|
           case event.command
@@ -1278,5 +1168,6 @@ module Wakame
       end
       
     end
+
   end      
 end

@@ -7,13 +7,18 @@ class Wakame::Monitor::Agent
   end
 
   def send_ping(hash)
-    publish_to('ping', Wakame::Packets::Agent::Ping.new(agent, hash[:attrs], hash[:actors], hash[:monitors]).marshal)
+    publish_to('ping', Wakame::Packets::Ping.new(agent, hash[:attrs], hash[:actors], hash[:monitors], hash[:services]).marshal)
   end
 
   def setup(path)
-    @timer = CheckerTimer.new(1) {
-      send_ping(check)
+    # Send the first ping signal as soon as possible since the ping contanins vital information to construct the Agent object on master node.
+    send_ping(check())
+
+    # Setup periodical ping publisher.
+    @timer = CheckerTimer.new(10) {
+      send_ping(check())
     }
+    @timer.start
   end
 
 
@@ -22,16 +27,21 @@ class Wakame::Monitor::Agent
       require 'wakame/vm_manipulator'
       attrs = Wakame::VmManipulator::EC2::MetadataService.fetch_local_attrs
     else
-      attrs = {:instance_id=>agent.agent_id}
+      attrs = Wakame::VmManipulator::StandAlone.fetch_local_attrs
     end
 
-    res = {:attrs=>attrs, :monitors=>[], :actors=>[]}
+    res = {:attrs=>attrs, :monitors=>[], :actors=>[], :services=>{}}
     EM.barrier {
-      agent.monitors.each { |key, m|
+      agent.monitor_registry.monitors.each { |key, m|
         res[:monitors] << {:class=>m.class.to_s}
       }
-      agent.actors.each { |key, a|
+      agent.actor_registry.actors.each { |key, a|
         res[:actors] << {:class=>a.class.to_s}
+      }
+
+      svcmon = agent.monitor_registry.find_monitor('/service')
+      svcmon.checkers.each { |svc_id, a|
+        res[:services][svc_id]={:status=>a.status}
       }
     }
 

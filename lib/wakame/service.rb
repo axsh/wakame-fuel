@@ -3,7 +3,6 @@
 require 'ostruct'
 
 require 'wakame'
-require 'wakame/configuration_template'
 require 'wakame/util'
 
 module Wakame
@@ -13,10 +12,10 @@ module Wakame
     class ServicePropagationError < ServiceError; end
 
 
-    STATUS_OFFLINE = STATUS_DOWN = 0
-    STATUS_ONLINE = STATUS_UP = STATUS_RUN = 1
+    STATUS_OFFLINE = 0
+    STATUS_ONLINE  = 1
     STATUS_UNKNOWN = 2
-    STATUS_FAIL = 3
+    STATUS_FAIL    = 3
     STATUS_STARTING = 4
     STATUS_STOPPING = 5
     STATUS_RELOADING = 6
@@ -25,18 +24,20 @@ module Wakame
     class Agent
       include ThreadImmutable
       include AttributeHelper
-      STATUS_DOWN = STATUS_OFFLINE =0
-      STATUS_UP = STATUS_ONLINE =1
-      STATUS_UNKNOWN=2
-      STATUS_TIMEOUT=3
+      STATUS_OFFLINE = 0
+      STATUS_ONLINE  = 1
+      STATUS_UNKNOWN = 2
+      STATUS_TIMEOUT = 3
       
-      attr_accessor :agent_id, :uptime, :last_ping_at, :attr, :services
-      thread_immutable_methods :agent_id=, :uptime=, :last_ping_at=, :attr=, :services=
+      attr_accessor :agent_id, :uptime, :last_ping_at, :attr, :services, :root_path
+      thread_immutable_methods :agent_id=, :uptime=, :last_ping_at=, :attr=, :services=, :root_path=
 
       def initialize(agent_id=nil)
         bind_thread
         @services = {}
         @agent_id = agent_id
+        @last_ping_at = Time.now
+        @status = STATUS_ONLINE
       end
 
       def agent_ip
@@ -79,23 +80,16 @@ module Wakame
       end
 
 
-      #def dump_status
-      #  {:agent_id => @agent_id, :status => @status, :last_ping_at => @last_ping_at, :attr => attr.dup,
-      #    :services => services.keys.dup
-      #  }
-      #end
+      def dump_status
+        {:agent_id => @agent_id, :status => @status, :last_ping_at => @last_ping_at, :attr => attr.dup,
+          :services => services.keys.dup
+        }
+      end
       
     end
 
 
     class ServiceCluster
-      class << self
-        
-        def instance_collection
-          @collection ||= {}
-        end
-      end
-
       include ThreadImmutable
 
       attr_reader :dg, :instance_id, :status_changed_at, :rule_engine, :master
@@ -109,11 +103,16 @@ module Wakame
         bind_thread
         @master = master
         @instance_id =Wakame.gen_id
+        @rule_engine ||= Rule::RuleEngine.new(self)
         prepare
         
         instance_eval(&blk) if blk
+      end
+
+      def define_rule(&blk)
+        @rule_engine ||= Rule::RuleEngine.new(self)
         
-        self.class.instance_collection[@instance_id] = self
+        blk.call(@rule_engine)
       end
       
       def add_service(service_property, name=nil)
@@ -149,13 +148,9 @@ module Wakame
       # The agents are not assigned at this point.
       def launch
         @properties.each { |n, p|
-          count = 0
-          each_instance(p.class) { |svc|
-            count += 1
-          }
-          
-          if p.instance_count > count
-            (p.instance_count - count).times {
+          count = instance_count(p)
+          if p.min_instances > count
+            (p.min_instances - count).times {
               propagate(p.class)
             }
           end
@@ -188,7 +183,7 @@ module Wakame
                         end
         prop = @properties[property_name.to_s] || raise("Unknown property name: #{property_name.to_s}")
         if force == false
-          instnum = instance_count(property_name) 
+          instnum = instance_count(property_name)
           if instnum >= prop.max_instances
             Wakame.log.info("#{prop.class} has been reached max_instance limit: max=#{prop.max_instance}")
             raise ServicePropagationError, "#{prop.class} has been reached to max_instance limit" 
@@ -231,7 +226,7 @@ module Wakame
       def each_instance(filter_prop_name=nil, &blk)
         prop_obj = nil
         if filter_prop_name.is_a? String
-          filter_prop_name = Wakame.str2const(filter_prop_name)
+          filter_prop_name = Util.build_const(filter_prop_name)
         end
 
         if filter_prop_name.is_a? Module
@@ -307,8 +302,51 @@ module Wakame
         @status = STATUS_OFFLINE
         @status_changed_at = Time.now
         @rule_engine = nil
+
+        @status_check_timer = EM::PeriodicTimer.new(5) {
+          update_cluster_status
+        }
+
+        @check_event_tickets = []
+        [Event::ServiceOnline, Event::ServiceOffline, Event::ServiceFailed].each { |evclass|
+          @check_event_tickets << ED.subscribe(evclass) { |event|
+            update_cluster_status
+          }
+        }
+
+#         ED.subscribe(Event::AgentTimedOut) { |event|
+#           svc_in_timedout_agent = service_cluster.instances.select { |k, i|
+#             if !i.agent.nil? && i.agent.agent_id == event.agent.agent_id
+#               i.status = Service::STATUS_FAIL
+#             end
+#           }
+          
+#         }
       end
       thread_immutable_methods :prepare
+
+
+      def update_cluster_status
+        onlines = []
+        all_offline = false
+        onlines = self.instances.select { |k, i|
+          i.status == Service::STATUS_ONLINE
+        }
+        all_offline = self.instances.all? { |k, i|
+          i.status == Service::STATUS_OFFLINE
+        }
+        #Wakame.log.debug "online instances: #{onlines.size}, assigned instances: #{self.instances.size}"
+        if self.instances.size == 0 || all_offline
+          self.status = Service::ServiceCluster::STATUS_OFFLINE
+        elsif onlines.size == self.instances.size
+          self.status = Service::ServiceCluster::STATUS_ONLINE
+        elsif onlines.size > 0
+          self.status = Service::ServiceCluster::STATUS_PARTIAL_ONLINE
+        end
+        
+      end
+      thread_immutable_methods :update_cluster_status
+
       
     end
     
@@ -413,7 +451,7 @@ module Wakame
     class ServiceInstance
       include ThreadImmutable
       attr_reader :instance_id, :service_property, :agent, :service_cluster, :status_changed_at
-      attr_accessor :name, :status
+      attr_accessor :name
       alias :cluster :service_cluster
       alias :property :service_property
       
@@ -422,7 +460,6 @@ module Wakame
           @collection ||= {}
         end
       end
-      
       
       def initialize(service_property)
         bind_thread
@@ -436,26 +473,43 @@ module Wakame
         self.class.instance_collection[@instance_id] = self
       end
       
-      def status=(new_status)
+      def update_status(new_status, changed_at=Time.now, fail_message=nil)
         if @status != new_status
           prev_status = @status
-          set_status(new_status, Time.now)
+          @status = new_status
+          @status_changed_at = changed_at
           
-          event = Event::ServiceStatusChanged.new(@instance_id, @service_property, @status, prev_status)
+          event = Event::ServiceStatusChanged.new(@instance_id, @service_property, new_status, prev_status)
           event.time = @status_changed_at.dup
           ED.fire_event(event)
+
+          tmp_event = nil
+          if prev_status != Service::STATUS_ONLINE && new_status == Service::STATUS_ONLINE
+            tmp_event = Event::ServiceOnline.new(self.instance_id, self.property)
+            tmp_event.time = @status_changed_at.dup
+          elsif prev_status != Service::STATUS_OFFLINE && new_status == Service::STATUS_OFFLINE
+            tmp_event = Event::ServiceOffline.new(self.instance_id, self.property)
+            tmp_event.time = @status_changed_at.dup
+          elsif prev_status != Service::STATUS_FAIL && new_status == Service::STATUS_FAIL
+            tmp_event = Event::ServiceFailed.new(self.instance_id, self.property, fail_message)
+            tmp_event.time = @status_changed_at.dup
+          end
+          ED.fire_event(tmp_event) if tmp_event
+
         end
         @status
       end
-      thread_immutable_methods :status=
+      thread_immutable_methods :update_status
       
-      def set_status(new_status, changed_at)
-        @status = new_status
-        @status_changed_at = changed_at
+
+      def status
+        @status
       end
-      thread_immutable_methods :set_status
       
       def property
+        @service_property
+      end
+      def resource
         @service_property
       end
       
@@ -529,7 +583,8 @@ module Wakame
       end
 
       def current
-        environment(Wakame.config.vm_environment)
+puts "vm_environment=" + Wakame.config.environment.to_s
+        environment(Wakame.config.environment)
       end
 
       def environment(klass_key, &blk)
@@ -595,91 +650,15 @@ module Wakame
       end
     end
 
-    class InstanceCounter
-      class OutOfLimitRangeError < StandardError; end
-
-      include AttributeHelper
-      
-      def bind_resource(resource)
-        @resource = resource
-      end
-
-      def resource
-        @resource
-      end
-
-      def instance_count
-        raise NotImplementedError
-      end
-
-      protected
-      def check_hard_limit(count=self.instance_count)
-        Range.new(@resource.min_instances, @resource.max_instances, true).include?(count)
-      end
-    end
-
-
-    class ConstantCounter < InstanceCounter
-      def initialize(resource)
-        @instance_count = 1
-        bind_resource(resource)
-      end
-
-      def instance_count
-        @instance_count
-      end
-
-      def instance_count=(count)
-        raise OutOfLimitRangeError unless check_hard_limit(count)
-        if @instance_count != count
-          prev = @instance_count
-          @instance_count = count
-          ED.fire_event(Event::InstanceCountChanged.new(@resource, prev, count))
-        end
-      end
-    end
-
-    class TimedCounter < InstanceCounter
-      def initialize(seq, resource)
-        @sequence = seq
-        bind_resource(resource)
-        timer = Scheduler::SequenceTimer.new(seq)
-        timer.add_observer(self)
-        @instance_count = 1
-      end
-
-      def instance_count
-        @instance_count
-      end
-
-      def update(*args)
-        new_count = args[0]
-        if @instance_count != count
-          prev = @instance_count
-          @instance_count = count
-          ED.fire_event(Event::InstanceCountChanged.new(@resource, prev, count))
-        end
-        #if self.min > new_count || self.max < new_count
-        #if self.min != new_count || self.max != new_count
-        #  prev_min = self.min
-        #  prev_max = self.max
-
-        #  self.max = self.min = new_count
-        #  ED.fire_event(Event::InstanceCountChanged.new(@resource, prev_min, prev_max, self.min, self.max))
-        #end
-
-      end
-    end
 
     class Property
       include AttributeHelper
       attr_accessor :check_time, :vm_spec
-      attr_accessor :template, :instance_counter
       def_attribute :duplicable, true
       def_attribute :min_instances, 1
       def_attribute :max_instances, 1
       def_attribute :startup, true
-      def_attribute :instance_counter, proc{ |my| ConstantCounter.new(my) }
+      def_attribute :require_agent, true
 
       def initialize(check_time=5)
         @check_time = check_time
@@ -695,30 +674,31 @@ module Wakame
         }
       end
 
-      def instance_count
-        instance_counter.instance_count
+      def basedir
+        File.join(Wakame.config.root_path, 'cluster', 'resources', Util.snake_case(self.class))
       end
 
       def dump_status
         {:type => self.class.to_s, :min_instances => min_instances, :max_instances=> max_instances,
-          :duplicable=>duplicable, :instance_count => instance_count,
-          :instance_counter_class => instance_counter.class.to_s
+          :duplicable=>duplicable
         }
       end
 
-      def start; end
-      def check; end
-      def stop; end
-      def reload; end
+      def start(service_instance, action); end
+      def stop(service_instance, action); end
+      def reload(service_instance, action); end
 
-      def before_start(service_instance, action)
+      def render_config(template)
       end
-      def after_start(service_instance, action)
-      end
-      def before_stop(service_instance, action)
-      end
-      def after_stop(service_instance, action)
-      end
+
+      #def before_start(service_instance, action)
+      #end
+      #def after_start(service_instance, action)
+      #end
+      #def before_stop(service_instance, action)
+      #end
+      #def after_stop(service_instance, action)
+      #end
 
       def on_child_changed(action, svc_inst)
       end
@@ -733,222 +713,15 @@ end
 
 module Wakame
   module Service
-    class WebCluster < ServiceCluster
-      attr_accessor :propagation_priority
-      
-      module HttpAppServer; end
-      module HttpAssetServer; end
-      module HttpLoadBalanceServer; end
-
-      VirtualHost = Class.new(OpenStruct)
-
-      class RuleSet < Rule::RuleEngine
-        def initialize(sc)
-          super(sc) {
-            register_rule(Rule::ProcessCommand.new)
-            register_rule(Rule::MaintainSshKnownHosts.new)
-            register_rule(Rule::ClusterStatusMonitor.new)
-            register_rule(Rule::LoadHistoryMonitor.new)
-            register_rule(Rule::InstanceCountUpdate.new)
-            #register_rule(Rule::ReflectPropagation_LB_Subs.new)
-            #register_rule(Rule::ScaleOutWhenHighLoad.new)
-            #register_rule(Rule::ShutdownUnusedVM.new)
-          }
-
-        end
-      end
-
-
-      def initialize(master, &blk)
-        super(master) {
-          add_service(Apache_WWW.new)
-          add_service(Apache_APP.new)
-          add_service(Apache_LB.new)
-          add_service(MySQL_Master.new)
-#          add_service(MySQL_Slave.new)
-
-          set_dependency(Apache_WWW, Apache_LB)
-          set_dependency(Apache_APP, Apache_LB)
-          set_dependency(MySQL_Master, Apache_APP)
-#          set_dependency(MySQL_Master, MySQL_Slave)
-
-          @rule_engine = RuleSet.new(self)
-        }
-
-        add_virtual_host(VirtualHost.new(:server_name=>'aaa.test', :document_root=>'/home/wakame/app/development/test/public'))
-        add_virtual_host(VirtualHost.new(:server_name=>'bbb.test', :document_root=>'/home/wakame/app/development/test/public'))
-
-        @propagation_priority = [Apache_APP, Apache_WWW]
-      end
-
-      def virtual_hosts
-        @virtual_hosts ||= []
-      end
-
-      def add_virtual_host(vh)
-        virtual_hosts << vh
-      end
-
-
-      def each_app(&blk)
-        each_instance(HttpAppServer) { |n|
-          blk.call(n)
-        }
-      end
-
-      def each_www(&blk)
-        each_instance(HttpAssetServer) { |n|
-          blk.call(n)
-        }
-      end
-
-      def each_mysql(&blk)
-        each_instance(MySQL_Master) { |n|
-          blk.call(n)
-        }
-      end
-
-    end
 
 
     
 
     module ApacheBasicProps
-      attr_accessor :listen_port, :listen_port_https
+      attr_accessor :listen_port, :listen_port_https, :server_root
       
     end
     
-
-    class Apache_WWW < Property
-      include ApacheBasicProps
-      include WebCluster::HttpAssetServer
-
-      def initialize
-        super()
-        @listen_port = 8000
-        @template = ConfigurationTemplate::ApacheTemplate.new(:www)
-        @max_instances = 5
-      end
-      
-      def start
-        system(Wakame.config.root + '/config/init.d/apache2-www start')
-      end
-      
-      def check
-        system("for i in `pidof apache2`; do ps -f $i; done | egrep -e '-DWWW' >/dev/null")
-        return false if $?.to_i != 0
-        true
-      end
-      
-      def stop
-        system(Wakame.config.root + '/config/init.d/apache2-www stop')
-      end
-
-      def reload
-        system(Wakame.config.root +  '/config/init.d/apache2-www reload')
-      end
-
-    end
-    
-    class Apache_APP < Property
-      include ApacheBasicProps
-      include WebCluster::HttpAppServer
-
-      def initialize
-        super()
-        @listen_port = 8001
-        @max_instances = 5
-        ms = Scheduler::PerHourSequence.new
-        #ms[0]=1
-        #ms[30]=5
-        ms[0]=1
-        ms["0:2:00"]=4
-        ms["0:5:00"]=1
-        ms["0:9:00"]=4
-        ms["0:13:00"]=1
-        ms["0:17:00"]=4
-        ms["0:21:00"]=1
-        ms["0:25:00"]=1
-        ms["0:29:00"]=1
-        ms["0:33:00"]=4
-        #ms["0:37:00"]=1
-        #ms["0:41:00"]=4
-        ms["0:45:00"]=1
-        ms["0:49:00"]=4
-        ms["0:53:00"]=1
-        ms["0:57:00"]=4
-        # @instance_counter = TimedCounter.new(Scheduler::LoopSequence.new(ms), self)
-
-        @template = ConfigurationTemplate::ApacheTemplate.new(:app)
-      end
-
-      def start
-        #Wakame.shell.transact {
-        #  system("pwd")
-          system(Wakame.config.root + '/config/init.d/apache2-app start')
-        #}
-      end
-      
-      def check
-        system("for i in `pidof apache2`; do ps -f $i; done | egrep -e '-DAPP' >/dev/null")
-        return false if $?.to_i != 0
-        true
-      end
-
-      def stop
-        system(Wakame.config.root + "/config/init.d/apache2-app stop")
-      end
-
-      def reload
-        system(Wakame.config.root +  '/config/init.d/apache2-app reload')
-      end
-
-    end
-
-    class Apache_LB < Property
-      include WebCluster::HttpLoadBalanceServer
-      include ApacheBasicProps
-
-      attr_reader :elastic_ip
-
-      def initialize
-        super()
-        @listen_port = 80
-        @listen_port_https = 443
-        @template = ConfigurationTemplate::ApacheTemplate.new(:lb)
-        @elastic_ip = ''
-      end
-
-      def on_parent_changed(action, svc_inst)
-        action.deploy_configuration(svc_inst)
-        action.trigger_action(Rule::ReloadService.new(svc_inst))
-      end
-
-      def after_start(svc, action)
-        vm_manipulator = VmManipulator.create
-        Wakame.log.info("Associating the Elastic IP #{@elastic_ip} to #{svc.agent.agent_id}")
-        vm_manipulator.associate_address(svc.agent.agent_id, @elastic_ip)
-      end
-
-      def start
-        system(Wakame.config.root +  '/config/init.d/apache2-lb start')
-      end
-      
-      def check
-        system("for i in `pidof apache2`; do ps -f $i; done | egrep -e '-DLB' >/dev/null")
-        return false if $?.to_i != 0
-        true
-      end
-      
-      def stop
-        system(Wakame.config.root + "/config/init.d/apache2-lb stop")
-      end
-
-      def reload
-        system(Wakame.config.root +  '/config/init.d/apache2-lb reload')
-      end
-      
-    end
 
     class MySQL_Master < Property
       attr_reader :basedir, :mysqld_datadir, :mysqld_port, :mysqld_server_id, :mysqld_log_bin, :ebs_volume, :ebs_device

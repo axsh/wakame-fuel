@@ -5,14 +5,14 @@ require 'wakame'
 class Wakame::Monitor::Service
 
   class ServiceChecker
-    include Wakame::Packets::Agent
+    #include Wakame::Packets::Agent
     attr_reader :timer, :svc_id
     attr_accessor :last_checked_at, :status
 
     def initialize(svc_id, svc_mon)
       @svc_id = svc_id
       @service_monitor = svc_mon
-      @status = Wakame::Monitor::STATUS_OFFLINE
+      @status = Wakame::Service::STATUS_OFFLINE
       count = 0
       @timer = Wakame::Monitor::CheckerTimer.new(3) {
         self.signal_checker
@@ -22,14 +22,16 @@ class Wakame::Monitor::Service
     def start
       if !@timer.running?
         @timer.start
-        @service_monitor.send_event(MonitoringStarted.new(@service_monitor.agent, self.svc_id))
+        @service_monitor.send_event(Wakame::Packets::MonitoringStarted.new(@service_monitor.agent, self.svc_id))
+        Wakame.log.debug("#{self.class}: Started the checker")
       end
     end
 
     def stop
       if @timer.running?
         @timer.stop
-        @service_monitor.send_event(MonitoringStopped.new(@service_monitor.agent, self.svc_id))
+        @service_monitor.send_event(Wakame::Packets::MonitoringStopped.new(@service_monitor.agent, self.svc_id))
+        Wakame.log.debug("#{self.class}: Stopped the checker")
       end
     end
 
@@ -41,20 +43,21 @@ class Wakame::Monitor::Service
       EventMachine.defer proc {
         res = begin
                 self.last_checked_at = Time.now
-                self.check
+                res = self.check
+                res 
               rescue => e
                 Wakame.log.error("#{self.class}: #{e}")
                 Wakame.log.error(e)
                 e
               end
-                Thread.pass
+        Thread.pass
         res
       }, proc { |res|
 
         case res
         when Exception
-          update_status(Wakame::Monitor::STATUS_FAIL) 
-        when Wakame::Monitor::STATUS_ONLINE, Wakame::Monitor::STATUS_OFFLINE
+          update_status(Wakame::Service::STATUS_FAIL) 
+        when Wakame::Service::STATUS_ONLINE, Wakame::Service::STATUS_OFFLINE
           update_status(res) 
         else
           Wakame.log.error("#{self.class}: Unknown response type from the checker: #{self.svc_id}, ")
@@ -66,7 +69,7 @@ class Wakame::Monitor::Service
       prev_status = self.status
       if prev_status != new_status
         self.status = new_status
-        @service_monitor.send_event(ServiceStatusChanged.new(@service_monitor.agent, self.svc_id, prev_status, new_status))
+        @service_monitor.send_event(Wakame::Packets::ServiceStatusChanged.new(@service_monitor.agent, self.svc_id, prev_status, new_status))
       end
     end
   end
@@ -78,7 +81,13 @@ class Wakame::Monitor::Service
     end
     
     def check
-      
+      return Wakame::Service::STATUS_OFFLINE unless File.exist?(@pidpath)
+      #cmdstat = ::Open4.popen4("ps -p \"`cat '#{@pidpath}'`\" > /dev/null"){}
+      #cmdstat.exitstatus == 0 ? Wakame::Service::STATUS_ONLINE : Wakame::Service::STATUS_OFFLINE
+
+      cmdres = system("ps -p \"`cat '#{@pidpath}'`\" > /dev/null")
+      # system() returns true or false.
+      cmdres ? Wakame::Service::STATUS_ONLINE : Wakame::Service::STATUS_OFFLINE
     end
   end
 
@@ -102,9 +111,9 @@ class Wakame::Monitor::Service
       }
       Wakame.log.debug("#{self.class}: Exit Status #{@command}: #{cmdstat}")
       if outputs.size > 0
-        @service_monitor.send_event(MonitoringOutput.new(@service_monitor.agent, self.svc_id, outputs.join('')))
+        @service_monitor.send_event(Wakame::Packets::MonitoringOutput.new(@service_monitor.agent, self.svc_id, outputs.join('')))
       end
-      cmdstat.exitstatus == 0 ? Wakame::Monitor::STATUS_ONLINE : Wakame::Monitor::STATUS_OFFLINE
+      cmdstat.exitstatus == 0 ? Wakame::Service::STATUS_ONLINE : Wakame::Service::STATUS_OFFLINE
     end
   end
 
@@ -113,7 +122,7 @@ class Wakame::Monitor::Service
   attr_reader :checkers
 
   def initialize
-    @status = STATUS_ONLINE
+    @status = Wakame::Service::STATUS_ONLINE
     @checkers = {}
   end
 
@@ -131,23 +140,32 @@ class Wakame::Monitor::Service
   end
 
   def send_event(a)
+    Wakame.log.debug("Sending back a event: #{a.class}")
     publish_to('agent_event', a.marshal)
   end
 
   def dump_attrs
+    
   end
 
   def find_checker(svc_id)
     @checkers[svc_id]
   end
 
-  def register(svc_id, cmdstr)
+  def register(svc_id, checker_type, *args)
     chk = @checkers[svc_id]
     if chk
       Wakame.log.error("#{self.class}: Service registory duplication. #{svc_id}")
-      return
+      raise "Service registory duplication. #{svc_id}"
     end
-    chk = CommandChecker.new(svc_id, self, cmdstr)
+    case checker_type.to_sym
+    when :pidfile
+      chk = PidFileChecker.new(svc_id, self, args[0])
+    when :command
+      chk = CommandChecker.new(svc_id, self, args[0])
+    else
+      raise "Unsupported checker type: #{checker_type}"
+    end
     chk.start
     @checkers[svc_id]=chk
     Wakame.log.info("#{self.class}: Registered service checker for #{svc_id}")

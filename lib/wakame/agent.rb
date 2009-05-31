@@ -38,28 +38,25 @@ module Wakame
       setup_actors
       setup_dispatcher
 
-      publish_to('registry', Packets::Agent::Register.new(self).marshal)
-      Wakame.log.info "Started Agent"
+      publish_to('registry', Packets::Register.new(self, Wakame.config.root_path.to_s).marshal)
+      Wakame.log.info("Started agent process : WAKAME_ROOT=#{Wakame.config.root_path} WAKAME_ENV=#{Wakame.config.environment}")
     end
 
-
-    def send_event_response(event)
-      Wakame.log.debug("Sending event to master : #{event.class}")
-      publish_to('agent_event', Marshal.dump(Packets::Agent::EventResponse.new(self, event)))
-    end
+#     def send_event_response(event)
+#       Wakame.log.debug("Sending event to master : #{event.class}")
+#       publish_to('agent_event', Marshal.dump(Packets::EventResponse.new(self, event)))
+#     end
 
     def cleanup
-      publish_to('registry', Packets::Agent::UnRegister.new(self).marshal)
+      publish_to('registry', Packets::UnRegister.new(self).marshal)
       #@cmd_t.kill
     end
-
-    attr_reader :monitors, :actors
 
     def determine_agent_id
       if Wakame.config.environment == :EC2
         @agent_id = VmManipulator::EC2::MetadataService.query_metadata_uri('instance-id')
       else
-        @agent_id = '__standalone__'
+        @agent_id = VmManipulator::StandAlone::INSTANCE_ID
       end
     end
 
@@ -71,8 +68,8 @@ module Wakame
       @monitor_registry.register(Monitor::Service.new, '/service')
       
       @monitor_registry.monitors.each { |path, mon|
-        mon.setup(path)
         mon.agent = self
+        mon.setup(path)
       }
     end
 
@@ -85,6 +82,7 @@ module Wakame
       load_actors
 
       @actor_registry.register(Actor::ServiceMonitor.new, '/service_monitor')
+      @actor_registry.register(Actor::Daemon.new, '/daemon')
       @actor_registry.actors.each { |path, actor|
 #        actor.setup(path)
         actor.agent = self
@@ -93,6 +91,7 @@ module Wakame
     
     def load_actors
       require 'wakame/actor/service_monitor'
+      require 'wakame/actor/daemon'
     end
 
 
@@ -192,16 +191,27 @@ module Wakame
       end
 
       EM.defer(proc {
-                 begin
-                   actor.send(action, *request[:args])
-                 rescue => e
-                   #Wakame.log.error("#{self.class}: #{request[:id]}")
-                   Wakame.log.error(e)
-                 end
+                 return begin
+                          Wakame.log.debug("#{self.class}: Started to run the actor: #{actor.class}, token=#{request[:token]}")
+                          agent.publish_to('agent_event', Packets::ActorResponse.new(agent, request[:token], Actor::STATUS_RUNNING).marshal)
+                          if request[:args].nil?
+                            actor.send(action)
+                          else
+                            actor.send(action, *request[:args])
+                          end
+                          Wakame.log.debug("#{self.class}: Finished to run the actor: #{actor.class}, token=#{request[:token]}")
+                        rescue => e
+                          Wakame.log.error("#{self.class}: Failed the actor: #{actor.class}, token=#{request[:token]}")
+                          Wakame.log.error(e)
+                          e
+                        end
                }, proc { |res|
-                 #agent.publish_to('agent_event', )
+                 status = Actor::STATUS_SUCCESS
+                 if res.is_a?(Exception)
+                   status = Actor::STATUS_FAILED
+                 end
+                 agent.publish_to('agent_event', Packets::ActorResponse.new(self.agent, request[:token], status).marshal)
                })
-
     end
   end
   
