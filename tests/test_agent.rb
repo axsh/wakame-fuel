@@ -118,21 +118,6 @@ class TestAgent < Test::Unit::TestCase
   end
 
 
-  def test_agent_cmd_service_start
-    EM.run {
-      agent = Wakame::Agent.start
-      EM.next_tick {
-        dummy = DummyService.new(2)
-        agent.send_cmd(Wakame::Packets::Agent::ServiceStart.new(DUMMY_INSTANCE_ID, dummy))
-        EM.add_timer(10){ 
-          assert_equal(Wakame::Service::STATUS_UP, agent.svc_mon[DUMMY_INSTANCE_ID].status)
-          Wakame::Agent.stop
-        }
-      }
-    }
-  end
-
-
   class DummyMaster
     include Wakame::AMQPClient
     include Wakame::QueueDeclare

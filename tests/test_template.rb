@@ -1,19 +1,21 @@
 
 
-$:.unshift File.dirname(__FILE__) + '/../lib'
-require 'rubygems'
+$:.unshift(File.dirname(__FILE__) + '/../lib')
+$:.unshift(File.dirname(__FILE__))
+
+require 'setup_master.rb'
+
+require 'wakame'
 
 require 'test/unit'
 require 'wakame'
-require 'wakame/configuration_template'
-require 'wakame/service.rb'
-
-WAKAME_ROOT="#{File.dirname(__FILE__)}/.."
+require 'wakame/template'
+require 'wakame/service'
+require 'wakame/event'
+require 'wakame/event_dispatcher'
 
 class TestTemplate < Test::Unit::TestCase
   class DummyAgent
-    def synchronize; end
-
     def agent_id
       'safasdfadsf'
     end
@@ -22,33 +24,44 @@ class TestTemplate < Test::Unit::TestCase
       '127.0.0.1'
     end
 
+    def services
+      {'aaa'=>nil}
+    end
+    
     def has_service_type?(n)
       false
     end
   end
+
+  class A < Wakame::Service::Resource
+    def basedir
+      './tests/'
+    end
+    
+    def render_config(template)
+      template.cp(%w(conf/a conf/b conf/c))
+    end
+  end
+
   def test_render
-    web = Wakame::Service::WebCluster.new(nil)
-    web.launch
+    cluster = Wakame::Service::ServiceCluster.new(nil) { |c|
+      c.add_service(A.new)
+    }
+    cluster.launch 
+
 
     agent = DummyAgent.new
-    web.each_instance { |n|
+    cluster.each_instance { |n|
       n.bind_agent(agent)
 
+      tmpl = Wakame::Template.new(n)
+      tmpl.render_config
+      assert(File.exists?(File.join(tmpl.tmp_basedir, 'conf/a')))
+      assert(File.exists?(File.join(tmpl.tmp_basedir, 'conf/b')))
+      assert(File.exists?(File.join(tmpl.tmp_basedir, 'conf/c')))
+      tmpl.cleanup
+      assert(File.directory?(tmpl.tmp_basedir) == false )
     }
 
-    web.each_www { |n|
-      t = Wakame::ConfigurationTemplate::ApacheTemplate.new(:www)
-    
-      t.pre_render
-      t.render(n)
-      puts t.sync_src
-    }
-    web.each_instance(Wakame::Service::Apache_LB) { |n|
-      t = Wakame::ConfigurationTemplate::ApacheTemplate.new(:lb)
-    
-      t.pre_render
-      t.render(n)
-      puts t.sync_src
-    }    
   end
 end
