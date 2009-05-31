@@ -3,10 +3,10 @@ class Wakame::Actor::ServiceMonitor
   include Wakame::Actor
 
   expose '/service_monitor/register', :register
-  def register(svc_id, cmdstr)
+  def register(svc_id, type, *args)
     EM.barrier {
       svcmon = agent.monitor_registry.find_monitor('/service')
-      svcmon.register(svc_id, cmdstr)
+      svcmon.register(svc_id, type, *args)
     }
   end
 
