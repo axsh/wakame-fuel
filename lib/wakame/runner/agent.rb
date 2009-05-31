@@ -1,6 +1,7 @@
 #!/usr/bin/ruby
 
-require 'wakame'
+
+require 'amqp'
 
 require 'uri'
 require 'ext/uri'
@@ -9,7 +10,6 @@ require 'optparse'
 module Wakame
   module Runner
     class Agent
-      include Wakame
       include Wakame::Daemonize
       
       def initialize(argv)

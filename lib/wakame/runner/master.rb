@@ -2,6 +2,8 @@ require 'uri'
 require 'ext/uri'
 require 'optparse'
 
+require 'amqp'
+
 module Wakame
   module Runner
     class Master
@@ -46,12 +48,12 @@ module Wakame
       
       def run
         %w(QUIT INT TERM).each { |i|
-          Signal.trap(i) { Master.stop{ remove_pidfile } }
+          Signal.trap(i) { Wakame::Master.stop{ remove_pidfile } }
         }
 
         unless @options[:amqp_server].nil?
           uri = @options[:amqp_server]
-          default = AMQP.settings
+          default = ::AMQP.settings
           opts = {:host => uri.host,
             :port => uri.port || default[:port],
             :vhost => uri.vhost || default[:vhost],
