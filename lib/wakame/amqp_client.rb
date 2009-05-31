@@ -3,6 +3,7 @@
 require 'mutex_m'
 
 require 'eventmachine'
+require 'ext/eventmachine'
 require 'amqp'
 require 'mq'
 
@@ -39,7 +40,7 @@ module Wakame
         #EM.add_timer(1){
         EM.next_tick {
           end_proc = proc {
-            EventHandler.reset
+            EventDispatcher.reset
 
             unless blk.nil?
               blk.call
@@ -143,7 +144,12 @@ module Wakame
       } unless @amqp_client.nil?
     end
 
-
+    #
+    # When you want to broadcast the data to all bound queues:
+    #  publish_to('exchange name', 'data')
+    #  publish_to('exchange name', '*', 'data')
+    # When you want to send the data to keyed  queue(s):
+    #  publish_to('exchange name', 'group.1', 'data')
     def publish_to(name, *args)
       publish_proc = proc {
         ex = amq.exchanges[name] || raise("Undefined exchange name : #{name}")
