@@ -210,6 +210,23 @@ module Wakame
       end
     end
 
+    class ActorProgress < Base
+      attr_reader :agent_id, :token, :progress
+      def initialize(agent_id, token, progress)
+        @agent_id = agent_id
+        @token = token
+        @progress  = progress
+      end
+    end
+
+    class ActorComplete < Base
+      attr_reader :agent_id, :token, :status
+      def initialize(agent_id, token, status)
+        @agent_id = agent_id
+        @token = token
+        @status = status
+      end
+    end
 
   end
 end
