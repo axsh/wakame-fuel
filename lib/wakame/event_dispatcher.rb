@@ -123,7 +123,8 @@ module Wakame
       }
     
       #@handler_run_queue.push(run_handlers)
-      EventMachine.next_tick {
+      
+      ::EventMachine.barrier {
         begin 
           run_callbacks.call
         rescue => e
