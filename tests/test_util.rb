@@ -60,4 +60,12 @@ class TestUtilClass < Test::Unit::TestCase
     assert_equal([], s.keys)
 
   end
+
+
+  def test_snake_case
+    {'CNN'=>'cnn', 'CNNNews'=>'cnn_news', 'NewsCNN'=>'news_cnn', 'Apache_WWW'=>'apache_www', 'ApacheAPP'=>'apache_app', 'HeadlineCNNNews'=>'headline_cnn_news'}.each { |k,v|
+      assert_equal(v, Wakame::Util.snake_case(k))
+    }
+  end
+
 end

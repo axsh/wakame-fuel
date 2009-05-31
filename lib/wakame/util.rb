@@ -2,6 +2,7 @@
 
 require 'digest/sha1'
 require 'hmac-sha1'
+require 'open4'
 
 module Wakame
   module Util
@@ -27,12 +28,12 @@ module Wakame
     module_function :build_const
 
     
-    def new_(class_or_str)
+    def new_(class_or_str, *args)
       if class_or_str.is_a? Class
-        class_or_str.new
+        class_or_str.new(*args)
       else
         c = build_const(class_or_str.to_s)
-        c.new
+        c.new(*args)
       end
     end
     module_function :new_
@@ -51,9 +52,9 @@ module Wakame
     # @api public
     def snake_case(const)
       const = const.to_s
-      return const.downcase if const =~ /^[A-Z]+$/
-      const.gsub(/([A-Z]+)(?=[A-Z][a-z]?)|\B[A-Z]/, '_\&') =~ /_*(.*)/
-      return $+.downcase
+      return const.downcase if const =~ /^[A-Z\d]+$/
+      const.gsub(/\B([A-Z\d]+)|([A-Z]+)(?=[A-Z][a-z]?)/, '_\&') =~ /_*(.*)/
+      return $+.downcase.gsub(/[_]+/, '_')
     end
     module_function :snake_case
 
@@ -71,6 +72,43 @@ module Wakame
       snake_case(const).gsub(/::/, "/")
     end
     module_function :to_const_path
+
+
+    def exec(command, &capture)
+      outputs = []
+      Wakame.log.debug("#{self}.exec(#{command})")
+      cmdstat = ::Open4.popen4(command) { |pid, stdin, stdout, stderr|
+        stdout.each { |l|
+          capture.call(l, :stdout) if capture
+          outputs << l
+        }
+        stderr.each { |l|
+          capture.call(l, :stderr) if capture
+          outputs << l
+        }
+      }
+      Wakame.log.debug(outputs.join(''))
+      raise "Command Failed (exit=#{cmdstat.exitstatus}): #{command}" unless cmdstat.exitstatus == 0
+    end
+    module_function :exec
+
+    def spawn(command, &capture)
+      outputs = []
+      Wakame.log.debug("#{self}.spawn(#{command})")
+      cmdstat = ::Open4.popen4(command) { |pid, stdin, stdout, stderr|
+        stdout.each { |l|
+          capture.call(l, :stdout) if capture
+          outputs << l
+        }
+        stderr.each { |l|
+          capture.call(l, :stderr) if capture
+          outputs << l
+        }
+      }
+      Wakame.log.debug(outputs.join(''))
+      cmdstat
+    end
+    module_function :spawn
 
   end
 end
@@ -160,7 +198,8 @@ end
 
 module AttributeHelper
 
-  PRIMITIVE_CLASSES=[NilClass, TrueClass, FalseClass, Numeric, String, Time, Symbol]
+  PRIMITIVE_CLASSES=[NilClass, TrueClass, FalseClass, Numeric, String, Symbol]
+  CONVERT_CLASSES={Time => proc{|i| i.to_s } }
 
   module ClassMethods
     def attr_attributes
@@ -191,8 +230,20 @@ module AttributeHelper
       }
     end
 
-    def def_attribute(name, default_value=nil)
-      attr_attributes[name.to_sym]= {:default=>default_value}
+    def def_attribute(name, *args)
+      attr = {}
+      attr_attributes[name.to_sym] = begin 
+                                       if args.size == 0
+                                         {:default=>nil}
+                                       else
+                                         case args[0]
+                                         when Hash
+                                           args[0].dup
+                                         else
+                                           {:default=>args[0]}
+                                         end
+                                       end
+                                     end
       class_eval <<-__E__
       def #{name}=(v)
         @#{name}=v
@@ -267,8 +318,10 @@ module AttributeHelper
       root.each {|k,v| t[k] = dump_internal(v) }
       t
     else
-      if PRIMITIVE_CLASSES.any?{|p| root.kind_of?(p) }
-        root.to_s
+      if CONVERT_CLASSES.any?{|t, p| root.kind_of?(t) }
+        CONVERT_CLASSES[root.class].call(root)
+      elsif PRIMITIVE_CLASSES.any?{|p| root.kind_of?(p) }
+        root
       #elsif root.respond_to?(:dump_attrs)
         #dump_internal(root.dump_attrs)
       else
@@ -394,6 +447,120 @@ module FilterChain
     order.reverse.each { |klass|
       blk.call(klass.filter_chain) 
     }
+  end
+  
+end
+
+
+class ConditionalWait
+  class TimeoutError < StandardError; end
+  include ThreadImmutable
+
+  def initialize
+    @wait_queue = ::Queue.new
+    @wait_tickets = []
+    @poll_threads = []
+    @event_tickets = []
+  end
+  
+  def poll( period=5, max_retry=10, &blk)
+    wticket = Wakame::Util.gen_id
+    @poll_threads << Thread.new {
+      retry_count = 0
+
+      begin
+        catch(:finish) {
+          while retry_count < max_retry
+            start_at = Time.now
+            if blk.call == true
+              throw :finish
+            end
+            Thread.pass
+            if period > 0
+              t = Time.now - start_at
+              sleep (period - t) if period > t
+            end
+            retry_count += 1
+          end
+        }
+        
+        if retry_count >= max_retry
+          Wakame.log.error('Over retry count')
+          raise 'Over retry count'
+        end
+
+      rescue => e
+        Wakame.log.error(e)
+        @wait_queue << [false, wticket, e]
+      else
+        @wait_queue << [true, wticket]
+      end
+    }
+    @poll_threads.last[:name]="#{self.class} poll"
+
+    @wait_tickets << wticket
+  end
+  thread_immutable_methods :poll
+  
+  def wait_event(event_class, &blk)
+    wticket = Wakame::Util.gen_id
+    Wakame.log.debug("#{self.class} called wait_event(#{event_class}) on thread #{Thread.current} (target_thread=#{self.target_thread?}). has_blk=#{blk}")
+    ticket = Wakame::EventDispatcher.subscribe(event_class) { |event|
+      begin
+        if blk.call(event) == true
+          Wakame::EventDispatcher.unsubscribe(ticket)
+          @wait_queue << [true, wticket]
+        end
+      rescue => e
+        Wakame.log.error(e)
+        Wakame::EventDispatcher.unsubscribe(ticket)
+        @wait_queue << [false, wticket, e]
+      end
+    }
+    @event_tickets << ticket
+
+    @wait_tickets << wticket
+  end
+  thread_immutable_methods :wait_event
+
+  def wait_completion(tout=0)
+
+    unless @wait_tickets.empty?
+      Wakame.log.debug("#{self.class} waits for #{@wait_tickets.size} num of event(s)/polling(s).")
+
+      timeout(((tout > 0) ? tout : nil), TimeoutError) {
+        while @wait_tickets.size > 0 && q = @wait_queue.shift
+          @wait_tickets.delete(q[1])
+          
+          unless q[0]
+            Wakame.log.debug("#{q[1]} failed with #{q[2]}")
+            raise q[2]
+          end
+        end
+      }
+    end
+    
+  ensure
+    # Cleanup generated threads/event tickets
+    @poll_threads.each { |t|
+      begin
+        t.kill
+      rescue => e
+        Wakame.log.error(e)
+      end
+    }
+    @event_tickets.each { |t| Wakame::EventDispatcher.unsubscribe(t) }
+  end
+  thread_immutable_methods :wait_completion
+  
+  def self.wait(timeout=60*30, &blk)
+    cond = ConditionalWait.new
+    cond.bind_thread(Thread.current)
+    
+    #cond.instance_eval(&blk)
+    blk.call(cond)
+    
+    cond.wait_completion(timeout)
   end
   
 end
