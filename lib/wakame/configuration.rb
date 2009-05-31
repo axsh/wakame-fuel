@@ -9,11 +9,11 @@ module Wakame
     PARAMS = {
       #:config_template_root => nil,
       #:config_tmp_root => nil,
-      #:config_root => nil,
+      :config_root => nil,
+      :cluster_class => 'WebCluster',
       :load_paths => [],
       :ssh_private_key => nil,
       :drb_command_server_uri => 'druby://localhost:12345',
-      :vm_environment => nil,
       :amqp_server_uri => nil,
       :unused_vm_live_period => 60 * 10,
       :eventmachine_use_epoll => true
@@ -26,15 +26,21 @@ module Wakame
       end
 
       @root_path = root_path
-      #default_set.process(self)
+
+      self.class.const_get(env).new.process(self)
     end
 
     def environment
       ::WAKAME_ENV.to_sym
     end
+    alias :vm_environment :environment
     
     def root_path
       ::WAKAME_ROOT
+    end
+
+    def tmp_path
+      File.join(root_path, 'tmp')
     end
 
     def ssh_known_hosts
@@ -63,9 +69,7 @@ module Wakame
     class EC2 < DefaultSet
       def process(config)
         super(config)
-        config.config_template_root = File.join(config.root, "config", "template")
-        config.config_root = '/home/wakame/config'
-        config.vm_environment = :EC2
+        config.config_root = File.join(config.root_path, 'tmp', 'config')
 
         config.ssh_private_key = '/home/wakame/config/root.id_rsa'
 
@@ -77,9 +81,7 @@ module Wakame
     class StandAlone < DefaultSet
       def process(config)
         super(config)
-        config.config_template_root = File.join(config.root, "config", "template")
-        config.config_root = File.join('home', 'wakame', 'config')
-        config.vm_environment = :StandAlone
+        config.config_root = File.join(config.root_path, 'tmp', 'config')
         config.amqp_server_uri = 'amqp://localhost/'
       end
     end
