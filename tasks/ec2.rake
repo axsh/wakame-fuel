@@ -1,12 +1,12 @@
 #!/usr/bin/env ruby
 
-require File.dirname(__FILE__) + '/../config/boot'
-
-require 'wakame'
+#require 'wakame'
 require 'timeout'
 
-AWS_ACCESS_KEY=ENV['AMAZON_ACCESS_KEY_ID'] || Wakame.config.aws_access_key
-AWS_SECRET_KEY=ENV['AMAZON_SECRET_ACCESS_KEY'] || Wakame.config.aws_secret_key
+#AWS_ACCESS_KEY=ENV['AMAZON_ACCESS_KEY_ID'] || Wakame.config.aws_access_key
+#AWS_SECRET_KEY=ENV['AMAZON_SECRET_ACCESS_KEY'] || Wakame.config.aws_secret_key
+AWS_ACCESS_KEY=ENV['AMAZON_ACCESS_KEY_ID']
+AWS_SECRET_KEY=ENV['AMAZON_SECRET_ACCESS_KEY']
 
 def create_ec2
   require 'EC2'
