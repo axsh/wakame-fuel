@@ -700,9 +700,9 @@ puts "vm_environment=" + Wakame.config.environment.to_s
       #def after_stop(service_instance, action)
       #end
 
-      def on_child_changed(action, svc_inst)
+      def on_child_changed(service_instance, action)
       end
-      def on_parent_changed(action, svc_inst)
+      def on_parent_changed(service_instance, action)
       end
 
     end

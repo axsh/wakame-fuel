@@ -997,7 +997,7 @@ module Wakame
         Wakame.log.debug("CallChildChangeAction: run: #{@resource.class}")
         service_cluster.each_instance(@resource.class) { |svc_inst|
           next if svc_inst.status != Service::STATUS_ONLINE
-          @resource.on_parent_changed(self, svc_inst)
+          @resource.on_parent_changed(svc_inst, self)
         }
       end
     end
