@@ -21,21 +21,24 @@ module Wakame
       @configuration = configuration
     end
 
-    def process_master
+    def process
       setup_load_paths
       setup_logger
+    end
+
+    def process_master
+      process
       load_cluster
       load_resources
       load_core_commands
     end
     
     def process_agent
-      setup_load_paths
-      setup_logger
+      process
     end
     
     def process_cli
-      setup_load_paths
+      process
       load_core_commands
     end
 
