@@ -745,10 +745,16 @@ module Wakame
         }
       end
 
+      def fetch_mysql_master_ip
+        mysql_master_ip = nil
+
+        each_mysql do |mysql|
+          mysql_master_ip = mysql.agent.agent_ip
+        end
+
+        mysql_master_ip
+      end
     end
-
-
-    
 
     module ApacheBasicProps
       attr_accessor :listen_port, :listen_port_https
@@ -899,7 +905,7 @@ module Wakame
         @mysqld_port = 3306
         @mysqld_datadir = File.expand_path('data', @basedir)
         @mysqld_log_bin = File.expand_path('mysql-bin.log', @mysqld_datadir)
-        @ebs_volume = 'vol-274fad4e'
+        @ebs_volume = 'vol-5aa24e33'
         @ebs_device = '/dev/sdm'
         @ebs_mount_option = 'noatime'
 
@@ -953,6 +959,12 @@ module Wakame
       def start
         mount_point_dev=`df "#{@mysqld_datadir}" | awk 'NR==2 {print $1}'`
         if mount_point_dev != @ebs_device
+          # sync
+          3.times do |i|
+            system("/bin/sync")
+            sleep 1.0
+          end
+
           Wakame.log.debug("Mounting EBS volume: #{@ebs_device} as #{@mysqld_datadir} (with option: #{@ebs_mount_option})")
           system("/bin/mount -o #{@ebs_mount_option} #{@ebs_device} #{@mysqld_datadir}")
           # sync
@@ -983,15 +995,16 @@ module Wakame
         @template = ConfigurationTemplate::MySQLSlaveTemplate.new()
         @basedir = '/home/wakame/mysql'
 
-        @mysqld_server_id = 2 # dynamic
+        @mysqld_server_id = nil # dynamic
+
         @mysqld_port = 3307
         @mysqld_datadir = File.expand_path('data-slave', @basedir)
 
-        @ebs_volume = 'vol-274fad4e'  # master volume_id
+        @ebs_volume = 'vol-5aa24e33'  # master volume_id
         @ebs_device = '/dev/sdn'      # slave mount point
         @ebs_mount_option = 'noatime'
 
-        @mysqld_master_host = '127.0.0.1'
+        @mysqld_master_host = nil
         @mysqld_master_user = 'wakame-repl'
         @mysqld_master_pass = 'wakame-slave'
         @mysqld_master_port = 3306
@@ -1001,6 +1014,14 @@ module Wakame
       end
 
       def before_start(svc, action)
+        Wakame.log.debug("#{svc.agent}")
+        require 'ipaddr'
+        @mysqld_server_id = IPAddr.new(svc.agent.agent_ip).to_i
+        Wakame.log.debug("mysqld_server_id = #{@mysqld_server_id}")
+
+        @mysqld_master_host = svc.cluster.fetch_mysql_master_ip
+        Wakame.log.debug("mysqld_master_host = #{@mysqld_master_host}")
+
         vm_manipulator = VmManipulator.create
 
         Wakame.log.debug("mkdir #{@mysqld_datadir}")
@@ -1125,8 +1146,19 @@ module Wakame
       def start
         mount_point_dev=`df "#{@mysqld_datadir}" | awk 'NR==2 {print $1}'`
         if mount_point_dev != @ebs_device
+          # sync
+          3.times do |i|
+            system("/bin/sync")
+            sleep 1.0
+          end
+
           Wakame.log.debug("Mounting EBS volume: #{@ebs_device} as #{@mysqld_datadir} (with option: #{@ebs_mount_option})")
           system("/bin/mount -o #{@ebs_mount_option} #{@ebs_device} #{@mysqld_datadir}")
+          # sync
+          3.times do |i|
+            system("/bin/sync")
+            sleep 1.0
+          end
         end
         system(Wakame.config.root + "/config/init.d/mysql-slave start")
       end

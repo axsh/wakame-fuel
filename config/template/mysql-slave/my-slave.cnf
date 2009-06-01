@@ -85,7 +85,12 @@ long_query_time = 2
 # The following can be used as easy to replay backup logs or for replication.
 # note: if you are setting up a replication slave, see README.Debian about
 #       other settings you may need to change.
-server-id		= <%= property.mysqld_server_id %>
+
+<%-
+ require 'ipaddr'
+ mysqld_server_id = IPAddr.new(agent.agent_ip).to_i
+-%>
+server-id		= <%= mysqld_server_id %>
 relay-log		= <%= property.mysqld_datadir %>/mysqld-relay-bin
 relay-log-index		= <%= property.mysqld_datadir %>/mysqld-relay-bin
 read_only
