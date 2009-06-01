@@ -2,7 +2,7 @@
 
 %w[rubygems rake rake/clean fileutils hoe].each { |f| require f }
 $:.unshift "#{File.dirname(__FILE__)}/lib"
-#require File.dirname(__FILE__) + '/lib/wakame'
+
 require 'wakame'
 
 # Generate all the Rake tasks
@@ -17,10 +17,11 @@ $hoe = Hoe.new('wakame', Wakame::VERSION) do |p|
   p.extra_deps         = [
      ['amqp','>= 0.6.0'],
      ['amazon-ec2','>= 0.3.6'],
-     ['eventmachine','>= 0.12.6'],
+     ['eventmachine','>= 0.12.8'],
      ['rake', '>= 0.8.4'],
      ['log4r'],
      ['daemons'],
+     ['rubigen', '>= 1.5.2'],
      ['hoe', ">= 1.12.0"]
   ]
   p.extra_dev_deps = [
