@@ -115,17 +115,18 @@ module Wakame
         blk.call(@rule_engine)
       end
       
-      def add_service(service_property, name=nil)
+      def add_resource(resource, name=nil)
         #if name.nil? || @name2prop.has_key? name
-        #  name = "#{service_property.class.to_s}#{name2prop.size + 1}"
+        #  name = "#{resource.class.to_s}#{name2prop.size + 1}"
         #end
-        raise "Duplicate service property registration" if @properties.has_key? service_property.class.to_s
-        @properties[service_property.class.to_s]=service_property
-        @dg.add_object(service_property.class.to_s)
+        raise ArgumentError unless resource.is_a? Resource
+        raise "Duplicate resource type registration" if @properties.has_key? resource.class.to_s
+        @properties[resource.class.to_s]=resource
+        @dg.add_object(resource.class.to_s)
         
         #name
       end
-      thread_immutable_methods :add_service
+      thread_immutable_methods :add_resource
       
       def set_dependency(prop_name1, prop_name2)
         prop1 = @properties[prop_name1.to_s]
