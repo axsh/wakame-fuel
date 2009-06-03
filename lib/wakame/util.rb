@@ -456,11 +456,14 @@ class ConditionalWait
   class TimeoutError < StandardError; end
   include ThreadImmutable
 
-  def initialize
+  def initialize(&blk)
+    bind_thread
     @wait_queue = ::Queue.new
     @wait_tickets = []
     @poll_threads = []
     @event_tickets = []
+
+    instance_eval(&blk)
   end
   
   def poll( period=5, max_retry=10, &blk)
@@ -523,12 +526,12 @@ class ConditionalWait
   end
   thread_immutable_methods :wait_event
 
-  def wait_completion(tout=0)
+  def wait(tout=nil)
 
     unless @wait_tickets.empty?
       Wakame.log.debug("#{self.class} waits for #{@wait_tickets.size} num of event(s)/polling(s).")
 
-      timeout(((tout > 0) ? tout : nil), TimeoutError) {
+      timeout(tout, TimeoutError) {
         while @wait_tickets.size > 0 && q = @wait_queue.shift
           @wait_tickets.delete(q[1])
           
@@ -551,7 +554,7 @@ class ConditionalWait
     }
     @event_tickets.each { |t| Wakame::EventDispatcher.unsubscribe(t) }
   end
-  thread_immutable_methods :wait_completion
+  thread_immutable_methods :wait
   
   def self.wait(timeout=60*30, &blk)
     cond = ConditionalWait.new
@@ -560,7 +563,7 @@ class ConditionalWait
     #cond.instance_eval(&blk)
     blk.call(cond)
     
-    cond.wait_completion(timeout)
+    cond.wait(timeout)
   end
   
 end
