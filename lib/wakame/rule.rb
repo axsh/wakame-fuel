@@ -469,9 +469,9 @@ module Wakame
           src_path = tmpl.tmp_basedir.dup
           src_path.sub!('/$', '') if File.directory? src_path
           
-          #Util.exec("rsync -e 'ssh -i #{Wakame.config.ssh_private_key} -o \"UserKnownHostsFile #{Wakame.config.ssh_known_hosts}\"' -au #{src_path} root@#{agent.agent_ip}:#{Wakame.config.config_root}/")
           dest_path = File.expand_path("tmp/config/" + File.basename(tmpl.basedir), service_instance.agent.root_path)
-          Util.exec("rsync -au #{src_path}/ #{dest_path}")
+          Util.exec("rsync -e 'ssh -i #{Wakame.config.ssh_private_key} -o \"UserKnownHostsFile #{Wakame.config.ssh_known_hosts}\"' -au #{src_path} root@#{agent.agent_ip}:#{dest_path}")
+          #Util.exec("rsync -au #{src_path}/ #{dest_path}")
           
         ensure
           tmpl.cleanup if tmpl
@@ -815,6 +815,8 @@ module Wakame
 
     class MaintainSshKnownHosts < Rule
       class UpdateKnownHosts < Action
+        require 'fileutils'
+
         def run
           host_keys = []
           ['/etc/ssh/ssh_host_rsa_key.pub', '/etc/ssh/ssh_host_dsa_key.pub'].each { |k|
@@ -823,7 +825,11 @@ module Wakame
           }
           return if host_keys.empty?
 
-          File.open(Wakame.config.config_tmp_root + '/known_hosts.tmp', 'w') { |f|
+          basedir = File.dirname(Wakame.config.ssh_known_hosts)
+          FileUtils.mkpath(basedir) unless File.exist? basedir
+
+          tmpfile = File.expand_path(File.basename(Wakame.config.ssh_known_hosts) + '.tmp', basedir)
+          File.open(tmpfile, 'w') { |f|
             agent_monitor.agents.each { |k, agent|
               host_keys.each { |k|
                 f << "#{Wakame::Util.ssh_known_hosts_hash(agent.agent_ip)} #{k}\n"
@@ -831,9 +837,7 @@ module Wakame
             }
           }
 
-          require 'fileutils'
-          FileUtils.mkpath(File.dirname(Wakame.config.ssh_known_hosts)) unless File.directory? File.dirname(Wakame.config.ssh_known_hosts)
-          FileUtils.move(Wakame.config.config_tmp_root + '/known_hosts.tmp', Wakame.config.ssh_known_hosts, {:force=>true})
+          FileUtils.move(tmpfile, Wakame.config.ssh_known_hosts, {:force=>true})
         end
       end
 
