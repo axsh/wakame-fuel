@@ -7,13 +7,13 @@ class Apache_APP < Wakame::Service::Resource
   def_attribute :max_instance, {:default=>5}
 
   def render_config(template)
-    template.cp(%w(conf/envvars-app init.d/apache-app))
+    template.cp(%w(conf/envvars-app init.d/apache2-app))
     template.render(%w(conf/system-app.conf conf/apache2.conf conf/sites-app.conf))
     template.chmod("init.d/apache2-app", 0755)
   end
 
 
-  def start
+  def start(svc, action)
     cond = ConditionalWait.new { |cond|
       cond.wait_event(Wakame::Event::ServiceOnline) { |event|
         event.instance_id == svc.instance_id
@@ -29,7 +29,7 @@ class Apache_APP < Wakame::Service::Resource
   end
   
 
-  def stop
+  def stop(svc, action)
     cond = ConditionalWait.new { |cond|
       cond.wait_event(Wakame::Event::ServiceOffline) { |event|
         event.instance_id == svc.instance_id
@@ -45,7 +45,7 @@ class Apache_APP < Wakame::Service::Resource
                                    '/service_monitor/unregister', svc.instance_id ).request
   end
 
-  def reload
+  def reload(svc, action)
     request = action.actor_request(svc.agent.agent_id,
                                    '/daemon/reload', "apache_app", 'init.d/apache2-app').request
     request.wait

@@ -7,7 +7,7 @@ class Apache_LB < Wakame::Service::Resource
   def_attribute :elastic_ip, {:default=>''}
   
   def render_config(template)
-    template.cp(%w(conf/envvars-lb init.d/apache-lb))
+    template.cp(%w(conf/envvars-lb init.d/apache2-lb))
     template.render(%w(conf/system-lb.conf conf/apache2.conf conf/sites-lb.conf))
     template.chmod("init.d/apache2-lb", 0755)
   end
