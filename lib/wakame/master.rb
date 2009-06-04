@@ -18,7 +18,6 @@ module Wakame
     def initialize(master)
       bind_thread
       @master = master
-      @agents = {}
       @registered_agents = {}
       @unregistered_agents = {}
       @agent_timeout = 31.to_f
@@ -27,7 +26,7 @@ module Wakame
 
       # GC event trigger for agent timer & status
       calc_agent_timeout = proc {
-        #Wakame.log.debug("Started agent GC : agents.size=#{@agents.size}, mutex locked=#{@agents.locked?.to_s}")
+        #Wakame.log.debug("Started agent GC : agents.size=#{@registered_agents.size}")
         kill_list=[]
         registered_agents.each { |agent_id, agent|
           next if agent.status == Service::Agent::STATUS_OFFLINE
@@ -82,7 +81,7 @@ module Wakame
           }
         }
         
-        agent = agents(ping[:agent_id])
+        agent = agent(ping[:agent_id])
         if agent.nil?
           agent = Service::Agent.new(ping[:agent_id])
           
@@ -140,7 +139,7 @@ module Wakame
     end
 
 
-    def agents(agent_id)
+    def agent(agent_id)
       registered_agents[agent_id] || unregistered_agents[agent_id]
     end
 
