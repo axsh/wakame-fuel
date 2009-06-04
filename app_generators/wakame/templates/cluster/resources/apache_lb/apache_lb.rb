@@ -18,32 +18,34 @@ class Apache_LB < Wakame::Service::Resource
   end
 
   def start(svc, action)
+    cond = ConditionalWait.new { |cond|
+      cond.wait_event(Wakame::Event::ServiceOnline) { |event|
+        event.instance_id == svc.instance_id
+      }
+    }
+
     request = action.actor_request(svc.agent.agent_id,
                                    '/service_monitor/register', svc.instance_id, :pidfile, '/var/run/apache2-lb.pid').request
     request = action.actor_request(svc.agent.agent_id,
                                    '/daemon/start', "apache_lb", 'init.d/apache2-lb').request
     #request.wait
-
-    ConditionalWait.wait { |cond|
-      cond.wait_event(Wakame::Event::ServiceOnline) { |event|
-        event.instance_id == svc.instance_id
-      }
-    }
+    cond.wait
 
     Wakame.log.info("Associating the Elastic IP #{@elastic_ip} to #{svc.agent.agent_id}")
     VmManipulator.create.associate_address(svc.agent.agent_id, @elastic_ip)
   end
   
   def stop(svc, action)
-    request = action.actor_request(svc.agent.agent_id,
-                                   '/daemon/stop', 'apache_lb', 'init.d/apache2-lb').request
-    #request.wait
-
-    ConditionalWait.wait { |cond|
-      cond.wait_event(Wakame::Event::ServiceOffline) { |event|
+    cond = ConditionalWait.new { |cond|
+      cond.wait_event(Wakame::Event::ServiceOnline) { |event|
         event.instance_id == svc.instance_id
       }
     }
+
+    request = action.actor_request(svc.agent.agent_id,
+                                   '/daemon/stop', 'apache_lb', 'init.d/apache2-lb').request
+    #request.wait
+    cond.wait
 
     request = action.actor_request(svc.agent.agent_id,
                                    '/service_monitor/unregister', svc.instance_id ).request

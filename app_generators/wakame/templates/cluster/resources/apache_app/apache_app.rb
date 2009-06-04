@@ -14,30 +14,32 @@ class Apache_APP < Wakame::Service::Resource
 
 
   def start
+    cond = ConditionalWait.new { |cond|
+      cond.wait_event(Wakame::Event::ServiceOnline) { |event|
+        event.instance_id == svc.instance_id
+      }
+    }
+
     request = action.actor_request(svc.agent.agent_id,
                                    '/service_monitor/register', svc.instance_id, :pidfile, '/var/run/apache2-app.pid').request
     request = action.actor_request(svc.agent.agent_id,
                                    '/daemon/start', "apache_app", 'init.d/apache2-app').request
     #request.wait
-
-    ConditionalWait.wait { |cond|
-      cond.wait_event(Wakame::Event::ServiceOnline) { |event|
-        event.instance_id == svc.instance_id
-      }
-    }
+    cond.wait
   end
   
 
   def stop
-    request = action.actor_request(svc.agent.agent_id,
-                                   '/daemon/stop', 'apache_app', 'init.d/apache2-app').request
-    #request.wait
-
-    ConditionalWait.wait { |cond|
+    cond = ConditionalWait.new { |cond|
       cond.wait_event(Wakame::Event::ServiceOffline) { |event|
         event.instance_id == svc.instance_id
       }
     }
+
+    request = action.actor_request(svc.agent.agent_id,
+                                   '/daemon/stop', 'apache_app', 'init.d/apache2-app').request
+    #request.wait
+    cond.wait
 
     request = action.actor_request(svc.agent.agent_id,
                                    '/service_monitor/unregister', svc.instance_id ).request
