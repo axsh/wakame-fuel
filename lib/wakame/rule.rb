@@ -830,7 +830,7 @@ module Wakame
 
           tmpfile = File.expand_path(File.basename(Wakame.config.ssh_known_hosts) + '.tmp', basedir)
           File.open(tmpfile, 'w') { |f|
-            agent_monitor.agents.each { |k, agent|
+            agent_monitor.registered_agents.each { |k, agent|
               host_keys.each { |k|
                 f << "#{Wakame::Util.ssh_known_hosts_hash(agent.agent_ip)} #{k}\n"
               }
