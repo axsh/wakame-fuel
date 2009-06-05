@@ -24,6 +24,7 @@ module Wakame
     def process
       setup_load_paths
       setup_logger
+      load_environment
     end
 
     def process_master
@@ -86,6 +87,19 @@ module Wakame
       }
     end
 
+
+    def load_environment
+      config = configuration
+      constants = self.class.constants
+
+      [:common, config.environment].each { |key|
+        eval(IO.read(config.environment_path(key)), binding, config.environment_path(key))
+      }
+
+      (self.class.constants - constants).each do |const|
+        Object.const_set(const, self.class.const_get(const))
+      end
+    end
 
     def load_resources
       load_path = File.expand_path('cluster/resources', configuration.root_path)

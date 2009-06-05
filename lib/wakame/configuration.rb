@@ -34,6 +34,10 @@ module Wakame
       ::WAKAME_ENV.to_sym
     end
     alias :vm_environment :environment
+
+    def environment_path(key=environment)
+      File.expand_path("config/environments/#{Util.snake_case(key.to_s)}.rb", root_path)
+    end
     
     def root_path
       ::WAKAME_ROOT
@@ -73,8 +77,6 @@ module Wakame
 
         config.ssh_private_key = '/home/wakame/config/root.id_rsa'
 
-        config.aws_access_key = ''
-        config.aws_secret_key = ''
       end
     end
 
