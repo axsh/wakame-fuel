@@ -92,8 +92,8 @@ module Wakame
           walk_subactions.call(root_act)
         ensure
           Thread.critical = false
-            # IMPORTANT: Ensure the worker thread to handle the exception.
-            Thread.pass
+          # IMPORTANT: Ensure the worker thread to handle the exception.
+          Thread.pass
         end
       end
 
@@ -119,12 +119,10 @@ module Wakame
                 ED.fire_event(Event::ActionStart.new(action))
                 begin
                   action.run
-                ensure
-                  action.status = :complete
                   action.completion_status = :succeeded
+                  Wakame.log.debug("Complete action : #{action.class.to_s}")
+                  ED.fire_event(Event::ActionComplete.new(action))
                 end
-                Wakame.log.debug("Complete action : #{action.class.to_s}")
-                ED.fire_event(Event::ActionComplete.new(action))
               rescue CancelBroadcast => e
                 Wakame.log.info("Received cancel signal: #{e}")
                 action.completion_status = :canceled
@@ -143,6 +141,7 @@ module Wakame
                 end
                 res = e
               ensure
+                action.status = :complete
                 action.bind_thread(nil)
               end
 
@@ -257,7 +256,7 @@ module Wakame
       end
 
       def notify_queue
-        @notify_queue ||= Queue.new
+        @notify_queue ||= ::Queue.new
       end
 
       def notify(src=nil)
@@ -470,7 +469,7 @@ module Wakame
           src_path.sub!('/$', '') if File.directory? src_path
           
           dest_path = File.expand_path("tmp/config/" + File.basename(tmpl.basedir), service_instance.agent.root_path)
-          Util.exec("rsync -e 'ssh -i #{Wakame.config.ssh_private_key} -o \"UserKnownHostsFile #{Wakame.config.ssh_known_hosts}\"' -au #{src_path} root@#{agent.agent_ip}:#{dest_path}")
+          Util.exec("rsync -e 'ssh -i #{Wakame.config.ssh_private_key} -o \"UserKnownHostsFile #{Wakame.config.ssh_known_hosts}\"' -au #{src_path}/ root@#{agent.agent_ip}:#{dest_path}")
           #Util.exec("rsync -au #{src_path}/ #{dest_path}")
           
         ensure
