@@ -31,13 +31,15 @@ class Apache_LB < Wakame::Service::Resource
     #request.wait
     cond.wait
 
-    Wakame.log.info("Associating the Elastic IP #{@elastic_ip} to #{svc.agent.agent_id}")
-    VmManipulator.create.associate_address(svc.agent.agent_id, @elastic_ip)
+    if !@elastic_ip.nil? && @elastic_ip != ''
+      Wakame.log.info("Associating the Elastic IP #{@elastic_ip} to #{svc.agent.agent_id}")
+      Wakame::VmManipulator.create.associate_address(svc.agent.agent_id, @elastic_ip)
+    end
   end
   
   def stop(svc, action)
     cond = ConditionalWait.new { |cond|
-      cond.wait_event(Wakame::Event::ServiceOnline) { |event|
+      cond.wait_event(Wakame::Event::ServiceOffline) { |event|
         event.instance_id == svc.instance_id
       }
     }
