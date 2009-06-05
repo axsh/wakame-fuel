@@ -157,11 +157,11 @@ module Wakame
           registered_agents[agent_id] = unregistered_agents[agent_id]
           unregistered_agents.delete(agent_id)
         end
-        agent.root_path = data[:root_path]
-        #Wakame.log.debug(registered_agents)
+        Wakame.log.debug("The Agent has been registered: #{data.inspect}")
         #Wakame.log.debug(unregistered_agents)
         ED.fire_event(Event::AgentMonitored.new(agent))
       end
+      agent.root_path = data[:root_path]
     end
 
     def unregister_agent(agent_id)
