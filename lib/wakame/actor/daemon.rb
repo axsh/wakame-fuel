@@ -26,7 +26,7 @@ class Wakame::Actor::Daemon
   end
 
   def resource_path(resource_dir)
-    sprintf("%s/cluster/resources/%s", Wakame.config.root_path, resource_dir)
+    sprintf("%s/%s", Wakame.config.config_root, resource_dir)
   end
 
   def cmd_abs_path(resource_dir, cmd)
