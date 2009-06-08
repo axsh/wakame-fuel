@@ -277,8 +277,13 @@ module Wakame
         }
       end
 
-      def actor_request(agent_id, path, *args)
-        master.actor_request(agent_id, path, *args)
+      def actor_request(agent_id, path, *args, &blk)
+        request = master.actor_request(agent_id, path, *args)
+        if blk
+          request.request
+          blk.call(request)
+        end
+        request
       end
 
       def sync_actor_request(agent_id, path, *args)
