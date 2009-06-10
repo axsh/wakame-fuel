@@ -1,7 +1,0 @@
-#!/usr/bin/ruby
-
-require File.dirname(__FILE__) + '/../config/boot'
-require 'wakame/agent'
-
-Wakame::AgentRunner.new(ARGV).run
-
