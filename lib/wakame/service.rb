@@ -584,7 +584,6 @@ module Wakame
       end
 
       def current
-puts "vm_environment=" + Wakame.config.environment.to_s
         environment(Wakame.config.environment)
       end
 
