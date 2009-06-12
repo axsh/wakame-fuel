@@ -10,6 +10,7 @@ module Wakame
   module Rule
     class CancelActionError < StandardError; end
     class CancelBroadcast < StandardError; end
+    class GlobalLockError < StandardError; end
 
     class RuleEngine
       include Wakame
@@ -40,6 +41,7 @@ module Wakame
         
         @active_jobs = {}
         @job_history = []
+        @global_lock = nil
         instance_eval(&blk) if blk
       end
 
@@ -101,6 +103,16 @@ module Wakame
         job_context = @active_jobs[action.job_id]
         raise "The job session is killed.: job_id=#{action.job_id}" if job_context.nil?
 
+        if action.acquire_lock
+          if @global_lock.nil?
+            @global_lock = action.job_id
+          else
+            unless @global_lock == action.job_id
+              raise GlobalLockError, "Global Lock is already acquired by the JobID: #{@global_lock}"
+            end
+          end
+        end
+
         EM.next_tick {
 
           begin
@@ -126,11 +138,13 @@ module Wakame
               rescue CancelBroadcast => e
                 Wakame.log.info("Received cancel signal: #{e}")
                 action.completion_status = :canceled
+                action.on_failed
                 ED.fire_event(Event::ActionFailed.new(action, e))
                 res = e
               rescue => e
                 Wakame.log.debug("Failed action : #{action.class.to_s} due to #{e}")
                 action.completion_status = :failed
+                action.on_failed
                 Wakame.log.error(e)
                 ED.fire_event(Event::ActionFailed.new(action, e))
                 # Escalate the cancelation event to parents.
@@ -152,7 +166,7 @@ module Wakame
               
               jobary = []
               job_context[:root_action].walk_subactions {|a| jobary << a }
-              p jobary.collect{|a| {a.class.to_s=>a.status}}
+              Wakme.log.debug(jobary.collect{|a| {a.class.to_s=>a.status}}.inspect)
 
               job_completed = false
               if res.is_a?(Exception)
@@ -173,6 +187,7 @@ module Wakame
                 job_context[:complete_at]=Time.now
                 @job_history << job_context
                 @active_jobs.delete(job_context[:job_id])
+                @global_lock = nil
               end
             }
           rescue => e
@@ -647,6 +662,10 @@ module Wakame
     end
 
     class ClusterLaunchAction < Action
+      def initialize
+        @acquire_lock = true
+      end
+
       def run
         if service_cluster.status == Service::ServiceCluster::STATUS_ONLINE
           Wakame.log.info("The service cluster is up & running already")
@@ -965,6 +984,7 @@ module Wakame
     
     class StartService < Action
       def initialize(service_instance)
+        @acquire_lock = true
         @service_instance = service_instance
       end
 
@@ -993,6 +1013,12 @@ module Wakame
         }
 
       end
+
+      def on_failed
+        EM.barrier {
+          @service_instance.update_status(Service::STATUS_FAILED)
+        }
+      end
     end
 
     class CallChildChangeAction < Action
@@ -1013,6 +1039,7 @@ module Wakame
 
     class StopService < Action
       def initialize(service_instance)
+        @acquire_lock = true
         @service_instance = service_instance
       end
 
@@ -1052,6 +1079,12 @@ module Wakame
 
         EM.barrier {
           service_cluster.destroy(@service_instance.instance_id)
+        }
+      end
+
+      def on_failed
+        EM.barrier {
+          @service_instance.update_status(Service::STATUS_FAILED)
         }
       end
 
