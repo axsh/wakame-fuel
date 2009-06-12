@@ -36,6 +36,7 @@ module Wakame
     
     def process_agent
       process
+      load_actors
     end
     
     def process_cli
@@ -111,13 +112,25 @@ module Wakame
         #require file.sub(matcher, '\1')
       end
       
-      
     end
 
 
     def load_cluster
       load File.expand_path('cluster/cluster.rb', configuration.root_path)
     end
+
+    def load_actors
+      load_path = File.expand_path('cluster/actors', configuration.root_path)
+      Dir.glob("#{load_path}/*.rb").sort.each do |file|
+        if file =~ %r{\A#{Regexp.escape(load_path)}/([^/]+)\.rb\Z}
+          Wakame.log.debug("Loading Actor: #{file}")
+          load file
+        end
+      end
+      
+      
+    end
+
 
   end
 end
