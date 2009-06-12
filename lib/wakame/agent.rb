@@ -83,6 +83,7 @@ module Wakame
 
       @actor_registry.register(Actor::ServiceMonitor.new, '/service_monitor')
       @actor_registry.register(Actor::Daemon.new, '/daemon')
+      @actor_registry.register(Actor::System.new, '/system')
       @actor_registry.actors.each { |path, actor|
 #        actor.setup(path)
         actor.agent = self
@@ -92,6 +93,7 @@ module Wakame
     def load_actors
       require 'wakame/actor/service_monitor'
       require 'wakame/actor/daemon'
+      require 'wakame/actor/system'
     end
 
 
@@ -99,8 +101,13 @@ module Wakame
       @dispatcher = Dispatcher.new(self)
       
       add_subscriber("agent_actor.#{agent_id}") { |data|
-        data = eval(data)
-        @dispatcher.handle_request(data)
+        begin 
+          request = eval(data)
+          @dispatcher.handle_request(request)
+        rescue => e
+          Wakame.log.error(e)
+          agent.publish_to('agent_event', Packets::ActorResponse.new(self, request[:token], Actor::STATUS_FAILED).marshal)
+        end
       }
     end
 
