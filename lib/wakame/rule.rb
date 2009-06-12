@@ -138,14 +138,22 @@ module Wakame
               rescue CancelBroadcast => e
                 Wakame.log.info("Received cancel signal: #{e}")
                 action.completion_status = :canceled
-                action.on_failed
+                begin
+                  action.on_failed
+                rescue => e
+                  Wakame.log.error(e)
+                end
                 ED.fire_event(Event::ActionFailed.new(action, e))
                 res = e
               rescue => e
                 Wakame.log.debug("Failed action : #{action.class.to_s} due to #{e}")
-                action.completion_status = :failed
-                action.on_failed
                 Wakame.log.error(e)
+                action.completion_status = :failed
+                begin
+                  action.on_failed
+                rescue => e
+                  Wakame.log.error(e)
+                end
                 ED.fire_event(Event::ActionFailed.new(action, e))
                 # Escalate the cancelation event to parents.
                 action.notify(e)
@@ -166,7 +174,7 @@ module Wakame
               
               jobary = []
               job_context[:root_action].walk_subactions {|a| jobary << a }
-              Wakme.log.debug(jobary.collect{|a| {a.class.to_s=>a.status}}.inspect)
+              Wakame.log.debug(jobary.collect{|a| {a.class.to_s=>a.status}}.inspect)
 
               job_completed = false
               if res.is_a?(Exception)
@@ -211,6 +219,7 @@ module Wakame
       def_attribute :status, :ready
       def_attribute :completion_status
       def_attribute :parent_action
+      def_attribute :acquire_lock, false
 
       attr_reader :rule
 
@@ -308,6 +317,9 @@ module Wakame
 
       def run
         raise NotImplementedError
+      end
+
+      def on_failed
       end
 
       private
@@ -1016,7 +1028,7 @@ module Wakame
 
       def on_failed
         EM.barrier {
-          @service_instance.update_status(Service::STATUS_FAILED)
+          @service_instance.update_status(Service::STATUS_FAIL)
         }
       end
     end
@@ -1084,7 +1096,7 @@ module Wakame
 
       def on_failed
         EM.barrier {
-          @service_instance.update_status(Service::STATUS_FAILED)
+          @service_instance.update_status(Service::STATUS_FAIL)
         }
       end
 
