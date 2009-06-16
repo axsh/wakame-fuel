@@ -1,7 +1,11 @@
 
+$:.unshift(File.dirname(__FILE__) + '/../lib')
+$:.unshift(File.dirname(__FILE__))
 
-$:.unshift File.dirname(__FILE__) + '/../lib'
+require 'setup_master.rb'
+
 require 'rubygems'
+require 'eventmachine'
 
 require 'test/unit'
 require 'wakame'
@@ -9,6 +13,7 @@ require 'wakame/rule.rb'
 
 WAKAME_ROOT="#{File.dirname(__FILE__)}/.."
 
+Wakame::EventDispatcher
 
 class TestRuleEngine < Test::Unit::TestCase
   include Wakame::Rule

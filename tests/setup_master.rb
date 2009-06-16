@@ -12,6 +12,8 @@ require 'test/unit'
 require 'wakame'
 require 'wakame/initializer'
 
+require 'ext/eventmachine'
+
 #require "#{WAKAME_ROOT}/config/boot"
 #Wakame::Bootstrap.boot_agent!
 
