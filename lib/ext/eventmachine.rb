@@ -53,17 +53,6 @@ module EventMachine
     end
   end
   
-  # 0.12.2 is missing the stub method in pure_ruby backend.
-  if EventMachine.library_type == :pure_ruby
-    class Connection
-      def associate_callback_target sig
-        # No-op for the time being
-      end
-    end
-  end
-
-
-  
   def self.barrier(&blk)
     # Presumably, Thread.main will return the EM main loop thread.
     if EM.reactor_thread?
