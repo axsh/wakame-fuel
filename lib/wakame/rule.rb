@@ -61,7 +61,8 @@ module Wakame
           :create_at=>Time.now,
           :start_at=>nil, 
           :complete_at=>nil,
-          :root_action=>root_action
+          :root_action=>root_action,
+          :notes=>{}
         }
       end
 
@@ -77,10 +78,10 @@ module Wakame
         root_act = job_context[:root_action]
 
         walk_subactions = proc { |a|
-          if a.status == :running && (a.target_thread && a.target_thread.alive?)
+          if a.status == :running && (a.target_thread && a.target_thread.alive?) && a.target_thread != Thread.current
             Wakame.log.debug "Raising CancelBroadcast exception: #{a.class} #{a.target_thread}(#{a.target_thread.status}), current=#{Thread.current}"
             # Broadcast the special exception to all
-            a.target_thread.raise(CancelBroadcast)
+            a.target_thread.raise(CancelBroadcast, "It's broadcasted from #{a.class}")
             # IMPORTANT: Ensure the worker thread to handle the exception.
             #Thread.pass
           end
@@ -156,9 +157,12 @@ module Wakame
                 end
                 ED.fire_event(Event::ActionFailed.new(action, e))
                 # Escalate the cancelation event to parents.
-                action.notify(e)
+                unless action.parent_action.nil?
+                  action.parent_action.notify(e)
+                end
                 # Force to cancel the current job when the root action ignored the elevated exception.
                 if action === job_context[:root_action]
+                  Wakame.log.warn("The escalated exception (#{e.class}) has reached to the root action (#{action.class}). Forcing to cancel the current job #{job_context[:job_id]}")
                   cancel_action(job_context[:job_id]) #rescue Wakame.log.error($!)
                 end
                 res = e
@@ -170,28 +174,25 @@ module Wakame
               res
             }, proc { |res|
               unless @active_jobs.has_key?(job_context[:job_id])
-                next              end
+                next
+              end
               
               jobary = []
               job_context[:root_action].walk_subactions {|a| jobary << a }
               Wakame.log.debug(jobary.collect{|a| {a.class.to_s=>a.status}}.inspect)
 
-              job_completed = false
               if res.is_a?(Exception)
-                if jobary.all? { |act| act.status == :complete }
-                  Wakame.log.info("Canceled all actions in JOB ID #{job_context[:job_id]}.") if res.is_a?(CancelBroadcast) 
-                  ED.fire_event(Event::JobFailed.new(action.job_id, res))
-                  job_context[:exception]=res
-                  job_completed = true
-                end
-              else
-                if jobary.all? { |act| act.status == :complete }
-                  ED.fire_event(Event::JobComplete.new(action.job_id))
-                  job_completed = true
-                end
+                job_context[:exception]=res
               end
 
-              if job_completed
+              if jobary.all? { |act| act.status == :complete }
+
+                if jobary.all? { |act| act.completion_status == :succeeded }
+                  ED.fire_event(Event::JobComplete.new(action.job_id))
+                else
+                  ED.fire_event(Event::JobFailed.new(action.job_id, res))
+                end
+
                 job_context[:complete_at]=Time.now
                 @job_history << job_context
                 @active_jobs.delete(job_context[:job_id])
@@ -286,10 +287,12 @@ module Wakame
       def notify(src=nil)
         #Wakame.log.debug("#{self.class}.notify() has been called")
         src = self if src.nil?
-        notify_queue.clear if notify_queue.size > 0
-        notify_queue.enq(src) #if notify_queue.num_waiting > 0
-        unless parent_action.nil?
+        if status == :complete && parent_action
+          # Escalate the notification to parent if the action is finished.
           parent_action.notify(src)
+        else
+          notify_queue.clear if notify_queue.size > 0
+          notify_queue.enq(src) #if notify_queue.num_waiting > 0
         end
       end
 
@@ -313,6 +316,10 @@ module Wakame
       def sync_actor_request(agent_id, path, *args)
         request = actor_request(agent_id, path, *args).request
         request.wait
+      end
+
+      def notes
+        rule.rule_engine.active_jobs[self.job_id][:notes]
       end
 
       def run
