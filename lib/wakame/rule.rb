@@ -140,7 +140,7 @@ module Wakame
                 Wakame.log.info("Received cancel signal: #{e}")
                 action.completion_status = :canceled
                 begin
-                  action.on_failed
+                  action.on_canceled
                 rescue => e
                   Wakame.log.error(e)
                 end
@@ -327,6 +327,9 @@ module Wakame
       end
 
       def on_failed
+      end
+
+      def on_canceled
       end
 
       private
