@@ -39,7 +39,13 @@ module Wakame
     class CheckerTimer < EventMachine::PeriodicTimer
       def initialize(time, &blk)
         @interval = time
-        @code = blk
+        @code = proc {
+          begin
+            blk.call
+          rescue => e
+            Wakame.log.error(e)
+          end
+        }
         stop
       end
 
