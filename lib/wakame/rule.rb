@@ -1011,8 +1011,10 @@ module Wakame
       end
 
       def run
-        raise "Agent is not bound on this service : #{@service_instance}" if @service_instance.property.require_agent && @service_instance.agent.nil?
-        raise "The assigned agent for the service instance #{@service_instance.instance_id} is not online."  unless @service_instance.agent.status == Service::Agent::STATUS_ONLINE
+        if @service_instance.property.require_agent
+          raise "Agent is not bound on this service : #{@service_instance}" if @service_instance.agent.nil?
+          raise "The assigned agent for the service instance #{@service_instance.instance_id} is not online."  unless @service_instance.agent.status == Service::Agent::STATUS_ONLINE
+        end
         
         # Skip to act when the service is having below status.
         if @service_instance.status == Service::STATUS_STARTING || @service_instance.status == Service::STATUS_ONLINE
@@ -1021,8 +1023,10 @@ module Wakame
         EM.barrier {
           @service_instance.update_status(Service::STATUS_STARTING)
         }
-
-        BasicActionSet.deploy_configuration(@service_instance)
+        
+        if @service_instance.property.require_agent
+          BasicActionSet.deploy_configuration(@service_instance)
+        end
 
         @service_instance.resource.start(@service_instance, self)
         
