@@ -568,7 +568,26 @@ module Wakame
         ret
       end
       thread_immutable_methods :dump_status
+
+      def parent_instances
+        ary = []
+        @service_cluster.dg.parents(resource.class).each { |r|
+          @service_cluster.each_instance(r.class){ |i|
+            ary << i
+          }
+        }
+        ary.flatten
+      end
       
+      def child_instances
+        ary = []
+        @service_cluster.dg.children(resource.class).each { |r|
+          @service_cluster.each_instance(r.class){ |i|
+            ary << i
+          }
+        }
+        ary.flatten
+      end
     end
 
 
