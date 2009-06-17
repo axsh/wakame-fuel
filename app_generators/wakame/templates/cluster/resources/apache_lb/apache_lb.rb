@@ -4,7 +4,6 @@ class Apache_LB < Wakame::Service::Resource
   
   def_attribute :listen_port, {:default=>80}
   def_attribute :listen_port_https, {:default=>443}
-  def_attribute :elastic_ip, {:default=>''}
   
   def render_config(template)
     template.cp(%w(conf/envvars-lb init.d/apache2-lb))
@@ -30,11 +29,6 @@ class Apache_LB < Wakame::Service::Resource
                                    '/daemon/start', "apache_lb", 'init.d/apache2-lb').request
     #request.wait
     cond.wait
-
-    if !@elastic_ip.nil? && @elastic_ip != ''
-      Wakame.log.info("Associating the Elastic IP #{@elastic_ip} to #{svc.agent.agent_id}")
-      Wakame::VmManipulator.create.associate_address(svc.agent.agent_id, @elastic_ip)
-    end
   end
   
   def stop(svc, action)
