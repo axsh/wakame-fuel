@@ -1,26 +1,27 @@
 
 class MySQL_Master < Wakame::Service::Resource
-  attr_reader :mysqld_basedir, :mysqld_datadir, :mysqld_port, :mysqld_server_id, :mysqld_log_bin, :ebs_volume, :ebs_device
 
-  def initialize
-    super()
-    @mysqld_basedir = '/home/wakame/mysql'
+  def_attribute :duplicable, false
+  def_attribute :mysqld_basedir, '/home/wakame/mysql'
+  def_attribute :mysqld_server_id, 1
+  def_attribute :mysqld_port, 3306
 
-    @mysqld_server_id = 1 # static
-    @mysqld_port = 3306
-    @mysqld_datadir = File.expand_path('data', @mysqld_basedir)
-    @mysqld_log_bin = File.expand_path('mysql-bin.log', @mysqld_datadir)
-    @ebs_volume = 'vol-6358b40a'
-    @ebs_device = '/dev/sdm'
-    @ebs_mount_option = 'noatime'
-
-    @duplicable = false
-  end
+  def_attribute :ebs_volume, ''
+  def_attribute :ebs_device, '/dev/sdm'
+  def_attribute :ebs_mount_option, 'noatime'
 
   def basedir
     File.join(Wakame.config.root_path, 'cluster', 'resources', 'mysql_master')
   end
   
+  def mysqld_datadir
+    File.expand_path('data', mysqld_basedir)
+  end
+
+  def mysqld_log_bin
+    File.expand_path('mysql-bin.log', mysqld_datadir)
+  end
+
   def render_config(template)
     template.cp(%w(init.d/mysql))
     template.render(%w(conf/my.cnf))
