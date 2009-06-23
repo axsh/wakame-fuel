@@ -8,7 +8,6 @@ class WakameGenerator < RubiGen::Base
   default_options   :shebang => DEFAULT_SHEBANG,
   :bin_name    => nil,
   :import_path => nil,
-  :test_framework  => 'test_unit',
   :version     => '0.0.1'
 
 
@@ -16,7 +15,6 @@ class WakameGenerator < RubiGen::Base
   attr_reader :version, :version_str
 
   # extensions/option
-  attr_reader :test_framework
   attr_reader :bin_names_list
   attr_reader :enable_website
   attr_reader :manifest
@@ -35,6 +33,7 @@ class WakameGenerator < RubiGen::Base
     # Use /usr/bin/env if no special shebang was specified
     script_options = { :chmod => 0755, :shebang => options[:shebang] == DEFAULT_SHEBANG ? nil : options[:shebang] }
     windows        = (RUBY_PLATFORM =~ /dos|win32|cygwin/i) || (RUBY_PLATFORM =~ /(:?mswin|mingw)/)
+    source_dir     = source_path('.').sub(%r{/\.\Z}, '')
 
     record do |m|
       # Root directory and all subdirectories.
@@ -42,48 +41,29 @@ class WakameGenerator < RubiGen::Base
       BASEDIRS.each { |path| m.directory path }
 
       m.file_copy_each %w(Rakefile README)
-      m.file_copy_each %w(config/boot.rb config/environments/common.rb config/environments/standalone.rb  config/environments/ec2.rb)
-      #m.template "lib/module.rb",         "lib/#{gem_name}.rb"
-
-      # Selecting a test framework
-      #case test_framework
-      #when "test_unit"
-      #  m.dependency "install_test_unit", [gem_name], :destination => destination_root, :collision => :force
-      #when "rspec"
-      #  m.dependency "install_rspec", [gem_name], :destination => destination_root, :collision => :force
-      #when "shoulda"
-      #  m.dependency "install_shoulda", [gem_name], :destination => destination_root, :collision => :force
-      #end
-
-      # Executables
-      for bin_name in bin_names_list
-        m.dependency "executable", [bin_name], :destination => destination_root, :collision => :force
-      end
+      m.file_copy_each %w(config/boot.rb config/cluster.rb config/environments/common.rb config/environments/stand_alone.rb  config/environments/ec2.rb)
+      m.file_copy_each %w(config/init.d/wakame-master config/init.d/wakame-agent)
       
-      for generator in @install_generators
-        m.dependency "install_#{generator}", [], :destination => destination_root, :collision => :force
+      #%w(apache_lb apache_app apache_www mysql_master ec2_elastic_ip).each { |f|
+        Dir.glob(source_path("cluster/resources") + "/**/*").each { |path|
+          relpath =  path.sub(%r{\A#{source_dir}\/}, '')
+          if File.directory? path
+            m.directory relpath
+          else
+            m.file relpath, relpath
+          end
+        }
+      #}
+
+      %w(wakame-master wakame-agent wakameadm).each do |script|
+        m.template "bin/#{script}", "bin/#{script}", script_options
       end
-      
-      #m.dependency "install_rubigen_scripts", [destination_root, "rubygems", "newgem", "newgem_theme"], :shebang => options[:shebang], :collision => :force
-
-      %w( console ).each do |file|
-        m.template "script/#{file}.erb",        "script/#{file}", script_options
-        m.template "script/win_script.cmd", "script/#{file}.cmd",
-        :assigns => { :filename => file } if windows
-      end
-
-      #m.write_manifest "Manifest.txt"
-
-      m.readme "readme"
     end
   end
 
   protected
   def banner
     <<-EOS
-Take any library or Rails plugin or command line application,
-gemify it, and easily share it with the Ruby world.
-
 Usage: #{File.basename $0} /path/to/your/app [options]
 EOS
   end
@@ -117,7 +97,6 @@ EOS
     @version_str       = @version.join('.')
 
     @bin_names_list     = (options[:bin_name] || "").split(',')
-    @test_framework     = options[:test_framework] || "test_unit"
     @project_name       = options[:project] if options.include?(:project)
     @install_generators = options[:install] || []
   end
@@ -137,6 +116,7 @@ EOS
   # Installation skeleton.  Intermediate directories are automatically
   # created so don't sweat their absence here.
   BASEDIRS = %w(
+    bin
     cluster
     cluster/actors
     cluster/actions
@@ -144,8 +124,9 @@ EOS
     cluster/resources
     cluster/commands
     config
+    config/init.d
+    config/environments
     lib
-    script
     tasks
     vendor
   )
