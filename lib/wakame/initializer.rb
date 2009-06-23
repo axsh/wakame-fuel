@@ -83,9 +83,17 @@ module Wakame
 #           require file.sub(matcher, '\1')
 #         end
 #       }
-      %w(launch_cluster shutdown_cluster status action_status actor).each { |f|
-        require "wakame/command/#{f}"
+
+      $LOAD_PATH.each{ |d|
+        Dir.glob("#{d}/wakame/command/**/*.rb").each{ |f|
+          f =~ %r{(wakame/command/.+)\.rb\Z}
+          require "#{$1}"
+        }
       }
+      
+      #%w(launch_cluster shutdown_cluster status action_status actor).each { |f|
+      #  require "wakame/command/#{f}"
+      #}
     end
 
 
@@ -116,7 +124,7 @@ module Wakame
 
 
     def load_cluster
-      load File.expand_path('cluster/cluster.rb', configuration.root_path)
+      load File.expand_path('config/cluster.rb', configuration.root_path)
     end
 
     def load_actors
