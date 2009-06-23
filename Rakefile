@@ -27,8 +27,13 @@ __END__
     ].each { |i|
       gem.add_dependency(i[0], i[1])
     }
-                       
-#    gem.files = FileList['app_generator/**/*', 'contrib/**/*', 'lib/**/*.rb', 'bin/*', '[A-Z]*', 'tasks/**/*', 'tests/**/*'].to_a
+    gem.files = FileList['app_generators/**/*',
+                         'contrib/**/*',
+                         'lib/**/*.rb',
+                         'bin/*',
+                         '[A-Z]*',
+                         'tasks/**/*',
+                         'tests/**/*'].to_a
   end
 
 rescue LoadError
@@ -68,7 +73,7 @@ Rake::RDocTask.new do |rdoc|
   end
 
   rdoc.rdoc_dir = 'rdoc'
-  rdoc.title = "tttest #{version}"
+  rdoc.title = "wakame #{version}"
   rdoc.rdoc_files.include('README*')
   rdoc.rdoc_files.include('lib/**/*.rb')
 end
