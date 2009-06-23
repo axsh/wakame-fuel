@@ -1,5 +1,0 @@
-History.txt
-Manifest.txt
-README.rdoc
-Rakefile
-lib/wakame.rb

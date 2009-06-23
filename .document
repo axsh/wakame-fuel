@@ -1,0 +1,10 @@
+README.rdoc
+app_generator/**/*
+contrib/**/*
+Rakefile
+tasks/**/*
+lib/**/*.rb
+bin/*
+tests/**/*
+VERSION
+LICENSE

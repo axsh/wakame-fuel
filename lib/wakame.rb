@@ -5,7 +5,9 @@ require 'rubygems'
 Thread.abort_on_exception = true 
 
 module Wakame
-  VERSION='0.3.1'
+  require 'jeweler'
+  VERSION=Jeweler::VersionHelper.new(File.expand_path('../', File.dirname(__FILE__))).to_s
+
   autoload :Agent, 'wakame/agent'
   autoload :Master, 'wakame/master'
   autoload :Daemonize, 'wakame/daemonize'
