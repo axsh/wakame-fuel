@@ -49,12 +49,16 @@ module Wakame
           cmd_queue = DRbObject.new_with_uri(@options[:command_server_uri])
           #res = cmd_queue.send_cmd(Marshal.dump(subcommand))
           subcommand = cmd_queue.send_cmd(subcommand)
+          if subcommand.is_a? Exception
+            STDERR.puts subcommand
+            exit 1
+          end
           #res = cmd_queue.send(subcommand.class.command_name)
         rescue => e
           STDERR.puts e
           exit 1
         end
-        
+
         subcommand.print_result
       end
       
