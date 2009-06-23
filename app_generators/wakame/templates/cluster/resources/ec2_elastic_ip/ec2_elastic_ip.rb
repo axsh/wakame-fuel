@@ -1,6 +1,6 @@
 class Ec2ElasticIp < Wakame::Service::Resource
   
-  def_attribute :elastic_ip, '174.129.206.164'
+  def_attribute :elastic_ip, ''
   def_attribute :require_agent, false
   
   def on_parent_changed(svc, action)
