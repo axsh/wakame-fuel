@@ -1,6 +1,7 @@
 # -*- ruby -*-
 require 'rubygems'
 require 'rake'
+require 'rake/clean'
 
 begin
   require 'jeweler'
