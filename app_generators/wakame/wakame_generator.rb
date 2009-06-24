@@ -5,6 +5,24 @@ class WakameGenerator < RubiGen::Base
   DEFAULT_SHEBANG = File.join(Config::CONFIG['bindir'],
                               Config::CONFIG['ruby_install_name'])
 
+  # Installation skeleton.  Intermediate directories are automatically
+  # created so don't sweat their absence here.
+  BASEDIRS = %w(
+    bin
+    cluster
+    cluster/actors
+    cluster/actions
+    cluster/triggers
+    cluster/resources
+    cluster/commands
+    config
+    config/init.d
+    config/environments
+    lib
+    tasks
+    vendor
+  )
+
   default_options   :shebang => DEFAULT_SHEBANG,
   :bin_name    => nil,
   :import_path => nil,
@@ -16,8 +34,6 @@ class WakameGenerator < RubiGen::Base
 
   # extensions/option
   attr_reader :bin_names_list
-  attr_reader :enable_website
-  attr_reader :manifest
 
   def initialize(runtime_args, runtime_options = {})
     super(config_args_and_runtime_args(runtime_args), runtime_options)
@@ -43,21 +59,13 @@ class WakameGenerator < RubiGen::Base
       m.file_copy_each %w(Rakefile README)
       m.file_copy_each %w(config/boot.rb config/cluster.rb config/environments/common.rb config/environments/stand_alone.rb  config/environments/ec2.rb)
       m.file_copy_each %w(config/init.d/wakame-master config/init.d/wakame-agent)
-      
-      #%w(apache_lb apache_app apache_www mysql_master ec2_elastic_ip).each { |f|
-        Dir.glob(source_path("cluster/resources") + "/**/*").each { |path|
-          relpath =  path.sub(%r{\A#{source_dir}\/}, '')
-          if File.directory? path
-            m.directory relpath
-          else
-            m.file relpath, relpath
-          end
-        }
-      #}
+
+      m.dependency "install_rubigen_scripts", [destination_root, :wakame]
 
       %w(wakame-master wakame-agent wakameadm).each do |script|
         m.template "bin/#{script}", "bin/#{script}", script_options
       end
+      
     end
   end
 
@@ -113,21 +121,4 @@ EOS
     runtime_args
   end
 
-  # Installation skeleton.  Intermediate directories are automatically
-  # created so don't sweat their absence here.
-  BASEDIRS = %w(
-    bin
-    cluster
-    cluster/actors
-    cluster/actions
-    cluster/triggers
-    cluster/resources
-    cluster/commands
-    config
-    config/init.d
-    config/environments
-    lib
-    tasks
-    vendor
-  )
 end
