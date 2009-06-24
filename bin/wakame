@@ -11,7 +11,7 @@ end
 
 require 'rubigen'
 require 'rubigen/scripts/generate'
-RubiGen::Base.reset_sources
+RubiGen::Base.use_application_sources! 
 RubiGen::Base.append_sources RubiGen::PathSource.new(:application,
                                                      File.join(File.dirname(__FILE__), "../app_generators"))
 #p RubiGen::Base.sources
