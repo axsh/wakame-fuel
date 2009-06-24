@@ -6,7 +6,7 @@ Gem::Specification.new do |s|
 
   s.required_rubygems_version = Gem::Requirement.new(">= 0") if s.respond_to? :required_rubygems_version=
   s.authors = ["axsh co.,Ltd.", "Masahiro Fujiwara"]
-  s.date = %q{2009-06-23}
+  s.date = %q{2009-06-24}
   s.default_executable = %q{wakame}
   s.description = %q{}
   s.email = ["m-fujiwara@axsh.net"]
@@ -87,9 +87,7 @@ Gem::Specification.new do |s|
      "lib/wakame/master.rb",
      "lib/wakame/monitor.rb",
      "lib/wakame/monitor/agent.rb",
-     "lib/wakame/monitor/process.rb",
      "lib/wakame/monitor/service.rb",
-     "lib/wakame/oldagent.rb",
      "lib/wakame/packets.rb",
      "lib/wakame/queue_declare.rb",
      "lib/wakame/rule.rb",
@@ -99,7 +97,6 @@ Gem::Specification.new do |s|
      "lib/wakame/scheduler.rb",
      "lib/wakame/service.rb",
      "lib/wakame/template.rb",
-     "lib/wakame/thread_pool.rb",
      "lib/wakame/trigger.rb",
      "lib/wakame/util.rb",
      "lib/wakame/vm_manipulator.rb",
@@ -121,7 +118,30 @@ Gem::Specification.new do |s|
      "tests/test_service.rb",
      "tests/test_template.rb",
      "tests/test_uri_amqp.rb",
-     "tests/test_util.rb"
+     "tests/test_util.rb",
+     "wakame_generators/resource/resource_generator.rb",
+     "wakame_generators/resource/templates/apache_app/apache_app.rb",
+     "wakame_generators/resource/templates/apache_app/conf/apache2.conf",
+     "wakame_generators/resource/templates/apache_app/conf/envvars-app",
+     "wakame_generators/resource/templates/apache_app/conf/sites-app.conf",
+     "wakame_generators/resource/templates/apache_app/conf/system-app.conf",
+     "wakame_generators/resource/templates/apache_app/init.d/apache2-app",
+     "wakame_generators/resource/templates/apache_lb/apache_lb.rb",
+     "wakame_generators/resource/templates/apache_lb/conf/apache2.conf",
+     "wakame_generators/resource/templates/apache_lb/conf/envvars-lb",
+     "wakame_generators/resource/templates/apache_lb/conf/sites-lb.conf",
+     "wakame_generators/resource/templates/apache_lb/conf/system-lb.conf",
+     "wakame_generators/resource/templates/apache_lb/init.d/apache2-lb",
+     "wakame_generators/resource/templates/apache_www/apache_www.rb",
+     "wakame_generators/resource/templates/apache_www/conf/apache2.conf",
+     "wakame_generators/resource/templates/apache_www/conf/envvars-www",
+     "wakame_generators/resource/templates/apache_www/conf/sites-www.conf",
+     "wakame_generators/resource/templates/apache_www/conf/system-www.conf",
+     "wakame_generators/resource/templates/apache_www/init.d/apache2-www",
+     "wakame_generators/resource/templates/ec2_elastic_ip/ec2_elastic_ip.rb",
+     "wakame_generators/resource/templates/mysql_master/conf/my.cnf",
+     "wakame_generators/resource/templates/mysql_master/init.d/mysql",
+     "wakame_generators/resource/templates/mysql_master/mysql_master.rb"
   ]
   s.has_rdoc = true
   s.homepage = %q{http://wakame.rubyforge.org/}
