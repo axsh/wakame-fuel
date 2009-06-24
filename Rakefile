@@ -28,6 +28,7 @@ __END__
       gem.add_dependency(i[0], i[1])
     }
     gem.files = FileList['app_generators/**/*',
+                         'wakame_generators/**/*',
                          'contrib/**/*',
                          'lib/**/*.rb',
                          'bin/*',
