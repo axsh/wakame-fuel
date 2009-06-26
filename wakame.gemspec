@@ -2,11 +2,11 @@
 
 Gem::Specification.new do |s|
   s.name = %q{wakame}
-  s.version = "0.3.1"
+  s.version = "0.4.0"
 
   s.required_rubygems_version = Gem::Requirement.new(">= 0") if s.respond_to? :required_rubygems_version=
   s.authors = ["axsh co.,Ltd.", "Masahiro Fujiwara"]
-  s.date = %q{2009-06-24}
+  s.date = %q{2009-06-26}
   s.default_executable = %q{wakame}
   s.description = %q{}
   s.email = ["m-fujiwara@axsh.net"]
@@ -60,6 +60,18 @@ Gem::Specification.new do |s|
      "lib/ext/shellwords.rb",
      "lib/ext/uri.rb",
      "lib/wakame.rb",
+     "lib/wakame/action.rb",
+     "lib/wakame/actions/destroy_instances.rb",
+     "lib/wakame/actions/launch_cluster.rb",
+     "lib/wakame/actions/migrate_service.rb",
+     "lib/wakame/actions/propagate_instances.rb",
+     "lib/wakame/actions/reload_service.rb",
+     "lib/wakame/actions/scaleout_when_high_load.rb",
+     "lib/wakame/actions/shutdown_cluster.rb",
+     "lib/wakame/actions/shutdown_vm.rb",
+     "lib/wakame/actions/start_service.rb",
+     "lib/wakame/actions/stop_service.rb",
+     "lib/wakame/actions/util.rb",
      "lib/wakame/actor.rb",
      "lib/wakame/actor/daemon.rb",
      "lib/wakame/actor/service_monitor.rb",
@@ -71,6 +83,7 @@ Gem::Specification.new do |s|
      "lib/wakame/command/actor.rb",
      "lib/wakame/command/clone_service.rb",
      "lib/wakame/command/launch_cluster.rb",
+     "lib/wakame/command/migrate_service.rb",
      "lib/wakame/command/propagate_service.rb",
      "lib/wakame/command/shutdown_cluster.rb",
      "lib/wakame/command/status.rb",
@@ -91,6 +104,7 @@ Gem::Specification.new do |s|
      "lib/wakame/packets.rb",
      "lib/wakame/queue_declare.rb",
      "lib/wakame/rule.rb",
+     "lib/wakame/rule_engine.rb",
      "lib/wakame/runner/administrator_command.rb",
      "lib/wakame/runner/agent.rb",
      "lib/wakame/runner/master.rb",
@@ -98,6 +112,11 @@ Gem::Specification.new do |s|
      "lib/wakame/service.rb",
      "lib/wakame/template.rb",
      "lib/wakame/trigger.rb",
+     "lib/wakame/triggers/instance_count_update.rb",
+     "lib/wakame/triggers/load_history.rb",
+     "lib/wakame/triggers/maintain_ssh_known_hosts.rb",
+     "lib/wakame/triggers/process_command.rb",
+     "lib/wakame/triggers/shutdown_unused_vm.rb",
      "lib/wakame/util.rb",
      "lib/wakame/vm_manipulator.rb",
      "tasks/ec2.rake",
