@@ -1,3 +1,6 @@
+
+require 'wakame/rule'
+
 class Apache_LB < Wakame::Service::Resource
   include WebCluster::HttpLoadBalanceServer
   include Wakame::Service::ApacheBasicProps
@@ -12,8 +15,8 @@ class Apache_LB < Wakame::Service::Resource
   end
 
   def on_parent_changed(svc, action)
-    action.deploy_configuration(svc_inst)
-    action.trigger_action(Rule::ReloadService.new(svc_inst))
+    Wakame::Rule::BasicActionSet.deploy_configuration(svc)
+    reload(svc, action)
   end
 
   def start(svc, action)
@@ -25,9 +28,12 @@ class Apache_LB < Wakame::Service::Resource
 
     request = action.actor_request(svc.agent.agent_id,
                                    '/service_monitor/register', svc.instance_id, :pidfile, '/var/run/apache2-lb.pid').request
-    request = action.actor_request(svc.agent.agent_id,
-                                   '/daemon/start', "apache_lb", 'init.d/apache2-lb').request
-    #request.wait
+    action.actor_request(svc.agent.agent_id,
+                         '/daemon/start', "apache_lb", 'init.d/apache2-lb'){ |req|
+      req.wait
+      Wakame.log.debug("#{self.class} process started")
+    }
+
     cond.wait
   end
   
@@ -38,9 +44,12 @@ class Apache_LB < Wakame::Service::Resource
       }
     }
 
-    request = action.actor_request(svc.agent.agent_id,
-                                   '/daemon/stop', 'apache_lb', 'init.d/apache2-lb').request
-    #request.wait
+    action.actor_request(svc.agent.agent_id,
+                         '/daemon/stop', 'apache_lb', 'init.d/apache2-lb'){ |req|
+      req.wait
+      Wakame.log.debug("#{self.class} process stopped")
+    }
+
     cond.wait
 
     request = action.actor_request(svc.agent.agent_id,
@@ -48,9 +57,11 @@ class Apache_LB < Wakame::Service::Resource
   end
 
   def reload(svc, action)
-    request = action.actor_request(svc.agent.agent_id,
-                                   '/daemon/reload', "apache_lb", 'init.d/apache2-lb').request
-    request.wait
+    action.actor_request(svc.agent.agent_id,
+                         '/daemon/reload', "apache_lb", 'init.d/apache2-lb'){ |req|
+      req.wait
+      Wakame.log.debug("#{self.class} process stopped")
+    }
   end
   
 end
