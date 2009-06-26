@@ -32,6 +32,8 @@ module Wakame
       load_cluster
       load_resources
       load_core_commands
+      load_core_actions
+      load_core_triggers
     end
     
     def process_agent
@@ -135,8 +137,24 @@ module Wakame
           load file
         end
       end
-      
-      
+    end
+
+    def load_core_triggers
+      $LOAD_PATH.each{ |d|
+        Dir.glob("#{d}/wakame/triggers/**/*.rb").each{ |f|
+          f =~ %r{(wakame/triggers/.+)\.rb\Z}
+          require "#{$1}"
+        }
+      }
+    end
+
+    def load_core_actions
+      $LOAD_PATH.each{ |d|
+        Dir.glob("#{d}/wakame/actions/**/*.rb").each{ |f|
+          f =~ %r{(wakame/actions/.+)\.rb\Z}
+          require "#{$1}"
+        }
+      }
     end
 
 
