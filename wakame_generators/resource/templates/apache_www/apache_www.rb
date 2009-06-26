@@ -21,8 +21,10 @@ class Apache_WWW < Wakame::Service::Resource
     request = action.actor_request(svc.agent.agent_id,
                                    '/service_monitor/register', svc.instance_id, :pidfile, '/var/run/apache2-www.pid').request
     request = action.actor_request(svc.agent.agent_id,
-                                   '/daemon/start', "apache_www", 'init.d/apache2-www').request
-    #request.wait
+                                   '/daemon/start', "apache_www", 'init.d/apache2-www'){ |req|
+      req.wait
+      Wakame.log.debug("#{self.class} process started")
+    }
     cond.wait
   end
   
@@ -34,8 +36,10 @@ class Apache_WWW < Wakame::Service::Resource
     }
 
     request = action.actor_request(svc.agent.agent_id,
-                                   '/daemon/stop', 'apache_www', 'init.d/apache2-www').request
-    #request.wait
+                                   '/daemon/stop', 'apache_www', 'init.d/apache2-www'){ |req|
+      req.wait
+      Wakame.log.debug("#{self.class} process stooped")
+    }
     cond.wait
 
     request = action.actor_request(svc.agent.agent_id,
@@ -43,8 +47,10 @@ class Apache_WWW < Wakame::Service::Resource
   end
   
   def reload(svc, action)
-    request = action.actor_request('/daemon/reload', 'apache_www', 'init.d/apache2-www').request
-    request.wait
+    action.actor_request('/daemon/reload', 'apache_www', 'init.d/apache2-www') { |req|
+      req.wait
+      Wakame.log.debug("#{self.class} process reloaded")
+    }
   end
   
 end
