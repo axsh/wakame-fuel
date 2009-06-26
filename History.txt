@@ -1,3 +1,19 @@
+== 0.4.0 2009-06-26
+
+* Actor and Monitor plugin support for Agent.
+
+* Changed the deployment procedure for configuration/script files of each resource.
+
+* Restructured the source code.
+
+* Project folder generators using rubigen.
+
+* Changed the deployment procedure for configuration/script files of each resource.
+
+* Renamed major data classes. And renaming is still on-going.
+
+* Gem packaging.
+
 == 0.3.0 2009-04-22
 
 * 1 major enhancement:

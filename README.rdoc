@@ -6,13 +6,9 @@
 
 * Wakame is a framework to simplify the complex virtual machine manipulation over multiple instances in Clound envrionment. This project aims to provide the management/monitoring services with server/daemon configuration set to build scalable web applications.
 
-== FEATURES/PROBLEMS:
-
-* 
-
 == SYNOPSIS:
 
-  
+* 
 
 == REQUIREMENTS:
 
@@ -20,19 +16,31 @@
 * amqp
 * daemons
 * amazon-ec2
+* right_aws
 * log4r
 * jeweler
 
 == INSTALL:
 
-* 
+* gem install wakame
+* wakame /path/to/yourproj
+% cd /path/to/yourproj
+% ./script/generate resource apache_lb
+% ./script/generate resource apache_app
+% ./script/generate resource apache_www
+% ./script/generate resource mysql_master
+
+Then edit config/cluster.rb to add above them all.
+
+% sudo ./config/init.d/wakame-master start
+% sudo ./config/init.d/wakame-agent start
 
 == LICENSE:
 
 (Apache License, Version 2.0)
 
 Copyright (c) 2009 axsh co., LTD
-Copyright (c) 2009 Masahiro Fujiwara <m-fujiwara at axsh dot net>
+Copyright (c) 2009 Masahiro Fujiwara <m-fujiwara_at_axsh.net>
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
