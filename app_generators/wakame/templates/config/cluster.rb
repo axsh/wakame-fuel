@@ -21,12 +21,12 @@ class WebCluster < Wakame::Service::ServiceCluster
     }
 
     define_rule { |r|
-      r.register_rule(Wakame::Rule::ProcessCommand.new)
-      r.register_rule(Wakame::Rule::MaintainSshKnownHosts.new)
-      #r.register_rule(Wakame::Rule::LoadHistoryMonitor.new)
-      #r.register_rule(Wakame::Rule::InstanceCountUpdate.new)
-      #r.register_rule(Wakame::Rule::ScaleOutWhenHighLoad.new)
-      #r.register_rule(Wakame::Rule::ShutdownUnusedVM.new)
+      r.register_trigger(Wakame::Triggers::ProcessCommand.new)
+      r.register_trigger(Wakame::Triggers::MaintainSshKnownHosts.new)
+      #r.register_trigger(Wakame::Triggers::LoadHistoryMonitor.new)
+      #r.register_trigger(Wakame::Triggers::InstanceCountUpdate.new)
+      #r.register_trigger(Wakame::Triggers::ScaleOutWhenHighLoad.new)
+      #r.register_trigger(Wakame::Triggers::ShutdownUnusedVM.new)
     }
 
      add_virtual_host(VirtualHost.new(:server_name=>'aaa.test', :document_root=>'/home/wakame/app/development/test/public'))
