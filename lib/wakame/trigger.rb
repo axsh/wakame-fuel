@@ -1,5 +1,5 @@
 module Wakame
-  module Trigger
+  class Trigger
     include FilterChain
     include AttributeHelper
 
