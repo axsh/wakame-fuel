@@ -67,14 +67,18 @@ module Wakame
       def has_service_type?(key)
         svc_class = case key
                     when Service::ServiceInstance
-                      key.property.class
+                      key.resource.class
+                    when Service::Resource
+                      key.class
                     when Class
                       key
                     else
-                      nil
+                      raise ArgumentError
                     end
 
         services.any? { |k, v|
+          Wakame.log.debug( "#{agent_id} of service #{v.resource.class}. v.resource.class == svc_class result to #{v.resource.class == svc_class}")
+          
           v.property.class == svc_class
         }
       end
@@ -103,14 +107,14 @@ module Wakame
         bind_thread
         @master = master
         @instance_id =Wakame.gen_id
-        @rule_engine ||= Rule::RuleEngine.new(self)
+        @rule_engine ||= RuleEngine.new(self)
         prepare
         
         instance_eval(&blk) if blk
       end
 
       def define_rule(&blk)
-        @rule_engine ||= Rule::RuleEngine.new(self)
+        @rule_engine ||= RuleEngine.new(self)
         
         blk.call(@rule_engine)
       end
