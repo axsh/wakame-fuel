@@ -9,7 +9,7 @@ class Wakame::Command::ShutdownCluster
   end
 
   def run(rule)
-    rule.trigger_action(Wakame::Rule::ClusterShutdownAction.new)
+    rule.trigger_action(Wakame::Actions::ShutdownCluster.new)
   end
 
 end

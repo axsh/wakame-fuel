@@ -9,7 +9,7 @@ class Wakame::Command::LaunchCluster
   end
 
   def run(rule)
-    rule.trigger_action(Wakame::Rule::ClusterLaunchAction.new)
+    rule.trigger_action(Wakame::Actions::LaunchCluster.new)
   end
 
 end
