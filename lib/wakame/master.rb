@@ -77,7 +77,7 @@ module Wakame
           
           agent.services.clear
           ping.services.each { |svc_id, i|
-            agent.services[svc_id] = i
+            agent.services[svc_id] = master.service_cluster.instances[svc_id]
           }
         }
         
