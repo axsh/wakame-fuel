@@ -463,7 +463,7 @@ class ConditionalWait
     @poll_threads = []
     @event_tickets = []
 
-    instance_eval(&blk)
+    instance_eval(&blk) if blk
   end
   
   def poll( period=5, max_retry=10, &blk)
