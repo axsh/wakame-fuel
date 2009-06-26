@@ -5,7 +5,7 @@ require 'rubygems'
 Thread.abort_on_exception = true 
 
 module Wakame
-  require 'jeweler'
+  require 'jeweler/version_helper'
   VERSION=Jeweler::VersionHelper.new(File.expand_path('../', File.dirname(__FILE__))).to_s
 
   autoload :Agent, 'wakame/agent'
@@ -28,6 +28,8 @@ module Wakame
   autoload :CommandQueue, 'wakame/command_queue'
   autoload :Template, 'wakame/template'
   autoload :Trigger, 'wakame/trigger'
+  autoload :Action, 'wakame/action'
+  autoload :RuleEngine, 'wakame/rule_engine'
   #autoload :Initializer, 'wakame/initializer' # Do not autoload this class since the constant is used for the flag in bootstrap.
 
   def gen_id(str=nil)
