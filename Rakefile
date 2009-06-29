@@ -24,6 +24,7 @@ __END__
      ['log4r', '>= 1.0.5'],
      ['daemons', '>= 1.0.10'],
      ['rubigen', '>= 1.5.2'],
+     ['open4', '>= 0.9.6'],
      ['jeweler', '>= 1.0.0']
     ].each { |i|
       gem.add_dependency(i[0], i[1])
