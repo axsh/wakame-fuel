@@ -21,6 +21,8 @@ class ResourceGenerator < RubiGen::Base
     @resource_name ||= @resource_template
 
     record do |m|
+      # Create the resource name folder
+      m.directory File.join('cluster', 'resources', @resource_name)
       Dir.glob(source_path(@resource_template) + "/**/*").each { |path|
         relpath =  path.sub(%r{\A#{source_root}\/}, '')
 
