@@ -68,13 +68,13 @@ module Wakame
 
       def load_rubygems
         require 'rubygems'
-        unless rubygems_version >= '1.3.0'
-          $stderr.puts "Rails requires RubyGems >= #{min_version} (you have #{rubygems_version}). Please `gem update --system` and try again."
+        unless Gem::RubyGemsVersion >= '1.3.1'
+          $stderr.puts "[ERROR]: Requires RubyGems >= 1.3.1"
           exit 1
         end
 
       rescue LoadError
-        $stderr.puts "Rails requires RubyGems >= #{min_version}. Please install RubyGems and try again: http://rubygems.rubyforge.org"
+        $stderr.puts "[ERROR]: RubyGems seems not to be installed. Please install RubyGems >= 1.3.1"
         exit 1
       end
 
