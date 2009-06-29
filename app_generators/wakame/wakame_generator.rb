@@ -58,12 +58,13 @@ class WakameGenerator < RubiGen::Base
 
       m.file_copy_each %w(Rakefile README)
       m.file_copy_each %w(config/boot.rb config/cluster.rb config/environments/common.rb config/environments/stand_alone.rb  config/environments/ec2.rb)
-      m.file_copy_each %w(config/init.d/wakame-master config/init.d/wakame-agent)
-
       m.dependency "install_rubigen_scripts", [destination_root, :wakame]
 
       %w(wakame-master wakame-agent wakameadm).each do |script|
         m.template "bin/#{script}", "bin/#{script}", script_options
+      end
+      %w(wakame-master wakame-agent).each do |script|
+        m.template "config/init.d/#{script}", "config/init.d/#{script}", script_options
       end
       
     end
