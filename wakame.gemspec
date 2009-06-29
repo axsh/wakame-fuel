@@ -6,7 +6,7 @@ Gem::Specification.new do |s|
 
   s.required_rubygems_version = Gem::Requirement.new(">= 0") if s.respond_to? :required_rubygems_version=
   s.authors = ["axsh co.,Ltd.", "Masahiro Fujiwara"]
-  s.date = %q{2009-06-26}
+  s.date = %q{2009-06-29}
   s.default_executable = %q{wakame}
   s.description = %q{}
   s.email = ["m-fujiwara@axsh.net"]
@@ -183,6 +183,7 @@ Gem::Specification.new do |s|
       s.add_runtime_dependency(%q<log4r>, [">= 1.0.5"])
       s.add_runtime_dependency(%q<daemons>, [">= 1.0.10"])
       s.add_runtime_dependency(%q<rubigen>, [">= 1.5.2"])
+      s.add_runtime_dependency(%q<open4>, [">= 0.9.6"])
       s.add_runtime_dependency(%q<jeweler>, [">= 1.0.0"])
     else
       s.add_dependency(%q<amqp>, [">= 0.6.0"])
@@ -193,6 +194,7 @@ Gem::Specification.new do |s|
       s.add_dependency(%q<log4r>, [">= 1.0.5"])
       s.add_dependency(%q<daemons>, [">= 1.0.10"])
       s.add_dependency(%q<rubigen>, [">= 1.5.2"])
+      s.add_dependency(%q<open4>, [">= 0.9.6"])
       s.add_dependency(%q<jeweler>, [">= 1.0.0"])
     end
   else
@@ -204,6 +206,7 @@ Gem::Specification.new do |s|
     s.add_dependency(%q<log4r>, [">= 1.0.5"])
     s.add_dependency(%q<daemons>, [">= 1.0.10"])
     s.add_dependency(%q<rubigen>, [">= 1.5.2"])
+    s.add_dependency(%q<open4>, [">= 0.9.6"])
     s.add_dependency(%q<jeweler>, [">= 1.0.0"])
   end
 end
