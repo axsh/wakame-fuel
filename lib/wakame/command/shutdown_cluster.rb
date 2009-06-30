@@ -5,11 +5,7 @@ class Wakame::Command::ShutdownCluster
 
   command_name='shutdown_cluster'
 
-  def parse(args)
-  end
-
   def run(rule)
-    rule.trigger_action(Wakame::Actions::ShutdownCluster.new)
+    rule.trigger_action(Wakame::Rule::ClusterShutdownAction.new)
   end
-
 end
