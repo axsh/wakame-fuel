@@ -1,6 +1,6 @@
 
+require 'uri'
 require 'thin'
-#require 'drb/drb'
 require 'thread'
 require 'json'
 
@@ -13,16 +13,15 @@ module Wakame
       @queue = Queue.new
       @result_queue = Queue.new
 
-      #DRb.start_service(Wakame.config.drb_command_server_uri, self)
-      #@drb_server = DRb.start_drbserver(Wakame.config.drb_command_server_uri, self)
-      server = Thin::Server.new('0.0.0.0', 3000, Adapter.new(self))
-      server.threaded = true
-      server.start
+      cmdsv_uri = URI.parse(Wakame.config.http_command_server_uri)
+
+      @thin_server = Thin::Server.new(cmdsv_uri.host, cmdsv_uri.port, Adapter.new(self))
+      @thin_server.threaded = true
+      @thin_server.start
     end
 
     def shutdown
-      DRb.stop_service()
-      #@drb_server.stop_service()
+      @thin_server.stop
     end
 
     def deq_cmd()
