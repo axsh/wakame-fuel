@@ -13,7 +13,7 @@ module Wakame
       :cluster_class => 'WebCluster',
       :load_paths => [],
       :ssh_private_key => nil,
-      :drb_command_server_uri => 'druby://localhost:12345',
+      :http_command_server_uri => 'http://localhost:3000',
       :amqp_server_uri => nil,
       :unused_vm_live_period => 60 * 10,
       :eventmachine_use_epoll => true
