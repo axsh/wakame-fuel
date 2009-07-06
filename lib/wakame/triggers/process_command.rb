@@ -9,8 +9,8 @@ module Wakame
             begin
               EM.barrier {
                 Wakame.log.debug("#{self.class}: Being processed the command: #{cmd.class}")
-                cmd.run(self)
-                res = cmd
+                res = cmd.run(self)
+                res
               }
             rescue => e
               Wakame.log.error(e)
