@@ -17,6 +17,9 @@ module Wakame
       }
     end
 
+    def initialize(option)
+      @options = option
+    end
 
     def parse(args)
     end
