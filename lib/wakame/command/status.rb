@@ -8,15 +8,6 @@ class Wakame::Command::Status
    EM.barrier {
       master = rule.master
       
-      sc = master.service_cluster
-      #result = {
-      #  :rule_engine => {
-      #    :rules => sc.rule_engine.rules
-      #  },
-      #  :service_cluster => sc.dump_status,
-      #  :agent_monitor => master.agent_monitor.dump_status
-      #}
-
       @service_cluster = master.service_cluster.dump_status
       @agent_monitor = master.agent_monitor.dump_status
       res = {
