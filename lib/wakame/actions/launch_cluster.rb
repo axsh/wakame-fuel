@@ -14,10 +14,13 @@ module Wakame
         EM.barrier {
           service_cluster.launch
         }
+        levels = service_cluster.dg.levels
+        Wakame.log.debug("#{self.class}: Resource launch order: " + levels.collect {|lv| '['+ lv.collect{|prop| "#{prop.class}" }.join(', ') + ']' }.join(', '))
+        acquire_lock { |list|
+          levels.each {|lv| list << lv.collect{|res| res.class } }
+        }
 
-        Wakame.log.debug("#{self.class}: Resource Launch Order: " + service_cluster.dg.levels.collect {|lv| '['+ lv.collect{|prop| "#{prop.class}" }.join(', ') + ']' }.join(', '))
-
-        service_cluster.dg.levels.each { |lv|
+        levels.each { |lv|
           lv.each { |svc_prop|
             trigger_action(PropagateInstances.new(svc_prop))
           }

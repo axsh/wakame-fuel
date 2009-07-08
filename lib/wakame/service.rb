@@ -29,7 +29,7 @@ module Wakame
       STATUS_UNKNOWN = 2
       STATUS_TIMEOUT = 3
       
-      attr_accessor :agent_id, :uptime, :last_ping_at, :attr, :services, :root_path
+      attr_accessor :agent_id, :uptime, :last_ping_at, :attr, :services, :root_path, :lock_queue
       thread_immutable_methods :agent_id=, :uptime=, :last_ping_at=, :attr=, :services=, :root_path=
 
       def initialize(agent_id=nil)
@@ -38,6 +38,7 @@ module Wakame
         @agent_id = agent_id
         @last_ping_at = Time.now
         @status = STATUS_ONLINE
+        @lock_queue = LockQueue.new(self)
       end
 
       def agent_ip
@@ -97,7 +98,7 @@ module Wakame
       include ThreadImmutable
 
       attr_reader :dg, :instance_id, :status_changed_at, :rule_engine, :master
-      attr_reader :status
+      attr_reader :status, :lock_queue
 
       STATUS_OFFLINE = 0
       STATUS_ONLINE = 1
@@ -108,6 +109,7 @@ module Wakame
         @master = master
         @instance_id =Wakame.gen_id
         @rule_engine ||= RuleEngine.new(self)
+        @lock_queue = LockQueue.new(self)
         prepare
         
         instance_eval(&blk) if blk
@@ -351,8 +353,88 @@ module Wakame
         
       end
       thread_immutable_methods :update_cluster_status
-
       
+    end
+
+    class LockQueue
+      def initialize(cluster)
+        @service_cluster = cluster
+        @locks = {}
+        @id2res = {}
+        @waitqueue = ::Queue.new
+      end
+
+      def set(resource, id)
+        @locks[resource.to_s] ||= []
+        @id2res[id] ||= {}
+
+        # Ths Job ID already holds/reserves the lock regarding the resource.
+        return if @id2res.has_key?(id) && @id2res[id].has_key?(resource.to_s)
+        
+        @id2res[id][resource.to_s]=1
+        @locks[resource.to_s] << id
+
+        Wakame.log.debug("#{self.class}: set(#{resource.to_s}, #{id})" + "\n#{self.inspect}")
+      end
+
+      def reset()
+        @locks.keys { |k|
+          @locks[k].clear
+        }
+        @id2res.clear
+      end
+
+      def test(id)
+        reslist = @id2res[id]
+        return :pass if reslist.nil? || reslist.empty?
+
+        # 
+        if reslist.keys.all? { |r| id == @locks[r.to_s][0] }
+          return :runnable
+        else
+          return :wait
+        end
+      end
+
+      def wait(id, tout=60*30)
+        timeout(tout) {
+          while test(id) == :wait
+            Wakame.log.debug("#{self.class}: Job #{id} waits for locked resouces: #{@id2res[id].keys.join(', ')}")
+            break if id == @waitqueue.deq
+          end
+        }
+      end
+      
+      def quit(id)
+        case test(id)
+        when :runnable, :wait
+          @id2res[id].keys.each { |r| @locks[r.to_s].delete_if{ |i| i == id } }
+          @waitqueue.enq(id)
+        end
+
+        @id2res.delete(id)
+        Wakame.log.debug("#{self.class}: quit(#{id})" + "\n#{self.inspect}")
+      end
+
+      def clear_resource(resource)
+      end
+
+      def inspect
+        output = @locks.collect { |k, lst|
+          [k, lst].flatten
+        }
+
+        # Table display
+        maxcols = (1..(output.size)).zip(*output).collect { |i| i.shift; i.map!{|i| (i.nil? ? "" : i).length }.max }
+
+        output.collect { |x|
+          buf=""
+          maxcols.each_with_index { |w, n|
+            buf << "|" + (x[n] || "").ljust(w)
+          }
+          buf << "|"
+        }.join("\n")
+      end
     end
     
     

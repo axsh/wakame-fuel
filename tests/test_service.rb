@@ -1,13 +1,11 @@
 
 
-$:.unshift File.dirname(__FILE__) + '/../lib'
-require 'rubygems'
+$:.unshift(File.dirname(__FILE__) + '/../lib')
+$:.unshift(File.dirname(__FILE__))
 
-require 'test/unit'
-require 'wakame'
+require 'setup_master.rb'
+
 require 'wakame/service.rb'
-
-WAKAME_ROOT="#{File.dirname(__FILE__)}/.."
 
 class TestService < Test::Unit::TestCase
   include Wakame::Service
@@ -56,5 +54,31 @@ class TestService < Test::Unit::TestCase
       Wakame.config.vm_environment = :EC3
       spec.current.attrs
     }
+  end
+
+
+  def test_queued_lock
+    q = Wakame::Service::LockQueue.new(nil)
+    q.set('Apache', '12345')
+    q.set('MySQL', '12345')
+    q.set('MySQL2', '12345')
+    q.set('Apache', '6789')
+    q.set('LB', '6789')
+    assert_equal(:runnable, q.test('12345'))
+    assert_equal(:wait, q.test('6789'))
+    assert_equal(:pass, q.test('unknown'))
+    #puts q.inspect
+    q.quit('12345')
+    assert_equal(:pass, q.test('12345'))
+    assert_equal(:runnable, q.test('6789'))
+    #puts q.inspect
+    q.set('Apache', '2345')
+    q.set('LB', '2345')
+    q.set('MySQL', '2345')
+    assert_equal(:runnable, q.test('6789'))
+    assert_equal(:wait, q.test('2345'))
+    q.quit('2345')
+    assert_equal(:runnable, q.test('6789'))
+    assert_equal(:pass, q.test('2345'))
   end
 end

@@ -34,7 +34,6 @@ module Wakame
       
       @active_jobs = {}
       @job_history = []
-      @global_lock = nil
       instance_eval(&blk) if blk
     end
 
@@ -52,7 +51,7 @@ module Wakame
         :job_id=>job_id,
         :src_trigger=>trigger,
         :create_at=>Time.now,
-        :start_at=>nil, 
+        :start_at=>nil,
         :complete_at=>nil,
         :root_action=>root_action,
         :notes=>{}
@@ -96,16 +95,6 @@ module Wakame
     def run_action(action)
       job_context = @active_jobs[action.job_id]
       raise "The job session is killed.: job_id=#{action.job_id}" if job_context.nil?
-
-      if action.acquire_lock
-        if @global_lock.nil?
-          @global_lock = action.job_id
-        else
-          unless @global_lock == action.job_id
-            raise GlobalLockError, "Global Lock is already acquired by the JobID: #{@global_lock}"
-          end
-        end
-      end
 
       EM.next_tick {
 
@@ -170,17 +159,17 @@ module Wakame
               next
             end
             
-            jobary = []
-            job_context[:root_action].walk_subactions {|a| jobary << a }
-            Wakame.log.debug(jobary.collect{|a| {a.class.to_s=>a.status}}.inspect)
+            actary = []
+            job_context[:root_action].walk_subactions {|a| actary << a }
+            Wakame.log.debug(actary.collect{|a| {a.class.to_s=>a.status}}.inspect)
 
             if res.is_a?(Exception)
               job_context[:exception]=res
             end
 
-            if jobary.all? { |act| act.status == :complete }
+            if actary.all? { |act| act.status == :complete }
 
-              if jobary.all? { |act| act.completion_status == :succeeded }
+              if actary.all? { |act| act.completion_status == :succeeded }
                 ED.fire_event(Event::JobComplete.new(action.job_id))
               else
                 ED.fire_event(Event::JobFailed.new(action.job_id, res))
@@ -189,7 +178,7 @@ module Wakame
               job_context[:complete_at]=Time.now
               @job_history << job_context
               @active_jobs.delete(job_context[:job_id])
-              @global_lock = nil
+              service_cluster.lock_queue.quit(job_context[:job_id])
             end
           }
         rescue => e

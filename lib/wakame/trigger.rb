@@ -27,17 +27,8 @@ module Wakame
     end
 
     def trigger_action(action)
-      found = rule_engine.active_jobs.find { |id, job|
-        job[:src_rule].class == self.class
-      }
-
-      if found
-        Wakame.log.warn("#{self.class}: Exisiting Job \"#{found[:job_id]}\" was kicked from this rule and it's still running. Skipping...")
-        raise CancelActionError
-      end
-
       rule_engine.create_job_context(self, action)
-      action.bind_triggered_rule(self)
+      action.bind_trigger(self)
       
       rule_engine.run_action(action)
       action.job_id

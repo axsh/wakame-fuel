@@ -3,6 +3,10 @@ module Wakame
     class ShutdownCluster < Action
       def run
         levels = service_cluster.dg.levels
+        Wakame.log.debug("#{self.class}: Resource shutdown order: " + levels.collect {|lv| '['+ lv.collect{|prop| "#{prop.class}" }.join(', ') + ']' }.join(', '))
+        acquire_lock { |list|
+          levels.each {|lv| list << lv.collect{|res| res.class } }
+        }
 
         levels.reverse.each { |lv|
           lv.each { |svc_prop|
