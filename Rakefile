@@ -25,7 +25,10 @@ __END__
      ['daemons', '>= 1.0.10'],
      ['rubigen', '>= 1.5.2'],
      ['open4', '>= 0.9.6'],
-     ['jeweler', '>= 1.0.0']
+     ['jeweler', '>= 1.0.0'],
+     ['rack', '>= 1.0.0'],
+     ['thin', '>= 1.2.2'],
+     ['json', '>= 1.1.7']
     ].each { |i|
       gem.add_dependency(i[0], i[1])
     }
