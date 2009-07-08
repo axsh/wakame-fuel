@@ -9,7 +9,7 @@ require 'json'
 require 'erb'
 
 require 'wakame'
-
+require 'pp'
 $root_constants = Module.constants
 
 module Wakame
@@ -55,7 +55,11 @@ module Wakame
           exit 1
         end
 
-        subcommand.print_result(res)
+        unless req[:json_print].nil?
+          pp res
+        else
+          subcommand.print_result(res)
+        end
       end
       
       private
@@ -85,7 +89,8 @@ module Wakame
         options = subcommand.parse(args)
         request_params = {
           :command => subcommand,
-          :command_server_uri => @options[:command_server_uri] + "?action=" + @subcmd + options
+          :command_server_uri => @options[:command_server_uri] + "?action=" + @subcmd + options[:query].to_s,
+          :json_print => options[:json_print]
         }
 
         request_params
@@ -150,9 +155,9 @@ class Wakame::Cli::Subcommand::LaunchCluster
       opts.separator "options:"
     }
     cmd = create_parser(args, &blk)
-    options = ""
+    options = {}
     unless cmd.version.nil?
-      options = "&version=#{cmd.version}"
+      options[:query] = "&version=#{cmd.version}"
     end
     options
   end
@@ -179,9 +184,9 @@ class Wakame::Cli::Subcommand::ShutdownCluster
     }
     cmd = create_parser(args, &blk)
 
-    options = ""
+    options = {}
     unless cmd.version.nil?
-      options = "&version=#{cmd.version}"
+      options[:query] = "&version=#{cmd.version}"
     end
     options
   end
@@ -243,17 +248,18 @@ __E__
   }
 
   def parse(args)
+    options = {}
     blk = Proc.new {|opts|
       #opts.version = "2009.06"
       opts.banner = "Usage: status [options]"
       opts.separator ""
       opts.separator "options:"
+      opts.on("--dump"){|j| options[:json_print] = "yes" }
     }
     cmd = create_parser(args, &blk)
 
-    options = ""
     unless cmd.version.nil?
-      options = "&version=#{cmd.version}"
+      options[:query] = "&version=#{cmd.version}"
     end
     options
   end
@@ -290,17 +296,19 @@ JOB <%= id %> :
 __E__
 
   def parse(args)
+    options = {}
     blk = Proc.new {|opts|
       #opts.version = '2009.06'
       opts.banner = "Usage: action_status"
       opts.separator ""
       opts.separator "options:"
+      opts.on("--dump"){|j| options[:json_print] = "yes" }
     }
     cmd = create_parser(args, &blk)
 
-    options = ""
+    #options = ""
     unless cmd.version.nil?
-      options = "&version=#{cmd.version}"
+      options[:query] = "&version=#{cmd.version}"
     end
     options
   end
@@ -334,18 +342,19 @@ class Wakame::Cli::Subcommand::PropagateService
   include Wakame::Cli::Subcommand
 
   def parse(args)
-    @options = ""
+    @options = {}
+    @options[:query] = ""
     blk = Proc.new {|opts|
       #opts.version = '2009.06'
       opts.banner = "Usage: propagate_service"
       opts.separator ""
       opts.separator "options:"
-      opts.on("-s SERVICE_NAME", "--service SERVICE_NAME"){|str| @options += "&service=#{str}"}
-      opts.on("-n NUMBER", "--number NUMBER"){|i| @options += "&num=#{i}"}
+      opts.on("-s SERVICE_NAME", "--service SERVICE_NAME"){|str| @options[:query] += "&service=#{str}"}
+      opts.on("-n NUMBER", "--number NUMBER"){|i| @options[:query] += "&num=#{i}"}
     }
     cmd = create_parser(args, &blk)
     unless cmd.version.nil?
-      @options += "&version=#{cmd.version}"
+      @options[:query] += "&version=#{cmd.version}"
     end
     @options
   end
