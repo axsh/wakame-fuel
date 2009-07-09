@@ -42,10 +42,8 @@ module Wakame
         }
         
         kill_list.each { |agent_id|
-          r_agent = @registered_agents.delete(agent_id)
-	  u_agent = @unregistered_agents.delete(agent_id)
-          ED.fire_event(Event::AgentUnMonitored.new(r_agent)) unless r_agent.nil?
-	  ED.fire_event(Event::AgentUnMonitored.new(u_agent)) unless u_agent.nil?
+          agent = @registered_agents.delete(agent_id)
+          ED.fire_event(Event::AgentUnMonitored.new(agent)) unless agent.nil?
         }
         #Wakame.log.debug("Finished agent GC")
       }
