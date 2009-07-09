@@ -223,7 +223,7 @@ Instances :
 
 Agents :
   <%- @agent_monitor["registered"].each { |a| -%>
-  <%= a["agent_id"] %> : <%= a["attr"]["local_ipv4"] %>, <%= a["attr"]["public_ipv4"] %> load=<%= a["attr"]["uptime"] %>, <%= (Time.now - a["last_ping_at"].to_i).to_i %> sec(s) <%= a["root_path"] %>(<%= a["status"] %>)
+  <%= a["agent_id"] %> : <%= a["attr"]["local_ipv4"] %>, <%= a["attr"]["public_ipv4"] %> load=<%= a["attr"]["uptime"] %>, <%= (Time.now - Time.parse(a["last_ping_at"])).to_i %> sec(s) <%= a["root_path"] %>(<%= a["status"] %>)
     <%- if !a["services"].nil? && a["services"].size > 0 && !@service_cluster["instances"].empty? -%>
     Services (<%= a["services"].size %>): <%= a["services"].collect{|id| @service_cluster["instances"][id]["property"] }.join(', ') %>
    <%- end -%>
@@ -264,6 +264,8 @@ __E__
   end
 
   def print_result(res)
+    require 'time'
+
     @service_cluster = res[1]["data"]["service_cluster"]
     @agent_monitor = res[1]["data"]["agent_monitor"]
     puts ERB.new(STATUS_TMPL, nil, '-').result(binding)
