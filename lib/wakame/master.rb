@@ -162,6 +162,7 @@ module Wakame
         ED.fire_event(Event::AgentMonitored.new(agent))
       end
       agent.root_path = data[:root_path]
+      agent.attr = data[:attrs]
     end
 
     def unregister_agent(agent_id)
