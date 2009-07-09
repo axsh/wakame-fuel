@@ -373,7 +373,6 @@ module Wakame
         
         @id2res[id][resource.to_s]=1
         @locks[resource.to_s] << id
-
         Wakame.log.debug("#{self.class}: set(#{resource.to_s}, #{id})" + "\n#{self.inspect}")
       end
 
@@ -425,15 +424,24 @@ module Wakame
         }
 
         # Table display
-        maxcols = (1..(output.size)).zip(*output).collect { |i| i.shift; i.map!{|i| (i.nil? ? "" : i).length }.max }
+        maxcolws = (0..(output.size)).zip(*output).collect { |i| i.shift; i.map!{|i| (i.nil? ? "" : i).length }.max }
+        maxcol = maxcolws.size
+        maxcolws.reverse.each {|i| 
+          break if i > 0
+          maxcol -= 1
+        }
 
-        output.collect { |x|
+        textrows = output.collect { |x|
           buf=""
-          maxcols.each_with_index { |w, n|
-            buf << "|" + (x[n] || "").ljust(w)
+          maxcol.times { |n|
+            buf << "|" + (x[n] || "").ljust(maxcolws[n])
           }
           buf << "|"
-        }.join("\n")
+        }
+
+        "+" + (["-"] * (textrows[0].length - 2)).join('') + "+\n" + \
+        textrows.join("\n") + \
+        "\n+" + (["-"] * (textrows[0].length - 2)).join('')+ "+"
       end
     end
     
