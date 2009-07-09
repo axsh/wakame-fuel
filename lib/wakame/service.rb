@@ -361,18 +361,22 @@ module Wakame
         @service_cluster = cluster
         @locks = {}
         @id2res = {}
-        @waitqueue = ::Queue.new
+
+        @queue_by_thread = {}
+        @qbt_m = ::Mutex.new
       end
-
+      
       def set(resource, id)
-        @locks[resource.to_s] ||= []
-        @id2res[id] ||= {}
-
         # Ths Job ID already holds/reserves the lock regarding the resource.
         return if @id2res.has_key?(id) && @id2res[id].has_key?(resource.to_s)
+
+        EM.barrier {
+          @locks[resource.to_s] ||= []
+          @id2res[id] ||= {}
         
-        @id2res[id][resource.to_s]=1
-        @locks[resource.to_s] << id
+          @id2res[id][resource.to_s]=1
+          @locks[resource.to_s] << id
+        }
         Wakame.log.debug("#{self.class}: set(#{resource.to_s}, #{id})" + "\n#{self.inspect}")
       end
 
@@ -396,22 +400,30 @@ module Wakame
       end
 
       def wait(id, tout=60*30)
+        @qbt_m.synchronize { @queue_by_thread[Thread.current] = ::Queue.new }
+
         timeout(tout) {
           while test(id) == :wait
             Wakame.log.debug("#{self.class}: Job #{id} waits for locked resouces: #{@id2res[id].keys.join(', ')}")
-            break if id == @waitqueue.deq
+            break if id == @queue_by_thread[Thread.current].deq
           end
         }
+      ensure
+        @qbt_m.synchronize { @queue_by_thread.delete(Thread.current) }
       end
       
       def quit(id)
-        case test(id)
-        when :runnable, :wait
-          @id2res[id].keys.each { |r| @locks[r.to_s].delete_if{ |i| i == id } }
-          @waitqueue.enq(id)
-        end
-
-        @id2res.delete(id)
+        EM.barrier {
+          case test(id)
+          when :runnable, :wait
+            @id2res[id].keys.each { |r| @locks[r.to_s].delete_if{ |i| i == id } }
+            @qbt_m.synchronize {
+              @queue_by_thread.each {|t, q| q.enq(id) }
+            }
+          end
+          
+          @id2res.delete(id)
+        }
         Wakame.log.debug("#{self.class}: quit(#{id})" + "\n#{self.inspect}")
       end
 
@@ -422,11 +434,12 @@ module Wakame
         output = @locks.collect { |k, lst|
           [k, lst].flatten
         }
+        return "" if output.empty?
 
         # Table display
         maxcolws = (0..(output.size)).zip(*output).collect { |i| i.shift; i.map!{|i| (i.nil? ? "" : i).length }.max }
         maxcol = maxcolws.size
-        maxcolws.reverse.each {|i| 
+        maxcolws.reverse.each { |i| 
           break if i > 0
           maxcol -= 1
         }
