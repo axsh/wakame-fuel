@@ -55,10 +55,11 @@ module Wakame
     
 
     class Register < ResponseBase
-      attr_reader :root_path
-      def initialize(agent, root_path)
+      attr_reader :root_path, :attrs
+      def initialize(agent, root_path, attrs)
         super(agent)
         @root_path = root_path
+        @attrs = attrs
       end
     end
 
