@@ -2,6 +2,13 @@
 module Wakame
   module Triggers
     class ProcessCommand < Trigger
+      def_attribute :status
+      def_attribute :job_id
+      def_attribute :completion_status
+      def_attribute :parent_action
+      def_attribute :acquire_lock, false
+
+      attr_reader :trigger
       def register_hooks
         @@command_thread ||= Thread.new {
           while cmd = self.command_queue.deq_cmd
