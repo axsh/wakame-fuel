@@ -86,12 +86,14 @@ module Wakame
       }
     end
     
+    FIRE_EVENT_LOG_IGNORE_EVENTS = [Wakame::Event::AgentPong]
+
     def fire_event(event_obj)
       raise ArgumentError unless event_obj.is_a?(Event::Base)
-      log_msg = ""
-      log_msg = " #{event_obj.log_message}" unless event_obj.log_message.nil?
 
-      Wakame.log.debug("Event #{event_obj.class} has been fired:" + log_msg )
+      if Wakame.log.level == 'DEBUG' && !FIRE_EVENT_LOG_IGNORE_EVENTS.member?(event_obj.class)
+        Wakame.log.debug("Event #{event_obj.class} has been fired:" + (event_obj.log_message.nil? ? "" : event_obj.log_message) )
+      end
       tlist = @event_handlers[event_obj.class]
       return if tlist.nil?
 

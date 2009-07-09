@@ -149,7 +149,7 @@ module Wakame
       end
 
       def log_message
-        "#{@action.class}"
+        "#{@action.class}, job_id=#{@action.job_id}"
       end
 
     end
@@ -170,11 +170,11 @@ module Wakame
       attr_reader :job_id
       def initialize(job_id)
         super()
-        @action = job_id
+        @job_id = job_id
       end
 
       def log_message
-        "#{@action.class}"
+        "#{@job_id}"
       end
     end
     class JobStart < JobEvent
