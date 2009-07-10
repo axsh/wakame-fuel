@@ -38,8 +38,9 @@ module Wakame
       setup_actors
       setup_dispatcher
 
-      publish_to('registry', Packets::Register.new(self, Wakame.config.root_path.to_s).marshal)
-      Wakame.log.info("Started agent process : WAKAME_ROOT=#{Wakame.config.root_path} WAKAME_ENV=#{Wakame.config.environment}")
+      attrs = Wakame::VmManipulator.create.fetch_local_attrs
+      publish_to('registry', Packets::Register.new(self, Wakame.config.root_path.to_s, attrs).marshal)
+      Wakame.log.info("Started agent process : WAKAME_ROOT=#{Wakame.config.root_path} WAKAME_ENV=#{Wakame.config.environment}, attrs=#{attrs.inspect}")
     end
 
 #     def send_event_response(event)

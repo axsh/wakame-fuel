@@ -32,6 +32,6 @@ class Wakame::Command::PropagateService
         rule.service_cluster.propagate(prop)
       }
     }
-    rule.trigger_action(Wakame::Rule::PropagateInstancesAction.new(prop))
+    rule.trigger_action(Wakame::Actions::PropagateInstances.new(prop))
   end
 end
