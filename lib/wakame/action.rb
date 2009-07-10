@@ -7,7 +7,6 @@ module Wakame
     def_attribute :status, :ready
     def_attribute :completion_status
     def_attribute :parent_action
-    def_attribute :acquire_lock, false
     
     attr_reader :trigger
 
@@ -36,20 +35,17 @@ module Wakame
       @subactions ||= []
     end
     
-    def bind_triggered_rule(trigger)
+    def bind_trigger(trigger)
       @trigger = trigger
     end
     
     def trigger_action(subaction, opts={})
-      if opts.is_a? Hash
-        succ_proc = opts[:success] || opts[:succ]
-        fail_proc = opts[:fail]
-      end
       subactions << subaction
       subaction.parent_action = self
-      #subaction.observers << self
+      subaction.job_id = self.job_id
+      subaction.bind_trigger(self.trigger)
       
-      async_trigger_action(subaction, succ_proc, fail_proc)
+      trigger.rule_engine.run_action(subaction)
     end
     
     def flush_subactions(sec=nil)
@@ -92,8 +88,8 @@ module Wakame
         notify_queue.enq(src) #if notify_queue.num_waiting > 0
       end
     end
-    
-    
+
+    # Recursively iterate the sub action descendants.
     def walk_subactions(&blk)
       blk.call(self)
       self.subactions.each{ |a|
@@ -118,6 +114,18 @@ module Wakame
     def notes
       trigger.rule_engine.active_jobs[self.job_id][:notes]
     end
+
+    # Set the lock flags to resources 
+    def acquire_lock(&blk)
+      EM.barrier {
+        reslist = []
+        blk.call(reslist)
+        reslist.flatten!
+        reslist.each {|r| service_cluster.lock_queue.set(r.to_s, self.job_id) }
+      }
+      
+      service_cluster.lock_queue.wait(self.job_id)
+    end
     
     def run
       raise NotImplementedError
@@ -128,29 +136,6 @@ module Wakame
     
     def on_canceled
     end
-    
-    private
-    def sync_trigger_action(action, succ_proc, fail_proc)
-      action.job_id = self.job_id
-      action.bind_triggered_rule(self.trigger)
-      
-      Wakame.log.debug("Start nested action in SYNC: #{action.class.to_s}")
-      begin
-        action.run
-        succ_proc.call if succ_proc
-      rescue => e
-        fail_proc.call if fail_proc
-        raise
-      end
-      Wakame.log.debug("Complete nested action : #{action.class.to_s}")
-    end
-    
-    def async_trigger_action(action, succ_proc, fail_proc)
-      action.job_id = self.job_id
-      action.bind_triggered_rule(self.trigger)
-      
-      trigger.rule_engine.run_action(action)
-    end
-    
+
   end
 end

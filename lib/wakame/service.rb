@@ -29,7 +29,7 @@ module Wakame
       STATUS_UNKNOWN = 2
       STATUS_TIMEOUT = 3
       
-      attr_accessor :agent_id, :uptime, :last_ping_at, :attr, :services, :root_path
+      attr_accessor :agent_id, :uptime, :last_ping_at, :attr, :services, :root_path, :lock_queue
       thread_immutable_methods :agent_id=, :uptime=, :last_ping_at=, :attr=, :services=, :root_path=
 
       def initialize(agent_id=nil)
@@ -38,6 +38,7 @@ module Wakame
         @agent_id = agent_id
         @last_ping_at = Time.now
         @status = STATUS_ONLINE
+        @lock_queue = LockQueue.new(self)
       end
 
       def agent_ip
@@ -97,7 +98,7 @@ module Wakame
       include ThreadImmutable
 
       attr_reader :dg, :instance_id, :status_changed_at, :rule_engine, :master
-      attr_reader :status
+      attr_reader :status, :lock_queue
 
       STATUS_OFFLINE = 0
       STATUS_ONLINE = 1
@@ -108,6 +109,7 @@ module Wakame
         @master = master
         @instance_id =Wakame.gen_id
         @rule_engine ||= RuleEngine.new(self)
+        @lock_queue = LockQueue.new(self)
         prepare
         
         instance_eval(&blk) if blk
@@ -351,8 +353,109 @@ module Wakame
         
       end
       thread_immutable_methods :update_cluster_status
-
       
+    end
+
+    class LockQueue
+      def initialize(cluster)
+        @service_cluster = cluster
+        @locks = {}
+        @id2res = {}
+
+        @queue_by_thread = {}
+        @qbt_m = ::Mutex.new
+      end
+      
+      def set(resource, id)
+        # Ths Job ID already holds/reserves the lock regarding the resource.
+        return if @id2res.has_key?(id) && @id2res[id].has_key?(resource.to_s)
+
+        EM.barrier {
+          @locks[resource.to_s] ||= []
+          @id2res[id] ||= {}
+        
+          @id2res[id][resource.to_s]=1
+          @locks[resource.to_s] << id
+        }
+        Wakame.log.debug("#{self.class}: set(#{resource.to_s}, #{id})" + "\n#{self.inspect}")
+      end
+
+      def reset()
+        @locks.keys { |k|
+          @locks[k].clear
+        }
+        @id2res.clear
+      end
+
+      def test(id)
+        reslist = @id2res[id]
+        return :pass if reslist.nil? || reslist.empty?
+
+        # 
+        if reslist.keys.all? { |r| id == @locks[r.to_s][0] }
+          return :runnable
+        else
+          return :wait
+        end
+      end
+
+      def wait(id, tout=60*30)
+        @qbt_m.synchronize { @queue_by_thread[Thread.current] = ::Queue.new }
+
+        timeout(tout) {
+          while test(id) == :wait
+            Wakame.log.debug("#{self.class}: Job #{id} waits for locked resouces: #{@id2res[id].keys.join(', ')}")
+            break if id == @queue_by_thread[Thread.current].deq
+          end
+        }
+      ensure
+        @qbt_m.synchronize { @queue_by_thread.delete(Thread.current) }
+      end
+      
+      def quit(id)
+        EM.barrier {
+          case test(id)
+          when :runnable, :wait
+            @id2res[id].keys.each { |r| @locks[r.to_s].delete_if{ |i| i == id } }
+            @qbt_m.synchronize {
+              @queue_by_thread.each {|t, q| q.enq(id) }
+            }
+          end
+          
+          @id2res.delete(id)
+        }
+        Wakame.log.debug("#{self.class}: quit(#{id})" + "\n#{self.inspect}")
+      end
+
+      def clear_resource(resource)
+      end
+
+      def inspect
+        output = @locks.collect { |k, lst|
+          [k, lst].flatten
+        }
+        return "" if output.empty?
+
+        # Table display
+        maxcolws = (0..(output.size)).zip(*output).collect { |i| i.shift; i.map!{|i| (i.nil? ? "" : i).length }.max }
+        maxcol = maxcolws.size
+        maxcolws.reverse.each { |i| 
+          break if i > 0
+          maxcol -= 1
+        }
+
+        textrows = output.collect { |x|
+          buf=""
+          maxcol.times { |n|
+            buf << "|" + (x[n] || "").ljust(maxcolws[n])
+          }
+          buf << "|"
+        }
+
+        "+" + (["-"] * (textrows[0].length - 2)).join('') + "+\n" + \
+        textrows.join("\n") + \
+        "\n+" + (["-"] * (textrows[0].length - 2)).join('')+ "+"
+      end
     end
     
     

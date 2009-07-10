@@ -13,6 +13,10 @@ module Wakame
 
       def run
         raise CancelActionError if @service_instance.status == Service::STATUS_MIGRATING
+        acquire_lock { |list|
+          list << @service_instance.resource.class
+        }
+
 
         EM.barrier {
           @service_instance.update_status(Service::STATUS_MIGRATING)

@@ -40,6 +40,12 @@ module Wakame
           end
         }
 
+        acquire_lock { |ary|
+          svc_to_start.each { |svc|
+            ary << svc.resource.class
+          }
+        }
+
         svc_to_start.each { |svc|
           if svc.property.require_agent
             # Try to arrange agent from existing agent pool.
