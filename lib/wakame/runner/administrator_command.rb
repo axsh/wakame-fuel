@@ -207,7 +207,7 @@ class Wakame::Cli::Subcommand::Status
   STATUS_TMPL = <<__E__
 Cluster : <%= @service_cluster["name"].to_s %> (<%= @service_cluster["status"].to_s %>)
 <%- @service_cluster["properties"].each { |prop, v| -%>
-  <%= v["type"].to_s %> : <current=<%= v["instance_count"] %> min=<%= v["min_instances"] %>, max=<%= v["max_instances"] %>>
+  <%= v["type"].to_s %> : <current=<%= v["instance_count"] %> min=<%= v["min_instances"] %>, max=<%= v["max_instances"] %><%= v["require_agent"] ? "" : ", AgentLess" %>>
   <%- v["instances"].each { |id|
          svc_inst = @service_cluster["instances"][id]
   -%>
