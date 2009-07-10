@@ -27,11 +27,6 @@ class Wakame::Command::PropagateService
       raise "The number is not appropriate: #{@num}"
     end
 
-    EM.barrier {
-      @num.to_i.times {
-        rule.service_cluster.propagate(prop)
-      }
-    }
-    rule.trigger_action(Wakame::Actions::PropagateInstances.new(prop))
+    rule.trigger_action(Wakame::Actions::PropagateInstances.new(prop, @num.to_i))
   end
 end
