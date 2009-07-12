@@ -47,7 +47,7 @@ module Wakame
     end
 
     def setup_load_paths
-      load_paths = configuration.load_paths + configuration.framework_paths
+      load_paths = configuration.load_paths + configuration.project_paths + configuration.framework_paths
       load_paths.reverse_each { |dir| $LOAD_PATH.unshift(dir) if File.directory?(dir) }
       $LOAD_PATH.uniq!
 
