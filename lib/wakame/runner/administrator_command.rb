@@ -228,7 +228,7 @@ Instances :
 
 Agents :
   <%- @agent_monitor["registered"].each { |a| -%>
-  <%= a["agent_id"] %> : <%= a["attr"]["local_ipv4"] %>, <%= a["attr"]["public_ipv4"] %> load=<%= a["attr"]["uptime"] %>, <%= (Time.now - Time.parse(a["last_ping_at"])).to_i %> sec(s) <%= a["root_path"] %>(<%= a["status"] %>)
+  <%= a["agent_id"] %> : <%= a["attr"]["local_ipv4"] %>, <%= a["attr"]["public_ipv4"] %> load=<%= a["attr"]["uptime"] %>, <%= (Time.now - Time.parse(a["last_ping_at"])).to_i %> sec(s), placement=<%= a["attr"]["availability_zone"] %><%= a["root_path"] %> (<%= a["status"] %>)
     <%- if !a["services"].nil? && a["services"].size > 0 && !@service_cluster["instances"].empty? -%>
     Services (<%= a["services"].size %>): <%= a["services"].collect{|id| @service_cluster["instances"][id]["property"] }.join(', ') %>
    <%- end -%>
