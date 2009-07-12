@@ -172,6 +172,7 @@ module Wakame
             rkey = key.tr('-', '_')
             attrs[rkey.to_sym]=query_metadata_uri(key)
           }
+          attrs[:availability_zone] = query_metadata_uri('placement/availability-zone')
           attrs
         end
         module_function :fetch_local_attrs
