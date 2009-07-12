@@ -129,7 +129,7 @@ module Wakame
           when Actor::STATUS_RUNNING
               ED.fire_event(Event::ActorProgress.new(response[:agent_id], response[:token], 0))
           else
-              ED.fire_event(Event::ActorComplete.new(response[:agent_id], response[:token], response[:status]))
+              ED.fire_event(Event::ActorComplete.new(response[:agent_id], response[:token], response[:status], response[:opts][:return_value]))
           end
         else
           Wakame.log.warn("#{self.class}: Unhandled agent response: #{response[:type]}")
@@ -300,7 +300,7 @@ module Wakame
 
 
   class ActorRequest
-    attr_reader :master
+    attr_reader :master, :return_value
 
     def initialize(master, packet)
       raise TypeError unless packet.is_a?(Wakame::Packets::ActorRequest)
@@ -309,6 +309,7 @@ module Wakame
       @packet = packet
       @requested = false
       @event_ticket = nil
+      @return_value = nil
       @wait_lock = ::Queue.new
     end
 
@@ -317,13 +318,14 @@ module Wakame
       raise "The request has already been sent." if @requested
 
       @event_ticket = ED.subscribe(Event::ActorComplete) { |event|
-       if event.token == @packet.token
+        if event.token == @packet.token
          
-         # Any of status except RUNNING are accomplishment of the actor request.
-         Wakame.log.debug("#{self.class}: The actor request has been completed: token=#{self.token}, status=#{event.status}")
-         ED.unsubscribe(@event_ticket)
-         @wait_lock.enq(event.status)
-       end
+          # Any of status except RUNNING are accomplishment of the actor request.
+          Wakame.log.debug("#{self.class}: The actor request has been completed: token=#{self.token}, status=#{event.status}, return_value=#{event.return_value}")
+          ED.unsubscribe(@event_ticket)
+          @return_value = event.return_value
+          @wait_lock.enq([event.status, event.return_value])
+        end
       }
       Wakame.log.debug("#{self.class}: Send the actor request: #{@packet.path}@#{@packet.agent_id}, token=#{self.token}")
       master.publish_to('agent_command', "agent_id.#{@packet.agent_id}", @packet.marshal)
@@ -353,11 +355,12 @@ module Wakame
       check_requested?
       timeout(tout) {
         Wakame.log.debug("#{self.class}: Waiting a response from the actor: #{@packet.path}@#{@packet.agent_id}, token=#{@packet.token}")
-        ret_status = @wait_lock.deq
+        ret_status, ret_val = @wait_lock.deq
         Wakame.log.debug("#{self.class}: A response (status=#{ret_status}) back from the actor: #{@packet.path}@#{@packet.agent_id}, token=#{@packet.token}")
         if ret_status == Actor::STATUS_FAILED
           raise RuntimeError, "Failed status has been returned: Actor Request #{token}"
         end
+        ret_val
       }
     end
     alias :wait :wait_completion
