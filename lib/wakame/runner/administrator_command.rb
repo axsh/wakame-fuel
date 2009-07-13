@@ -370,3 +370,32 @@ class Wakame::Cli::Subcommand::PropagateService
     p res[0]["message"]
   end
 end
+
+class Wakame::Cli::Subcommand::MigrateService
+  include Wakame::Cli::Subcommand
+
+  def parse(args)
+    @options = {}
+    @options[:query] = ""
+    parser = create_parser(args) {|opts|
+      opts.banner = "Usage: migrate_service [options] \"Service ID\""
+      opts.separator ""
+      opts.separator "options:"
+      opts.on("-a Agent ID", "--agent Agent ID"){ |i| @options[:query] += "&agent_id=#{i}"}
+    }
+
+    service_id = args.shift || abort("[ERROR]: Service ID was not given")
+    @options[:query] += "&service_id=#{service_id}"
+    
+    @options
+  end
+
+  def run(options)
+    res = uri(options)
+    res
+  end
+
+  def print_result(res)
+    p res[0]["message"]
+  end
+end
