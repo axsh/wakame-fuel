@@ -42,30 +42,6 @@ module Wakame
 
         agent
       end
-      
-      
-      def start_instance(image_id, attr={})
-        Wakame.log.debug("#{self.class} called start_instance(#{image_id})")
-        
-        attr[:user_data] = "node=agent\namqp_server=amqp://#{master.attr[:local_ipv4]}/"
-        Wakame.log.debug("user_data: #{attr[:user_data]}")
-        vm_manipulator = VmManipulator.create
-        res = vm_manipulator.start_instance(image_id, attr)
-        inst_id = res[:instance_id]
-        
-        ConditionalWait.wait { | cond |
-          cond.wait_event(Event::AgentMonitored) { |event|
-            event.agent.attr[:instance_id] == inst_id
-          }
-          
-          cond.poll(5, 100) {
-            vm_manipulator.check_status(inst_id, :online)
-          }
-        }
-        
-        inst_id
-      end
-
     end
   end
 end
