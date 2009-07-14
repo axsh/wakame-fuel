@@ -206,29 +206,29 @@ module AttributeHelper
       @attr_attributes ||= {}
     end
 
-    def attr(name, assignable=false)
-      attr_attributes[name.to_sym]={}
-      attr_without_trap(name, assignable)
-    end
+#     def attr(name, assignable=false)
+#       attr_attributes[name.to_sym]={}
+#       attr_without_trap(name, assignable)
+#     end
     
-    # Override Object.attr_accessor to 
-    def attr_accessor(*args)
-      args.each { |name|
-        attr(name, true)
-      }
-    end
+#     # Override Object.attr_accessor to 
+#     def attr_accessor(*args)
+#       args.each { |name|
+#         attr(name, true)
+#       }
+#     end
     
-    def attr_reader(*args)
-      args.each { |name|
-        attr(name, false)
-      }
-    end
+#     def attr_reader(*args)
+#       args.each { |name|
+#         attr(name, false)
+#       }
+#     end
     
-    def attr_writer(*args)
-      args.each { |name|
-        attr(name, true)
-      }
-    end
+#     def attr_writer(*args)
+#       args.each { |name|
+#         attr(name, true)
+#       }
+#     end
 
     def def_attribute(name, *args)
       attr = {}
@@ -276,7 +276,7 @@ module AttributeHelper
   private
   def self.included(klass)
     klass.class.class_eval {
-      alias :attr_without_trap :attr unless self.respond_to?(:attr_without_trap, true)
+      #alias :attr_without_trap :attr unless self.respond_to?(:attr_without_trap, true)
     }
     klass.extend ClassMethods
   end

@@ -291,7 +291,7 @@ module Wakame
           r[:instances][k]=i.dump_status
         }
         properties.each { |k, i|
-          r[:properties][k] = i.dump_status
+          r[:properties][k] = i.dump_attrs
           r[:properties][k][:instances] = each_instance(i.class).collect{|k, v| k }
         }
 

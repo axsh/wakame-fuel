@@ -21,6 +21,9 @@ class Wakame::Monitor::Service
 
     def start
       if !@timer.running?
+        # Runs checker once for immediate status update.
+        signal_checker
+
         @timer.start
         @service_monitor.send_event(Wakame::Packets::MonitoringStarted.new(@service_monitor.agent, self.svc_id))
         Wakame.log.debug("#{self.class}: Started the checker")
@@ -174,9 +177,18 @@ class Wakame::Monitor::Service
   def unregister(svc_id)
     chk = @checkers[svc_id]
     if chk
-      chk.timer.stop
+      chk.stop
       @checkers.delete(svc_id)
       Wakame.log.info("#{self.class}: Unregistered service checker for #{svc_id}")
+    end
+  end
+
+  def check_status(svc_id)
+    chk = @checkers[svc_id]
+    if chk
+      chk.status
+    else
+      raise RuntimeError, "#{self.class}: Specified service id was not found: #{svc_id}"
     end
   end
 

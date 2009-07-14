@@ -10,7 +10,7 @@ module Wakame
     def self.included(klass)
       klass.extend ClassMethods
       klass.class_eval {
-        attr_accessor :agent
+        attr_accessor :agent, :return_value
       }
     end
 

@@ -64,6 +64,11 @@ module Wakame
 
       paths.map{|dir| File.join(framework_root_path, dir) }.select{|path| File.directory?(path) }
     end
+
+    def project_paths
+      %w(lib).map{|dir| File.join(root_path, dir) }.select{|path| File.directory?(path)}
+    end
+
     # 
     class DefaultSet
       def process(config)

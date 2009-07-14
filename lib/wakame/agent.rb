@@ -199,26 +199,29 @@ module Wakame
       end
 
       EM.defer(proc {
-                 return begin
-                          Wakame.log.debug("#{self.class}: Started to run the actor: #{actor.class}, token=#{request[:token]}")
-                          agent.publish_to('agent_event', Packets::ActorResponse.new(agent, request[:token], Actor::STATUS_RUNNING).marshal)
-                          if request[:args].nil?
-                            actor.send(action)
-                          else
-                            actor.send(action, *request[:args])
-                          end
-                          Wakame.log.debug("#{self.class}: Finished to run the actor: #{actor.class}, token=#{request[:token]}")
-                        rescue => e
-                          Wakame.log.error("#{self.class}: Failed the actor: #{actor.class}, token=#{request[:token]}")
-                          Wakame.log.error(e)
-                          e
-                        end
+                 begin
+                   Wakame.log.debug("#{self.class}: Started to run the actor: #{actor.class}, token=#{request[:token]}")
+                   agent.publish_to('agent_event', Packets::ActorResponse.new(agent, request[:token], Actor::STATUS_RUNNING).marshal)
+                   if request[:args].nil?
+                     actor.send(action)
+                   else
+                     actor.send(action, *request[:args])
+                   end
+                   Wakame.log.debug("#{self.class}: Finished to run the actor: #{actor.class}, token=#{request[:token]}")
+                   actor.return_value
+                 rescue => e
+                   Wakame.log.error("#{self.class}: Failed the actor: #{actor.class}, token=#{request[:token]}")
+                   Wakame.log.error(e)
+                   e
+                 end
                }, proc { |res|
                  status = Actor::STATUS_SUCCESS
                  if res.is_a?(Exception)
                    status = Actor::STATUS_FAILED
+                 else
+                   opts = {:return_value=>res}
                  end
-                 agent.publish_to('agent_event', Packets::ActorResponse.new(self.agent, request[:token], status).marshal)
+                 agent.publish_to('agent_event', Packets::ActorResponse.new(self.agent, request[:token], status, opts).marshal)
                })
     end
   end

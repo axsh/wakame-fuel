@@ -220,11 +220,12 @@ module Wakame
     end
 
     class ActorComplete < Base
-      attr_reader :agent_id, :token, :status
-      def initialize(agent_id, token, status)
+      attr_reader :agent_id, :token, :status, :return_value
+      def initialize(agent_id, token, status, return_value)
         @agent_id = agent_id
         @token = token
         @status = status
+        @return_value = return_value
       end
     end
 

@@ -28,10 +28,7 @@ module Wakame
 
         flush_subactions()
 
-        if @service_instance.status == Service::STATUS_ONLINE
-          @service_instance.property.stop(@service_instance, self)
-        else
-        end
+        @service_instance.property.stop(@service_instance, self)
         
         EM.barrier {
           service_cluster.destroy(@service_instance.instance_id)

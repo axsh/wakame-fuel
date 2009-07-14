@@ -20,6 +20,7 @@ class WakameGenerator < RubiGen::Base
     config/environments
     lib
     tasks
+    tmp
     vendor
   )
 

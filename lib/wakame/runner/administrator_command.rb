@@ -223,7 +223,7 @@ class Wakame::Cli::Subcommand::Status
   STATUS_TMPL = <<__E__
 Cluster : <%= @service_cluster["name"].to_s %> (<%= @service_cluster["status"].to_s %>)
 <%- @service_cluster["properties"].each { |prop, v| -%>
-  <%= v["type"].to_s %> : <current=<%= v["instance_count"] %> min=<%= v["min_instances"] %>, max=<%= v["max_instances"] %>>
+  <%= v["type"].to_s %> : <current=<%= v["instance_count"] %> min=<%= v["min_instances"] %>, max=<%= v["max_instances"] %><%= v["require_agent"] ? "" : ", AgentLess" %>>
   <%- v["instances"].each { |id|
          svc_inst = @service_cluster["instances"][id]
   -%>
@@ -244,7 +244,7 @@ Instances :
 
 Agents :
   <%- @agent_monitor["registered"].each { |a| -%>
-  <%= a["agent_id"] %> : <%= a["attr"]["local_ipv4"] %>, <%= a["attr"]["public_ipv4"] %> load=<%= a["attr"]["uptime"] %>, <%= (Time.now - Time.parse(a["last_ping_at"])).to_i %> sec(s) <%= a["root_path"] %>(<%= a["status"] %>)
+  <%= a["agent_id"] %> : <%= a["attr"]["local_ipv4"] %>, <%= a["attr"]["public_ipv4"] %> load=<%= a["attr"]["uptime"] %>, <%= (Time.now - Time.parse(a["last_ping_at"])).to_i %> sec(s), placement=<%= a["attr"]["availability_zone"] %><%= a["root_path"] %> (<%= a["status"] %>)
     <%- if !a["services"].nil? && a["services"].size > 0 && !@service_cluster["instances"].empty? -%>
     Services (<%= a["services"].size %>): <%= a["services"].collect{|id| @service_cluster["instances"][id]["property"] unless @service_cluster["instances"][id].nil? }.join(', ') %>
    <%- end -%>
@@ -407,6 +407,31 @@ class Wakame::Cli::Subcommand::StopService
       #opts.on("-n NUMBER", "--number NUMBER"){|i| @options[:query] += "&num=#{i}"}
     }
     cmd = create_parser(args, &blk)
+    @options
+  end
+
+  def run(options)
+    res = uri(options)
+    res
+  end
+
+  def print_result(res)
+    p res[0]["message"]
+  end
+end
+
+class Wakame::Cli::Subcommand::MigrateService
+    @options = {}
+    @options[:query] = ""
+    parser = create_parser(args) {|opts|
+      opts.banner = "Usage: migrate_service [options] \"Service ID\""
+      opts.separator ""
+      opts.separator "options:"
+      opts.on("-a Agent ID", "--agent Agent ID"){ |i| @options[:query] += "&agent_id=#{i}"}
+    }
+
+    service_id = args.shift || abort("[ERROR]: Service ID was not given")
+    @options[:query] += "&service_id=#{service_id}"
     @options
   end
 

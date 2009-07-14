@@ -1,10 +1,6 @@
-
-require 'wakame/actions/util'
-
 module Wakame
   module Actions
     class PropagateInstances < Action
-      include Actions::Util
 
       def initialize(svc_prop, propagate_num=0)
         raise ArgumentError unless svc_prop.is_a?(Wakame::Service::Resource)
@@ -47,53 +43,26 @@ module Wakame
         }
 
         svc_to_start.each { |svc|
+          target_agent = nil
           if svc.property.require_agent
             # Try to arrange agent from existing agent pool.
             if svc.agent.nil?
               EM.barrier {
-                arrange_agent(svc)
+                agent_monitor.each_online { |ag|
+                  if !ag.has_service_type?(@svc_prop.class) && @svc_prop.vm_spec.current.satisfy?(ag)
+                    target_agent = ag
+                    break
+                  end
+                }
               }
             end
-            
-            # If the agent pool is empty, will start a new VM slice.
-            if svc.agent.nil?
-              inst_id = start_instance(master.attr[:ami_id], @svc_prop.vm_spec.current.attrs)
-              EM.barrier {
-                arrange_agent(svc, inst_id)
-              }
-            end
-            
-            if svc.agent.nil?
-              Wakame.log.error("Failed to arrange the agent #{svc.instance_id} (#{svc.property.class})")
-              raise "Failed to arrange the agent #{@svc_prop.class}"
-            end
+
+            Wakame.log.debug("#{self.class}: arranged agent for #{svc.resource.class}: #{target_agent ? target_agent.agent_id : nil}")
           end
 
-          trigger_action(StartService.new(svc))
+          trigger_action(StartService.new(svc, target_agent))
         }
         flush_subactions
-      end
-
-      private
-      # Arrange an agent for the paticular service instance which does not have agent.
-      def arrange_agent(svc, vm_inst_id=nil)
-        agent = nil
-        if vm_inst_id
-          agent = agent_monitor.registered_agents[vm_inst_id]
-          raise "Cound not find the specified VM instance \"#{vm_inst_id}\"" if agent.nil?
-          raise "Same service is running" if agent.has_service_type? @svc_prop.class
-        else
-          agent_monitor.each_online { |ag|
-            Wakame.log.debug "has_service_type?(#{@svc_prop.class}): #{ag.has_service_type?(@svc_prop.class)}"
-            if test_agent_candidate(@svc_prop, ag)
-              agent = ag
-              break
-            end
-          }
-        end
-        if agent
-          svc.bind_agent(agent)
-        end
       end
 
     end
