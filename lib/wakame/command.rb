@@ -17,8 +17,8 @@ module Wakame
       }
     end
 
-    def initialize(option)
-      @options = option
+    def options=(path)
+      @options = path
     end
 
     def parse(args)
