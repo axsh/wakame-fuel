@@ -1,12 +1,12 @@
 
 require 'uri'
+require 'cgi'
 require 'ext/uri'
 require 'optparse'
 require 'net/http'
 require 'json'
 require 'erb'
 require 'wakame'
-require 'pp'
 
 #require 'openssl'
 #require 'base64'
@@ -54,6 +54,7 @@ module Wakame
 	else
 	  get_params = req[:command_server_uri] + req[:query_string]
 	end
+p get_params
         begin
           res = subcommand.run(get_params)
           res = JSON.parse(res)
@@ -63,9 +64,19 @@ module Wakame
         end
 
         unless req[:json_print].nil?
+	  require 'pp' 
           pp res
         else
-          subcommand.print_result(res)
+          case res[0]["status"]
+          when 404
+            p "Command Error: #{res[0]["message"]}"
+          when 403
+            p "Authentication Error: #{res[0]["message"]}"
+          when 500
+            p "Server Error: #{res[0]["message"]}"
+          else
+	    subcommand.print_result(res)
+          end
         end
       end
       
@@ -94,10 +105,11 @@ module Wakame
         fail "No such sub command: #{@subcmd}" if subcommand.nil?
 
         options = subcommand.parse(args)
+	query_string = CGI.escape('action') + "=" + CGI.escape(@subcmd) + options[:query].to_s
         request_params = {
           :command => subcommand,
           :command_server_uri => @options[:command_server_uri] + "?",
-	  :query_string => "action=" + @subcmd + options[:query].to_s,
+	  :query_string => query_string,
           :json_print => options[:json_print]
         }
 
@@ -106,7 +118,7 @@ module Wakame
 
       def authentication(uri, query)
         key = @public_key
-	req = query + "&timestamp=#{Time.now.utc.strftime("%Y%m%dT%H%M%SZ")}"
+	req = query + "&" + CGI.escape('timestamp') + "=" + CGI.escape(Time.now.utc.strftime("%Y%m%dT%H%M%SZ"))
 	hash = OpenSSL::HMAC::digest(OpenSSL::Digest::SHA256.new, key, req)
 	sign = uri.to_s + req.to_s + "&signature=" + Base64.encode64(hash).gsub(/\+/, "").gsub(/\n/, "").to_s
 	sign
@@ -165,16 +177,12 @@ class Wakame::Cli::Subcommand::LaunchCluster
   #command_name = 'launch_cluster'
   def parse(args)
     blk = Proc.new {|opts|
-      #opts.version = '2009.06'
       opts.banner = "Usage: launch_cluster [options]"
       opts.separator ""
       opts.separator "options:"
     }
     cmd = create_parser(args, &blk)
     options = {}
-    unless cmd.version.nil?
-      options[:query] = "&version=#{cmd.version}"
-    end
     options
   end
 
@@ -193,17 +201,12 @@ class Wakame::Cli::Subcommand::ShutdownCluster
 
   def parse(args)
     blk = Proc.new {|opts|
-      #opts.version = '2009.06'
       opts.banner = "Usage: shutdown_cluster"
       opts.separator ""
       opts.separator "options:"
     }
     cmd = create_parser(args, &blk)
-
     options = {}
-    unless cmd.version.nil?
-      options[:query] = "&version=#{cmd.version}"
-    end
     options
   end
 
@@ -266,17 +269,12 @@ __E__
   def parse(args)
     options = {}
     blk = Proc.new {|opts|
-      #opts.version = "2009.06"
       opts.banner = "Usage: status [options]"
       opts.separator ""
       opts.separator "options:"
       opts.on("--dump"){|j| options[:json_print] = "yes" }
     }
     cmd = create_parser(args, &blk)
-
-    unless cmd.version.nil?
-      options[:query] = "&version=#{cmd.version}"
-    end
     options
   end
 
@@ -319,18 +317,12 @@ __E__
   def parse(args)
     options = {}
     blk = Proc.new {|opts|
-      #opts.version = '2009.06'
       opts.banner = "Usage: action_status"
       opts.separator ""
       opts.separator "options:"
       opts.on("--dump"){|j| options[:json_print] = "yes" }
     }
     cmd = create_parser(args, &blk)
-
-    #options = ""
-    unless cmd.version.nil?
-      options[:query] = "&version=#{cmd.version}"
-    end
     options
   end
 
@@ -365,21 +357,18 @@ class Wakame::Cli::Subcommand::PropagateService
   include Wakame::Cli::Subcommand
 
   def parse(args)
-    @options = {}
-    @options[:query] = ""
+    params = {}
     blk = Proc.new {|opts|
-      #opts.version = '2009.06'
       opts.banner = "Usage: propagate_service"
       opts.separator ""
       opts.separator "options:"
-      opts.on("-s SERVICE_NAME", "--service SERVICE_NAME"){|str| @options[:query] += "&service=#{str}"}
-      opts.on("-n NUMBER", "--number NUMBER"){|i| @options[:query] += "&num=#{i}"}
+      opts.on("-s SERVICE_NAME", "--service SERVICE_NAME"){|str| params[:service] = str}
+      opts.on("-n NUMBER", "--number NUMBER"){|i| params["num"] = i}
     }
     cmd = create_parser(args, &blk)
-    unless cmd.version.nil?
-      @options[:query] += "&version=#{cmd.version}"
-    end
-    @options
+    options = {}
+    options[:query] = "&" + params.collect{|k,v| "#{CGI.escape(k.to_s)}=#{CGI.escape(v)}"}.join("&")
+    options
   end
 
   def run(options)
@@ -396,18 +385,19 @@ class Wakame::Cli::Subcommand::StopService
   include Wakame::Cli::Subcommand
 
   def parse(args)
-    @options = {}
-    @options[:query] = ""
+    params = {}
     blk = Proc.new {|opts|
       opts.banner = "Usage: stop_service"
       opts.separator ""
       opts.separator "options:"
-      opts.on("-i INSTANCE_ID", "--instances INSTANCE_ID"){|str| @options[:query] += "&instances=#{str}"}
-      opts.on("-s SERVICE_NAME", "--service SERVICE_NAME"){|str| @options[:query] += "&service=#{str}"}
+      opts.on("-i INSTANCE_ID", "--instances INSTANCE_ID"){|str| params[:instances] = str}
+      opts.on("-s SERVICE_NAME", "--service SERVICE_NAME"){|str| params[:service] = str}
       #opts.on("-n NUMBER", "--number NUMBER"){|i| @options[:query] += "&num=#{i}"}
     }
     cmd = create_parser(args, &blk)
-    @options
+    options = {}
+    options[:query] = "&" + params.collect{|k,v| CGI.escape(k.to_s) + "=" + CGI.escape(v)}.join("&")
+    options
   end
 
   def run(options)
@@ -421,18 +411,20 @@ class Wakame::Cli::Subcommand::StopService
 end
 
 class Wakame::Cli::Subcommand::MigrateService
-    @options = {}
-    @options[:query] = ""
+  def parse(args)
+    params = {}
     parser = create_parser(args) {|opts|
       opts.banner = "Usage: migrate_service [options] \"Service ID\""
       opts.separator ""
       opts.separator "options:"
-      opts.on("-a Agent ID", "--agent Agent ID"){ |i| @options[:query] += "&agent_id=#{i}"}
+      opts.on("-a Agent ID", "--agent Agent ID"){ |i| params[:id] = i}
     }
 
     service_id = args.shift || abort("[ERROR]: Service ID was not given")
-    @options[:query] += "&service_id=#{service_id}"
-    @options
+    params["service_id"] = service_id
+    options = {}
+    options[:query] = "&" + params.collect{|k,v| "#{CGI.escape(k.to_s)}=#{CGI.escape(v)}"}.join("&")
+    options
   end
 
   def run(options)
