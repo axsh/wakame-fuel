@@ -2,14 +2,15 @@
 require 'uri'
 require 'ext/uri'
 require 'optparse'
-
 require 'net/http'
 require 'json'
-
 require 'erb'
-
 require 'wakame'
 require 'pp'
+
+#require 'openssl'
+#require 'base64'
+
 $root_constants = Module.constants
 
 module Wakame
@@ -22,6 +23,7 @@ module Wakame
 	@options = {
           :command_server_uri => Wakame.config.http_command_server_uri
         }
+	@public_key = "1234567890"
       end
       
       def parse(args=@args)
@@ -46,7 +48,12 @@ module Wakame
       def run
         req = parse
         subcommand = req[:command]
-        get_params = req[:command_server_uri]
+
+	if Wakame.config.enable_authentication == "true"
+	  get_params = authentication(req[:command_server_uri], req[:query_string])
+	else
+	  get_params = req[:command_server_uri] + req[:query_string]
+	end
         begin
           res = subcommand.run(get_params)
           res = JSON.parse(res)
@@ -89,11 +96,20 @@ module Wakame
         options = subcommand.parse(args)
         request_params = {
           :command => subcommand,
-          :command_server_uri => @options[:command_server_uri] + "?action=" + @subcmd + options[:query].to_s,
+          :command_server_uri => @options[:command_server_uri] + "?",
+	  :query_string => "action=" + @subcmd + options[:query].to_s,
           :json_print => options[:json_print]
         }
 
         request_params
+      end
+
+      def authentication(uri, query)
+        key = @public_key
+	req = query + "&timestamp=#{Time.now.utc.strftime("%Y%m%dT%H%M%SZ")}"
+	hash = OpenSSL::HMAC::digest(OpenSSL::Digest::SHA256.new, key, req)
+	sign = uri.to_s + req.to_s + "&signature=" + Base64.encode64(hash).gsub(/\+/, "").gsub(/\n/, "").to_s
+	sign
       end
     end
   end
@@ -230,7 +246,7 @@ Agents :
   <%- @agent_monitor["registered"].each { |a| -%>
   <%= a["agent_id"] %> : <%= a["attr"]["local_ipv4"] %>, <%= a["attr"]["public_ipv4"] %> load=<%= a["attr"]["uptime"] %>, <%= (Time.now - Time.parse(a["last_ping_at"])).to_i %> sec(s) <%= a["root_path"] %>(<%= a["status"] %>)
     <%- if !a["services"].nil? && a["services"].size > 0 && !@service_cluster["instances"].empty? -%>
-    Services (<%= a["services"].size %>): <%= a["services"].collect{|id| @service_cluster["instances"][id]["property"] }.join(', ') %>
+    Services (<%= a["services"].size %>): <%= a["services"].collect{|id| @service_cluster["instances"][id]["property"] unless @service_cluster["instances"][id].nil? }.join(', ') %>
    <%- end -%>
   <%- } -%>
 <%- end -%>
@@ -271,10 +287,13 @@ __E__
 
   def print_result(res)
     require 'time'
-
-    @service_cluster = res[1]["data"]["service_cluster"]
-    @agent_monitor = res[1]["data"]["agent_monitor"]
-    puts ERB.new(STATUS_TMPL, nil, '-').result(binding)
+    if res[1]["data"].nil?
+      p res[0]["message"]
+    else
+      @service_cluster = res[1]["data"]["service_cluster"]
+      @agent_monitor = res[1]["data"]["agent_monitor"]
+      puts ERB.new(STATUS_TMPL, nil, '-').result(binding)
+    end
   end
 
   private
@@ -321,10 +340,12 @@ __E__
   end
 
   def print_result(res)
-    unless res[1].nil?
-    @status = res[1]['data']
+    if res[1]["data"].nil?
+      p res[0]["message"]
+    else
+      @status = res[1]['data']
+      puts ERB.new(ACTION_STATUS_TMPL, nil, '-').result(binding)
     end
-    puts ERB.new(ACTION_STATUS_TMPL, nil, '-').result(binding)
   end
 
   private
@@ -358,6 +379,34 @@ class Wakame::Cli::Subcommand::PropagateService
     unless cmd.version.nil?
       @options[:query] += "&version=#{cmd.version}"
     end
+    @options
+  end
+
+  def run(options)
+    res = uri(options)
+    res
+  end
+
+  def print_result(res)
+    p res[0]["message"]
+  end
+end
+
+class Wakame::Cli::Subcommand::StopService
+  include Wakame::Cli::Subcommand
+
+  def parse(args)
+    @options = {}
+    @options[:query] = ""
+    blk = Proc.new {|opts|
+      opts.banner = "Usage: stop_service"
+      opts.separator ""
+      opts.separator "options:"
+      opts.on("-i INSTANCE_ID", "--instances INSTANCE_ID"){|str| @options[:query] += "&instances=#{str}"}
+      opts.on("-s SERVICE_NAME", "--service SERVICE_NAME"){|str| @options[:query] += "&service=#{str}"}
+      #opts.on("-n NUMBER", "--number NUMBER"){|i| @options[:query] += "&num=#{i}"}
+    }
+    cmd = create_parser(args, &blk)
     @options
   end
 
