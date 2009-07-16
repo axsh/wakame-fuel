@@ -54,7 +54,6 @@ module Wakame
 	else
 	  get_params = req[:command_server_uri] + req[:query_string]
 	end
-p get_params
         begin
           res = subcommand.run(get_params)
           res = JSON.parse(res)
@@ -392,7 +391,7 @@ class Wakame::Cli::Subcommand::StopService
       opts.separator "options:"
       opts.on("-i INSTANCE_ID", "--instances INSTANCE_ID"){|str| params[:instances] = str}
       opts.on("-s SERVICE_NAME", "--service SERVICE_NAME"){|str| params[:service] = str}
-      #opts.on("-n NUMBER", "--number NUMBER"){|i| @options[:query] += "&num=#{i}"}
+      opts.on("-a AGENT_ID", "--agent AGENT_ID"){|i| params[:agent_id] = i}
     }
     cmd = create_parser(args, &blk)
     options = {}
@@ -411,19 +410,49 @@ class Wakame::Cli::Subcommand::StopService
 end
 
 class Wakame::Cli::Subcommand::MigrateService
+  include Wakame::Cli::Subcommand
   def parse(args)
     params = {}
-    parser = create_parser(args) {|opts|
+#    parser = create_parser(args) {|opts|
+     blk = Proc.new {|opts|
       opts.banner = "Usage: migrate_service [options] \"Service ID\""
       opts.separator ""
       opts.separator "options:"
-      opts.on("-a Agent ID", "--agent Agent ID"){ |i| params[:id] = i}
+      opts.on("-a Agent ID", "--agent Agent ID"){ |i| params[:agent_id] = i}
     }
-
+    cmd = create_parser(args, &blk)
     service_id = args.shift || abort("[ERROR]: Service ID was not given")
-    params["service_id"] = service_id
+    params[:service_id] = service_id
     options = {}
     options[:query] = "&" + params.collect{|k,v| "#{CGI.escape(k.to_s)}=#{CGI.escape(v)}"}.join("&")
+    options
+  end
+
+  def run(options)
+    res = uri(options)
+    res
+  end
+
+  def print_result(res)
+    p res[0]["message"]
+  end
+end
+
+class Wakame::Cli::Subcommand::ShutdownVm
+  include Wakame::Cli::Subcommand
+
+  def parse(args)
+    params = {}
+    blk = Proc.new {|opts|
+      opts.banner = "Usage: shutdown_vm"
+      opts.separator ""
+      opts.separator "options:"
+      opts.on("-a AGENT_ID", "--agent AGENT_ID"){|i| params[:agent_id] = i}
+      opts.on("-f", "--force"){|str| params[:force] = "yes"}
+    }
+    cmd = create_parser(args, &blk)
+    options = {}
+    options[:query] = "&" + params.collect{|k,v| CGI.escape(k.to_s) + "=" + CGI.escape(v)}.join("&")
     options
   end
 
