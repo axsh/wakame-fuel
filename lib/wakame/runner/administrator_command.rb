@@ -413,7 +413,6 @@ class Wakame::Cli::Subcommand::MigrateService
   include Wakame::Cli::Subcommand
   def parse(args)
     params = {}
-#    parser = create_parser(args) {|opts|
      blk = Proc.new {|opts|
       opts.banner = "Usage: migrate_service [options] \"Service ID\""
       opts.separator ""
@@ -444,15 +443,40 @@ class Wakame::Cli::Subcommand::ShutdownVm
   def parse(args)
     params = {}
     blk = Proc.new {|opts|
-      opts.banner = "Usage: shutdown_vm"
+      opts.banner = "Usage: shutdown_vm [options] \"Agent ID\""
       opts.separator ""
       opts.separator "options:"
-      opts.on("-a AGENT_ID", "--agent AGENT_ID"){|i| params[:agent_id] = i}
       opts.on("-f", "--force"){|str| params[:force] = "yes"}
     }
     cmd = create_parser(args, &blk)
+    agent_id = args.shift || abort("[ERROR]: Agent ID was not given")
+    params[:agent_id] = agent_id
     options = {}
     options[:query] = "&" + params.collect{|k,v| CGI.escape(k.to_s) + "=" + CGI.escape(v)}.join("&")
+    options
+  end
+
+  def run(options)
+    res = uri(options)
+    res
+  end
+
+  def print_result(res)
+    p res[0]["message"]
+  end
+end
+
+class Wakame::Cli::Subcommand::LaunchVm
+  include Wakame::Cli::Subcommand
+
+  def parse(args)
+    blk = Proc.new {|opts|
+      opts.banner = "Usage: launch_vm"
+      opts.separator ""
+      opts.separator "options:"
+    }
+    cmd = create_parser(args, &blk)
+    options = {}
     options
   end
 
