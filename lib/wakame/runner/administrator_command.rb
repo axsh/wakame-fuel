@@ -386,11 +386,11 @@ class Wakame::Cli::Subcommand::StopService
   def parse(args)
     params = {}
     blk = Proc.new {|opts|
-      opts.banner = "Usage: stop_service"
+      opts.banner = "Usage: stop_service [options] \"Service ID\""
       opts.separator ""
       opts.separator "options:"
-      opts.on("-i INSTANCE_ID", "--instances INSTANCE_ID"){|str| params[:instances] = str}
-      opts.on("-s SERVICE_NAME", "--service SERVICE_NAME"){|str| params[:service] = str}
+      opts.on("-i INSTANCE_ID", "--instance INSTANCE_ID"){|i| params[:service_id] = i}
+      opts.on("-s SERVICE_NAME", "--service SERVICE_NAME"){|str| params[:service_name] = str}
       opts.on("-a AGENT_ID", "--agent AGENT_ID"){|i| params[:agent_id] = i}
     }
     cmd = create_parser(args, &blk)
