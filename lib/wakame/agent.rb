@@ -85,6 +85,7 @@ module Wakame
       @actor_registry.register(Actor::ServiceMonitor.new, '/service_monitor')
       @actor_registry.register(Actor::Daemon.new, '/daemon')
       @actor_registry.register(Actor::System.new, '/system')
+      @actor_registry.register(Actor::MySQL.new, '/mysql')
       @actor_registry.actors.each { |path, actor|
 #        actor.setup(path)
         actor.agent = self
@@ -95,6 +96,7 @@ module Wakame
       require 'wakame/actor/service_monitor'
       require 'wakame/actor/daemon'
       require 'wakame/actor/system'
+      require 'wakame/actor/mysql'
     end
 
 
