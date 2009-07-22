@@ -13,11 +13,13 @@ class WebCluster < Wakame::Service::ServiceCluster
       c.add_resource(Apache_APP.new)
       c.add_resource(Apache_LB.new)
       c.add_resource(MySQL_Master.new)
+      #c.add_resource(MySQL_Slave.new)
 
       c.set_dependency(Apache_LB, Ec2ElasticIp)
       c.set_dependency(Apache_WWW, Apache_LB)
       c.set_dependency(Apache_APP, Apache_LB)
       c.set_dependency(MySQL_Master, Apache_APP)
+      #c.set_dependency(MySQL_Master, MySQL_Slave)
     }
 
     define_rule { |r|
@@ -60,5 +62,39 @@ class WebCluster < Wakame::Service::ServiceCluster
       blk.call(n)
     }
   end
+
+  def each_mysql_master(&blk)
+    each_instance(MySQL_Master) { |n|
+      blk.call(n)
+    }
+  end
+
+  def fetch_mysql_master_ip
+    mysql_master_ip = nil
+    each_mysql_master do |mysql|
+      mysql_master_ip = mysql.agent.agent_ip
+    end
+    mysql_master_ip
+  end
+
+  def each_mysql_slave(&blk)
+    each_instance(MySQL_Slave) { |n|
+      blk.call(n)
+    }
+  end
+
+  def fetch_mysql_slave_ip
+    mysql_slave_ips = []
+    each_mysql_slave do |mysql|
+      mysql_slave_ips << mysql.agent.agent_ip
+    end
+    mysql_master_ips
+  end
+
+#  def each_postgresql(&blk)
+#    each_instance(PostgreSQL_Master) { |n|
+#      blk.call(n)
+#    }
+#  end
 
 end
