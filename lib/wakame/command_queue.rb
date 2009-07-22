@@ -3,6 +3,8 @@ require 'uri'
 require 'thin'
 require 'thread'
 require 'json'
+#require 'openssl'
+#require 'base64'
 
 module Wakame
   class CommandQueue
@@ -58,31 +60,47 @@ module Wakame
     def call(env)
 Wakame.log.debug EM.reactor_thread?
       req = Rack::Request.new(env)
-      request = req.get?()
-        if request.to_s == "true"
-          path = req.params()
-          cname = path["action"].split("_")
-          begin
-            cmd = eval("Command::#{(cname.collect{|c| c.capitalize}).join}").new(path)
-            command = @command_queue.send_cmd(cmd)
-
-            if command.is_a?(Exception)
-              status = 500
-
-              body = json_encode(status, command.message)
-            else
-              status = 200
-              body = json_encode(status, "OK", command)
-            end
-          rescue => e
-            status = 404
-            body = json_encode(status, e)
-          end
-        else
-          status = 403
-          body = json_encode(status, "Forbidden")
+      begin
+        unless req.get?().to_s == "true"
+          raise "No Support Response"
         end
+        query = req.query_string()
+        params = req.params()
+        if Wakame.config.enable_authentication == "true"
+          auth = authentication(params, query)
+        end
+        cname = params["action"].split("_")
+        begin
+         cmd = eval("Command::#{(cname.collect{|c| c.capitalize}).join}").new 
+	 cmd.options = params
+         command = @command_queue.send_cmd(cmd)
+
+         if command.is_a?(Exception)
+           status = 500
+           body = json_encode(status, command.message)
+         else
+           status = 200
+           body = json_encode(status, "OK", command)
+         end
+        rescue => e
+           status = 404
+           body = json_encode(status, e)
+        end
+      rescue => e
+        status = 403
+        body = json_encode(status, e)
+      end
       [ status, {'Content-Type' => 'text/javascript+json'}, body]
+    end
+
+    def authentication(path, query)
+      key = Wakame.config.private_key
+      req = query.split(/\&signature\=/)
+      hash = OpenSSL::HMAC::digest(OpenSSL::Digest::SHA256.new, key, req[0])
+      hmac = Base64.encode64(hash).gsub(/\+/, "").gsub(/\n/, "").to_s
+      if hmac != path["signature"]
+         raise "Authentication failed"
+      end
     end
 
     def json_encode(status, message, data=nil)
