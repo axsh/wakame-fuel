@@ -2,6 +2,8 @@
 class MySQL_Slave < Wakame::Service::Resource
 
   def_attribute :duplicable, true
+  def_attribute :max_instances, {:default=>5}
+
   def_attribute :mysqld_basedir, '/home/wakame/mysql'
   def_attribute :mysqld_port, 3307
 
@@ -76,9 +78,6 @@ class MySQL_Slave < Wakame::Service::Resource
   end
   
   def stop(svc, action)
-    # serivce-offline phase
-    # -stop
-    # - umount
     cond = ConditionalWait.new { |c|
       c.wait_event(Wakame::Event::ServiceOffline) { |event|
         event.instance_id == svc.instance_id
@@ -91,37 +90,28 @@ class MySQL_Slave < Wakame::Service::Resource
     }
     cond.wait
 
-    # after service-offline phase
-    # after service-offline phase
-    # - volume_detach
     require 'right_aws'
     ec2 = RightAws::Ec2.new(Wakame.config.aws_access_key, Wakame.config.aws_secret_key)
-
-    Wakame.log.debug("ec2.describe_volumes.each...|||")
     ec2.describe_volumes.each do |volume|
-      Wakame.log.debug("ec2.describe_volumes.each...>>>>>")
-      Wakame.log.debug(volume)
       next unless volume[:aws_instance_id] == svc.agent.agent_id && volume[:aws_device] == self.ebs_device
 
       @ebs_volume = volume[:aws_id]
-      Wakame.log.debug("@ebs_volume :  #{@ebs_volume}")
 
-      res = ec2.describe_volumes([@ebs_volume])[0]
-      Wakame.log.debug("MySQL_Slave.stop>>>>> describe_volumes")
-      Wakame.log.debug(res)
+      # detach volume
       res = ec2.detach_volume(@ebs_volume)
-      Wakame.log.debug("MySQL_Slave.stop>>>>> detach_volume")
-      Wakame.log.debug(res)
-
+      Wakame.log.debug("detach_volume : #{res.inspect}")
+      # waiting for available
       cond = ConditionalWait.new { |c|
         c.poll {
           res = ec2.describe_volumes([@ebs_volume])[0]
-          Wakame.log.debug("MySQL_Slave.stop>>>>> describe_volume")
-          Wakame.log.debug(res)
           res[:aws_status] == 'available'
         }
       }
       cond.wait
+
+      # delete mysql-slave snapshot volume
+      res = ec2.delete_volume(@ebs_volume)
+      Wakame.log.debug("delete_volume : #{res.inspect}")
     end
 
     # unregister

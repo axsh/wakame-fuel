@@ -99,9 +99,6 @@ class MySQL_Master < Wakame::Service::Resource
   end
   
   def stop(svc, action)
-    # service-offline phase
-    # - stop
-    # - umount
     cond = ConditionalWait.new { |c|
       c.wait_event(Wakame::Event::ServiceOffline) { |event|
         event.instance_id == svc.instance_id
@@ -114,20 +111,6 @@ class MySQL_Master < Wakame::Service::Resource
     }
     cond.wait
 
-    # after service-offline phase
-    # - volume_detach
-#    require 'right_aws'
-#    ec2 = RightAws::Ec2.new(Wakame.config.aws_access_key, Wakame.config.aws_secret_key)
-#    ec2.detach_volume(self.ebs_volume)
-#    cond = ConditionalWait.new { |c|
-#      c.poll {
-#        res1 = ec2.describe_volumes([self.ebs_volume])[0]
-#        res1[:aws_status] == 'available'
-#      }
-#    }
-#    cond.wait
-
-    # unregister
     action.actor_request(svc.agent.agent_id,
                          '/service_monitor/unregister',
                          svc.instance_id).request
