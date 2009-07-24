@@ -9,33 +9,28 @@ class Wakame::Actor::System
   def sync(count = 1)
     count.to_i.times do |i|
       Wakame.log.debug("Wakame::Actor::System.sync #{i + 1}/#{count}")
-      system("/bin/sync")
+      Wakame::Util.exec("/bin/sync")
     end
   end
 
   def mount(dev, path, opts={})
-    16.times do |i|
-      break if File.blockdev?(dev)
-      Wakame.log.debug("Wakame::Actor::System.mount sync=#{i}")
-      self.sync
-      sleep 1.0
-    end
+    Wakame.log.debug("Wakame::Actor::System.mount")
+    cond = ConditionalWait.new { |c|
+      c.poll {
+        self.sync
+        File.blockdev?(dev)
+      }
+    }
+    cond.wait
 
     raise "#{dev} does not exist or not block device." unless File.blockdev?(dev)
-    raise "#{path} does not exist or not directory." unless File.directory?(path)
+    raise "#{path} does not exist or not directory."   unless File.directory?(path)
     
     mount_point_dev=`/bin/df "#{path}" | /usr/bin/awk 'NR==2 {print $1}'`.strip
-
-    #mount_point_dev=`/bin/mount | /usr/bin/awk '$3==path {print $1}' path="#{path}"`.strip
     Wakame.log.debug("#{mount_point_dev}: #{dev}, /bin/mount | awk '$3==path {print $1}' path=\"#{path}\"")
     if mount_point_dev != dev
       Wakame.log.debug("Mounting volume: #{dev} as #{path} (with options: #{opts})")
       Wakame::Util.exec("/bin/mount -o #{mount_opts(opts)} '#{Shellwords.shellescape(dev)}' '#{Shellwords.shellescape(path)}'")
-      # sync
-#      3.times do |i|
-#        system("/bin/sync")
-#        sleep 1.0
-#      end
     else
       Wakame.log.debug("Mounting EBS volume: #{dev} as #{path} (with options: #{opts})")
     end
