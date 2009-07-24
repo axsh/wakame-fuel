@@ -29,7 +29,7 @@ module Wakame
       STATUS_UNKNOWN = 2
       STATUS_TIMEOUT = 3
       
-      attr_accessor :agent_id, :uptime, :last_ping_at, :attr, :services, :root_path, :lock_queue
+      attr_accessor :agent_id, :uptime, :last_ping_at, :attr, :services, :root_path
       thread_immutable_methods :agent_id=, :uptime=, :last_ping_at=, :attr=, :services=, :root_path=
 
       def initialize(agent_id=nil)
@@ -38,7 +38,6 @@ module Wakame
         @agent_id = agent_id
         @last_ping_at = Time.now
         @status = STATUS_ONLINE
-        @lock_queue = LockQueue.new(self)
       end
 
       def agent_ip
