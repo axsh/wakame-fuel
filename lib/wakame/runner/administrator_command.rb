@@ -489,3 +489,95 @@ class Wakame::Cli::Subcommand::LaunchVm
     p res[0]["message"]
   end
 end
+
+class Wakame::Cli::Subcommand::ReloadService
+  include Wakame::Cli::Subcommand
+
+  def parse(args)
+    params = {}
+    blk = Proc.new {|opts|
+      opts.banner = "Usage: ReloadService [options] \"Service NAME\""
+      opts.separator ""
+      opts.separator "options:"
+    }
+    cmd = create_parser(args, &blk)
+    service_name = args.shift || abort("[ERROR]: Service NAME was not given")
+    params[:service_name] = service_name
+    options = {}
+    options[:query] = "&" + params.collect{|k,v| CGI.escape(k.to_s) + "=" + CGI.escape(v)}.join("&")
+    options
+  end
+
+  def run(options)
+    res = uri(options)
+    res
+  end
+
+  def print_result(res)
+    p res[0]["message"]
+  end
+end
+
+class Wakame::Cli::Subcommand::AgentStatus
+  include Wakame::Cli::Subcommand
+
+STATUS_TMPL = <<__E__
+Agent :<%= @agent["agent_id"]%> load=<%= @agent["attr"]["uptime"]%>, <%= (Time.now - Time.parse(@agent["last_ping_at"])).to_i%> sec(s), placement=<%= @agent["attr"]["availability_zone"]%><%= @agent["root_path"] %> (<%= trans_svc_status(@agent["status"]) %>)
+  Instance ID : <%= @agent["attr"]["instance_id"]%>
+  AMI ID : <%= @agent["attr"]["ami_id"]%>
+  Public DNS Name : <%= @agent["attr"]["public_hostname"]%>
+  Private DNS Name : <%= @agent["attr"]["local_hostname"]%>
+  Instance Type : <%= @agent["attr"]["instance_type"]%>
+  Availability Zone : <%= @agent["attr"]["availability_zone"]%>
+
+<%- if !@agent["services"].nil? && @agent["services"].size > 0 -%>
+Services (<%= @agent["services"].size%>):
+  <%- @agent["services"].each {|id| -%>
+      <%= @service_cluster["instances"][id]["instance_id"]%> : <%= @service_cluster["instances"][id]["property"]%> (<%= trans_svc_status(@service_cluster["instances"][id]["status"])%>)
+  <%- } -%>
+<%- end -%>
+__E__
+
+  SVC_STATUS_MSG={
+    Wakame::Service::STATUS_OFFLINE=>'Offline',
+    Wakame::Service::STATUS_ONLINE=>'ONLINE',
+    Wakame::Service::STATUS_UNKNOWN=>'Unknown',
+    Wakame::Service::STATUS_FAIL=>'Fail',
+    Wakame::Service::STATUS_STARTING=>'Starting...',
+    Wakame::Service::STATUS_STOPPING=>'Stopping...',
+    Wakame::Service::STATUS_RELOADING=>'Reloading...',
+    Wakame::Service::STATUS_MIGRATING=>'Migrating...',
+  }
+
+  def parse(args)
+    params = {}
+    blk = Proc.new {|opts|
+      opts.banner = "Usage: AgentStatus [options] \"Agent ID\""
+      opts.separator ""
+      opts.separator "options:"
+    }
+    cmd = create_parser(args, &blk)
+    agent_id = args.shift || abort("[ERROR]: Agent ID was not given")
+    params[:agent_id] = agent_id
+    options = {}
+    options[:query] = "&" + params.collect{|k,v| CGI.escape(k.to_s) + "=" + CGI.escape(v)}.join("&")
+    options
+  end
+
+  def run(options)
+    res = uri(options)
+    res
+  end
+
+  def print_result(res)
+    require 'time'
+    @agent = res[1]["data"]["agent_status"]
+    @service_cluster = res[1]["data"]["service_cluster"]
+    puts ERB.new(STATUS_TMPL, nil, '-').result(binding)
+  end
+
+  private
+  def trans_svc_status(stat)
+    SVC_STATUS_MSG[stat]
+  end
+end

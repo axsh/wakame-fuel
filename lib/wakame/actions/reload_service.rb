@@ -13,8 +13,8 @@ module Wakame
         #if @service_instance.status == Service::STATUS_STARTING || @service_instance.status == Service::STATUS_ONLINE
         #  raise "Canceled as the service is being or already ONLINE: #{@service_instance.property}"
         #end
-        
-        master.send_agent_command(Packets::ServiceReload.new(@service_instance.instance_id), @service_instance.agent.agent_id)
+
+	@service_instance.resource.reload(@service_instance, self)
       end
     end
   end
