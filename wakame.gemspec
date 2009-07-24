@@ -2,11 +2,11 @@
 
 Gem::Specification.new do |s|
   s.name = %q{wakame}
-  s.version = "0.4.0"
+  s.version = "0.4.1"
 
   s.required_rubygems_version = Gem::Requirement.new(">= 0") if s.respond_to? :required_rubygems_version=
   s.authors = ["axsh co.,Ltd.", "Masahiro Fujiwara"]
-  s.date = %q{2009-06-29}
+  s.date = %q{2009-07-24}
   s.default_executable = %q{wakame}
   s.description = %q{}
   s.email = ["m-fujiwara@axsh.net"]
@@ -24,28 +24,6 @@ Gem::Specification.new do |s|
      "app_generators/wakame/templates/bin/wakame-agent",
      "app_generators/wakame/templates/bin/wakame-master",
      "app_generators/wakame/templates/bin/wakameadm",
-     "app_generators/wakame/templates/cluster/resources/apache_app/apache_app.rb",
-     "app_generators/wakame/templates/cluster/resources/apache_app/conf/apache2.conf",
-     "app_generators/wakame/templates/cluster/resources/apache_app/conf/envvars-app",
-     "app_generators/wakame/templates/cluster/resources/apache_app/conf/sites-app.conf",
-     "app_generators/wakame/templates/cluster/resources/apache_app/conf/system-app.conf",
-     "app_generators/wakame/templates/cluster/resources/apache_app/init.d/apache2-app",
-     "app_generators/wakame/templates/cluster/resources/apache_lb/apache_lb.rb",
-     "app_generators/wakame/templates/cluster/resources/apache_lb/conf/apache2.conf",
-     "app_generators/wakame/templates/cluster/resources/apache_lb/conf/envvars-lb",
-     "app_generators/wakame/templates/cluster/resources/apache_lb/conf/sites-lb.conf",
-     "app_generators/wakame/templates/cluster/resources/apache_lb/conf/system-lb.conf",
-     "app_generators/wakame/templates/cluster/resources/apache_lb/init.d/apache2-lb",
-     "app_generators/wakame/templates/cluster/resources/apache_www/apache_www.rb",
-     "app_generators/wakame/templates/cluster/resources/apache_www/conf/apache2.conf",
-     "app_generators/wakame/templates/cluster/resources/apache_www/conf/envvars-www",
-     "app_generators/wakame/templates/cluster/resources/apache_www/conf/sites-www.conf",
-     "app_generators/wakame/templates/cluster/resources/apache_www/conf/system-www.conf",
-     "app_generators/wakame/templates/cluster/resources/apache_www/init.d/apache2-www",
-     "app_generators/wakame/templates/cluster/resources/ec2_elastic_ip/ec2_elastic_ip.rb",
-     "app_generators/wakame/templates/cluster/resources/mysql_master/conf/my.cnf",
-     "app_generators/wakame/templates/cluster/resources/mysql_master/init.d/mysql",
-     "app_generators/wakame/templates/cluster/resources/mysql_master/mysql_master.rb",
      "app_generators/wakame/templates/config/boot.rb",
      "app_generators/wakame/templates/config/cluster.rb",
      "app_generators/wakame/templates/config/environments/common.rb",
@@ -63,6 +41,7 @@ Gem::Specification.new do |s|
      "lib/wakame/action.rb",
      "lib/wakame/actions/destroy_instances.rb",
      "lib/wakame/actions/launch_cluster.rb",
+     "lib/wakame/actions/launch_vm.rb",
      "lib/wakame/actions/migrate_service.rb",
      "lib/wakame/actions/propagate_instances.rb",
      "lib/wakame/actions/reload_service.rb",
@@ -74,6 +53,7 @@ Gem::Specification.new do |s|
      "lib/wakame/actions/util.rb",
      "lib/wakame/actor.rb",
      "lib/wakame/actor/daemon.rb",
+     "lib/wakame/actor/mysql.rb",
      "lib/wakame/actor/service_monitor.rb",
      "lib/wakame/actor/system.rb",
      "lib/wakame/agent.rb",
@@ -81,12 +61,17 @@ Gem::Specification.new do |s|
      "lib/wakame/command.rb",
      "lib/wakame/command/action_status.rb",
      "lib/wakame/command/actor.rb",
+     "lib/wakame/command/agent_status.rb",
      "lib/wakame/command/clone_service.rb",
      "lib/wakame/command/launch_cluster.rb",
+     "lib/wakame/command/launch_vm.rb",
      "lib/wakame/command/migrate_service.rb",
      "lib/wakame/command/propagate_service.rb",
+     "lib/wakame/command/reload_service.rb",
      "lib/wakame/command/shutdown_cluster.rb",
+     "lib/wakame/command/shutdown_vm.rb",
      "lib/wakame/command/status.rb",
+     "lib/wakame/command/stop_service.rb",
      "lib/wakame/command_queue.rb",
      "lib/wakame/configuration.rb",
      "lib/wakame/daemonize.rb",
@@ -110,6 +95,7 @@ Gem::Specification.new do |s|
      "lib/wakame/runner/master.rb",
      "lib/wakame/scheduler.rb",
      "lib/wakame/service.rb",
+     "lib/wakame/statusdb.rb",
      "lib/wakame/template.rb",
      "lib/wakame/trigger.rb",
      "lib/wakame/triggers/instance_count_update.rb",
@@ -158,9 +144,16 @@ Gem::Specification.new do |s|
      "wakame_generators/resource/templates/apache_www/conf/system-www.conf",
      "wakame_generators/resource/templates/apache_www/init.d/apache2-www",
      "wakame_generators/resource/templates/ec2_elastic_ip/ec2_elastic_ip.rb",
+     "wakame_generators/resource/templates/ec2_elb/ec2_elb.rb",
      "wakame_generators/resource/templates/mysql_master/conf/my.cnf",
      "wakame_generators/resource/templates/mysql_master/init.d/mysql",
-     "wakame_generators/resource/templates/mysql_master/mysql_master.rb"
+     "wakame_generators/resource/templates/mysql_master/mysql_master.rb",
+     "wakame_generators/resource/templates/mysql_slave/conf/my.cnf",
+     "wakame_generators/resource/templates/mysql_slave/init.d/mysql-slave",
+     "wakame_generators/resource/templates/mysql_slave/mysql_slave.rb",
+     "wakame_generators/resource/templates/nginx/conf/nginx.conf",
+     "wakame_generators/resource/templates/nginx/init.d/nginx",
+     "wakame_generators/resource/templates/nginx/nginx.rb"
   ]
   s.has_rdoc = true
   s.homepage = %q{http://wakame.rubyforge.org/}
@@ -185,6 +178,9 @@ Gem::Specification.new do |s|
       s.add_runtime_dependency(%q<rubigen>, [">= 1.5.2"])
       s.add_runtime_dependency(%q<open4>, [">= 0.9.6"])
       s.add_runtime_dependency(%q<jeweler>, [">= 1.0.0"])
+      s.add_runtime_dependency(%q<rack>, [">= 1.0.0"])
+      s.add_runtime_dependency(%q<thin>, [">= 1.2.2"])
+      s.add_runtime_dependency(%q<json>, [">= 1.1.7"])
     else
       s.add_dependency(%q<amqp>, [">= 0.6.0"])
       s.add_dependency(%q<amazon-ec2>, [">= 0.3.6"])
@@ -196,6 +192,9 @@ Gem::Specification.new do |s|
       s.add_dependency(%q<rubigen>, [">= 1.5.2"])
       s.add_dependency(%q<open4>, [">= 0.9.6"])
       s.add_dependency(%q<jeweler>, [">= 1.0.0"])
+      s.add_dependency(%q<rack>, [">= 1.0.0"])
+      s.add_dependency(%q<thin>, [">= 1.2.2"])
+      s.add_dependency(%q<json>, [">= 1.1.7"])
     end
   else
     s.add_dependency(%q<amqp>, [">= 0.6.0"])
@@ -208,5 +207,8 @@ Gem::Specification.new do |s|
     s.add_dependency(%q<rubigen>, [">= 1.5.2"])
     s.add_dependency(%q<open4>, [">= 0.9.6"])
     s.add_dependency(%q<jeweler>, [">= 1.0.0"])
+    s.add_dependency(%q<rack>, [">= 1.0.0"])
+    s.add_dependency(%q<thin>, [">= 1.2.2"])
+    s.add_dependency(%q<json>, [">= 1.1.7"])
   end
 end
