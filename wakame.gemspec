@@ -2,7 +2,7 @@
 
 Gem::Specification.new do |s|
   s.name = %q{wakame}
-  s.version = "0.4.1"
+  s.version = "0.4.2"
 
   s.required_rubygems_version = Gem::Requirement.new(">= 0") if s.respond_to? :required_rubygems_version=
   s.authors = ["axsh co.,Ltd.", "Masahiro Fujiwara"]
@@ -95,7 +95,6 @@ Gem::Specification.new do |s|
      "lib/wakame/runner/master.rb",
      "lib/wakame/scheduler.rb",
      "lib/wakame/service.rb",
-     "lib/wakame/statusdb.rb",
      "lib/wakame/template.rb",
      "lib/wakame/trigger.rb",
      "lib/wakame/triggers/instance_count_update.rb",
