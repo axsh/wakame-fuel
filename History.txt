@@ -1,3 +1,21 @@
+== 0.4.2 2009-07-24
+
+* Add Web API for master control. (Note that the API design is not fixed yet)
+
+* Rewrote the CLI to use HTTP instead of old DRb interface.
+
+* Add support for agent less resource.
+
+* Add LockQueue to avoid confliction when multiple actions run.
+
+* Add MySQL_Slave resource.
+
+* Add Elastic IP resource. 
+
+* Add Elastic Load Balancer resource.
+
+* Add Nginx resource.
+
 == 0.4.1 2009-06-29
 
 * Fixed the packaging bugs.

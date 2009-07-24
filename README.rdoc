@@ -6,10 +6,6 @@
 
 * Wakame is a framework to simplify the complex virtual machine manipulation over multiple instances in Clound envrionment. This project aims to provide the management/monitoring services with server/daemon configuration set to build scalable web applications.
 
-== SYNOPSIS:
-
-* 
-
 == REQUIREMENTS:
 
 * eventmachine
@@ -19,6 +15,8 @@
 * right_aws
 * log4r
 * jeweler
+* thin
+* json
 
 == INSTALL:
 
