@@ -21,9 +21,9 @@ PIDFILE=/var/run/wakame/wakame-master.pid
 #LSBNAMES='-l'  # Uncomment for LSB name support in /etc/cron.d/
 
 . /lib/lsb/init-functions
-if [ -z $WAKAME_HOME ]; then
+if [ -z $WAKAME_ROOT ]; then
     [ -f /etc/default/wakame ] && . /etc/default/wakame
-    export GEM_HOME WAKAME_HOME WAKAME_ENV
+    export GEM_HOME WAKAME_ROOT WAKAME_ENV
 fi
 
 start_master()
@@ -41,7 +41,7 @@ start_master()
       chown "$USER:$GROUP" $pid_dir
     fi
     
-    start-stop-daemon --start --quiet --pidfile $PIDFILE --name wakame-master --startas $WAKAME_HOME/bin/wakame-master -- -u $USER $LSBNAMES
+    start-stop-daemon --start --quiet --pidfile $PIDFILE --name wakame-master --startas $WAKAME_ROOT/bin/wakame-master -- -u $USER $LSBNAMES
     
 }
 stop_master()
