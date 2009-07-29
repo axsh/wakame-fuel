@@ -4,7 +4,8 @@ class Apache_APP < Wakame::Service::Resource
 
   def_attribute :listen_port, {:default=>8001}
   def_attribute :listen_port_https, {:default=>443}
-  def_attribute :max_instance, {:default=>5}
+  def_attribute :max_instances, {:default=>5}
+  def_attribute :passenger_version, {:default=>'2.2.2'}
 
   def render_config(template)
     template.cp(%w(conf/envvars-app init.d/apache2-app))
