@@ -8,17 +8,17 @@ class WebCluster < Wakame::Service::ServiceCluster
   VirtualHost = Class.new(OpenStruct)
   def initialize(master, &blk)
     super(master) { |c|
-      c.add_resource(Ec2ElasticIp.new)
-      c.add_resource(Apache_WWW.new)
-      c.add_resource(Apache_APP.new)
-      c.add_resource(Apache_LB.new)
-      c.add_resource(MySQL_Master.new)
+      #c.add_resource(Ec2ElasticIp.new)
+      #c.add_resource(Apache_WWW.new)
+      #c.add_resource(Apache_APP.new)
+      #c.add_resource(Apache_LB.new)
+      #c.add_resource(MySQL_Master.new)
       #c.add_resource(MySQL_Slave.new)
 
-      c.set_dependency(Apache_LB, Ec2ElasticIp)
-      c.set_dependency(Apache_WWW, Apache_LB)
-      c.set_dependency(Apache_APP, Apache_LB)
-      c.set_dependency(MySQL_Master, Apache_APP)
+      #c.set_dependency(Apache_LB, Ec2ElasticIp)
+      #c.set_dependency(Apache_WWW, Apache_LB)
+      #c.set_dependency(Apache_APP, Apache_LB)
+      #c.set_dependency(MySQL_Master, Apache_APP)
       #c.set_dependency(MySQL_Master, MySQL_Slave)
     }
 
@@ -31,8 +31,8 @@ class WebCluster < Wakame::Service::ServiceCluster
       #r.register_trigger(Wakame::Triggers::ShutdownUnusedVM.new)
     }
 
-     add_virtual_host(VirtualHost.new(:server_name=>'aaa.test', :document_root=>'/home/wakame/app/development/test/public'))
-     add_virtual_host(VirtualHost.new(:server_name=>'bbb.test', :document_root=>'/home/wakame/app/development/test/public'))
+     add_virtual_host(VirtualHost.new(:server_name=>'aaa.test', :document_root=>'/home/wakame/app/development/test/public', :rails_env=>'development'))
+     add_virtual_host(VirtualHost.new(:server_name=>'bbb.test', :document_root=>'/home/wakame/app/development/test/public', :rails_env=>'development'))
 
   end
 
