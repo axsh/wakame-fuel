@@ -9,12 +9,14 @@ apt-get -y install apache2-mpm-prefork libapache2-mod-rpaf
 apt-get -y install mysql-server mysql-client
 apt-get -y install erlang-nox
 apt-get -y install unzip zip rsync libopenssl-ruby libhmac-ruby rubygems irb ri rdoc sysstat
+apt-get -y install apache2-prefork-dev ruby-dev make g++ libopenssl-ruby subversion
+apt-get -y install memcached
 
 apt-get clean
 
 (cd /tmp;
-wget http://www.rabbitmq.com/releases/rabbitmq-server/v1.5.4/rabbitmq-server_1.5.4-1_all.deb;
-dpkg -i rabbitmq-server_1.5.4-1_all.deb;
+wget http://www.rabbitmq.com/releases/rabbitmq-server/v1.6.0/rabbitmq-server_1.6.0-1_all.deb
+dpkg -i rabbitmq-server_1.6.0-1_all.deb
 )
 
 
@@ -40,7 +42,7 @@ EOF
 fi
 
 cat <<EOF > /etc/default/wakame
-WAKAME_HOME=/home/wakame/corelib
+WAKAME_ROOT=/home/wakame/wakame.proj
 GEM_HOME=/usr/local/gems
 EOF
 
@@ -48,12 +50,14 @@ update-rc.d -f apache2 remove
 update-rc.d -f mysql remove
 update-rc.d -f mysql-ndb remove
 update-rc.d -f mysql-ndb-mgm remove
+update-rc.d -f mysql-ndb-mgm memcached
 # Disable apparmor
 update-rc.d -f apparmor remove
 
-cat <<EOF > /usr/local/bin/passenger_ruby.sh
+cat <<'EOF' > /usr/local/bin/passenger_ruby.sh
 #!/bin/sh
-export GEM_PATH="/usr/local/gems"
+. /etc/environment
+export RUBYLIB GEM_HOME
 exec /usr/bin/ruby $@
 EOF
 chmod 755 /usr/local/bin/passenger_ruby.sh
