@@ -198,6 +198,7 @@ end
 
 module AttributeHelper
 
+  CLASS_TYPE_KEY=:class_type
   PRIMITIVE_CLASSES=[NilClass, TrueClass, FalseClass, Numeric, String, Symbol]
   CONVERT_CLASSES={Time => proc{|i| i.to_s } }
 
@@ -206,49 +207,47 @@ module AttributeHelper
       @attr_attributes ||= {}
     end
 
-#     def attr(name, assignable=false)
-#       attr_attributes[name.to_sym]={}
-#       attr_without_trap(name, assignable)
-#     end
-    
-#     # Override Object.attr_accessor to 
-#     def attr_accessor(*args)
-#       args.each { |name|
-#         attr(name, true)
-#       }
-#     end
-    
-#     def attr_reader(*args)
-#       args.each { |name|
-#         attr(name, false)
-#       }
-#     end
-    
-#     def attr_writer(*args)
-#       args.each { |name|
-#         attr(name, true)
-#       }
-#     end
+    def merged_attr_attributes
+      hash = {}
+      self.ancestors.reverse.each { |klass|
+        next unless klass.include?(AttributeHelper)
+        hash.merge!(klass.attr_attributes.dup)
+      }
+      hash
+    end
+
+    def get_attr_attribute(attr_name)
+      merged_attr_attributes[attr_name]
+    end
 
     def def_attribute(name, *args)
-      attr = {}
-      attr_attributes[name.to_sym] = begin 
-                                       if args.size == 0
-                                         {:default=>nil}
-                                       else
-                                         case args[0]
-                                         when Hash
-                                           args[0].dup
-                                         else
-                                           {:default=>args[0]}
-                                         end
-                                       end
-                                     end
-      class_eval <<-__E__
-      def #{name}=(v)
-        @#{name}=v
+      attr = begin 
+               if args.size == 0
+                 {:default=>nil}
+               else
+                 case args[0]
+                 when Hash
+                   args[0].dup
+                 else
+                   {:default=>args[0]}
+                 end
+               end
+             end
+
+      (attr_attributes[name.to_sym] ||= {}).merge!(attr)
+
+      unless attr[:read_only]
+        class_eval <<-__E__
+        def #{name}=(v)
+          self.#{name}
+          @#{name}=v
+        end
+
+        public :#{name}=
+        __E__
       end
-        
+
+      class_eval <<-__E__
       def #{name}
         if @#{name}.nil?
           retrieve_attr_attribute { |a|
@@ -258,7 +257,7 @@ module AttributeHelper
               when Proc
                 @#{name} = defval.call(self)
               else
-                @#{name} = defval
+                @#{name} = defval.dup rescue defval
               end
               break
             end
@@ -267,7 +266,7 @@ module AttributeHelper
         @#{name}
       end
 
-      public :#{name}, :#{name}=
+      public :#{name}
       __E__
     end
     
@@ -275,40 +274,44 @@ module AttributeHelper
 
   private
   def self.included(klass)
-    klass.class.class_eval {
-      #alias :attr_without_trap :attr unless self.respond_to?(:attr_without_trap, true)
-    }
     klass.extend ClassMethods
   end
 
 
   public
-  def dump_attrs(root=nil)
+  def dump_attrs(root=nil, &blk)
     if root.nil? 
       root = self
     end
 
-    return dump_internal(root)
+    return dump_internal(root, &blk)
   end
   #thread_immutable_method :dump_attrs if self.kind_of?(ThreadImmutable)
   #module_function :dump_attrs
 
-
-  private
   def retrieve_attr_attribute(&blk)
     self.class.ancestors.each { |klass|
       blk.call(klass.attr_attributes) if klass.include?(AttributeHelper)
     }
   end
 
-  def dump_internal(root)
+  private
+  def dump_internal(root, &blk)
     case root
     when AttributeHelper
       t={}
-      t[:type] = root.class.to_s
+      t[CLASS_TYPE_KEY] = root.class.to_s
 
-      retrieve_attr_attribute { |a|
-        a.each_key {|k| t[k] = dump_internal(root.__send__(k.to_sym)) }
+      default_dumper = lambda { |k|
+        t[k] = dump_internal(root.__send__(k.to_sym), &blk)
+      }
+
+      self.class.merged_attr_attributes.each { |k,v|
+        if blk
+          blk.call(k,v, default_dumper)
+        else
+          default_dumper.call(k)
+        end
       }
       t
     when Array
