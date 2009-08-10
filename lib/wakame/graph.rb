@@ -2,7 +2,8 @@
 module Wakame
   
   class Graph
-    
+    attr_accessor :edges
+
     def initialize
       @edges={}
     end
