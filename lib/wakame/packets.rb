@@ -125,28 +125,6 @@ module Wakame
     class Nop < RequestBase
     end
 
-#     class ServiceStart < RequestBase
-#       attr_reader :instance_id, :property
-#       def initialize(instance_id, property)
-#         @instance_id = instance_id
-#         @property = property
-#       end
-#     end
-
-#     class ServiceStop < RequestBase
-#       attr_reader :instance_id
-#       def initialize(instance_id)
-#         @instance_id = instance_id
-#       end
-#     end
-
-#     class ServiceReload < RequestBase
-#       attr_reader :instance_id
-#       def initialize(instance_id)
-#         @instance_id = instance_id
-#       end
-#     end
-
     class ServiceStatusChanged < ResponseBase
       #attr_accessor :svc_id, :prev_status, :new_status, :fail_message
       def_attribute :svc_id
