@@ -2,19 +2,19 @@
 module Wakame
   module Triggers
     class ProcessCommand < Trigger
-      def_attribute :status
-      def_attribute :job_id
-      def_attribute :completion_status
-      def_attribute :parent_action
-      def_attribute :acquire_lock, false
 
-      attr_reader :trigger
       def register_hooks
-        @@command_thread ||= Thread.new {
+        @command_thread ||= Thread.new {
+          Wakame.log.info("#{self.class}: Started process command thread.")
           while cmd = self.command_queue.deq_cmd
+            unless cmd.kind_of?(Wakame::Command)
+              Wakame.log.warn("#{self.class}: Incompatible type of object has been sent to ProcessCommand thread. #{cmd.class}")
+              next
+            end
+
             res = nil
             begin
-              EM.barrier {
+              StatusDB.barrier {
                 Wakame.log.debug("#{self.class}: Being processed the command: #{cmd.class}")
                 res = cmd.run(self)
                 res
@@ -34,7 +34,7 @@ module Wakame
       end
       
       def cleanup
-        @@command_thread.kill if @@command_thread.alive?
+        @command_thread.kill if @command_thread && @command_thread.alive?
       end
     end
   end
