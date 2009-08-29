@@ -42,7 +42,7 @@ __END__
             event.agent.attr[:instance_id] == inst_id
           }
           
-          cond.poll(5, 100) {
+          cond.poll(5, 360) {
             d = ec2.describe_instances([inst_id])[0]
             Wakame.log.debug("#{self.class}: Polling describe_instances(#{inst_id}): #{d[:aws_state]} ")
             d[:aws_state] == "running"

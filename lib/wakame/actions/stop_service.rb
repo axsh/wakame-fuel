@@ -2,41 +2,39 @@ module Wakame
   module Actions
     class StopService < Action
       def initialize(service_instance)
-        @acquire_lock = true
         @service_instance = service_instance
       end
 
 
       def run
-        raise "Agent is not bound on this service : #{@service_instance}" if @service_instance.property.require_agent && @service_instance.agent.nil?
+        acquire_lock { |lst|
+          lst << @service_instance.resource.id
+        }
+        if @service_instance.resource.require_agent && @service_instance.host.mapped?
+          raise "Agent is not bound on this service : #{@service_instance}"
+        end
         
         # Skip to act when the service is having below status.
         if @service_instance.status == Service::STATUS_STOPPING || @service_instance.status == Service::STATUS_OFFLINE
-          raise CancelActionError, "Canceled as the service is being or already OFFLINE: #{@service_instance.property}"
+          raise CancelActionError, "Canceled as the service is being or already OFFLINE: #{@service_instance.resource}"
         end
 
-        EM.barrier {
+        StatusDB.barrier {
           @service_instance.update_status(Service::STATUS_STOPPING)
         }
         
-        EM.barrier {
-          Wakame.log.debug("Child nodes: #{@service_instance.property.class}: " + service_cluster.dg.children(@service_instance.property.class).inspect)
-          service_cluster.dg.children(@service_instance.property.class).each { |svc_prop|
-            trigger_action(CallChildChangeAction.new(svc_prop))
-          }
-        }
+        trigger_action(NotifyChildChanged.new(@service_instance))
+        flush_subactions
 
-        flush_subactions()
-
-        @service_instance.property.stop(@service_instance, self)
+        @service_instance.resource.stop(@service_instance, self)
         
-        EM.barrier {
-          service_cluster.destroy(@service_instance.instance_id)
+        StatusDB.barrier {
+          service_cluster.destroy(@service_instance.id)
         }
       end
 
       def on_failed
-        EM.barrier {
+        StatusDB.barrier {
           @service_instance.update_status(Service::STATUS_FAIL)
         }
       end

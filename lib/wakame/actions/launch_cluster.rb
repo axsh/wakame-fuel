@@ -2,7 +2,6 @@ module Wakame
   module Actions
     class LaunchCluster < Action
       def initialize
-        @acquire_lock = true
       end
 
       def run
@@ -11,9 +10,6 @@ module Wakame
           raise CancelActionError
         end
 
-        EM.barrier {
-          service_cluster.launch
-        }
         levels = service_cluster.dg.levels
         Wakame.log.debug("#{self.class}: Resource launch order: " + levels.collect {|lv| '['+ lv.collect{|prop| "#{prop.class}" }.join(', ') + ']' }.join(', '))
         acquire_lock { |list|
