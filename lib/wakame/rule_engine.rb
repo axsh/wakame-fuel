@@ -7,13 +7,10 @@ module Wakame
   class GlobalLockError < StandardError; end
 
   class RuleEngine
-    
-    FORWARD_ATTRS=[:command_queue, :agent_monitor, :service_cluster, :master]
-
-    attr_reader :triggers, :active_jobs
+    attr_reader :triggers, :active_jobs, :lock_queue
 
     def master
-      service_cluster.master
+      Wakame::Master.instance
     end
 
     def command_queue
@@ -34,6 +31,7 @@ module Wakame
       
       @active_jobs = {}
       @job_history = []
+      @lock_queue = LockQueue.new
       instance_eval(&blk) if blk
     end
 
@@ -178,7 +176,7 @@ module Wakame
               job_context[:complete_at]=Time.now
               @job_history << job_context
               @active_jobs.delete(job_context[:job_id])
-              service_cluster.lock_queue.quit(job_context[:job_id])
+              @lock_queue.quit(job_context[:job_id])
             end
           }
         rescue => e
@@ -188,4 +186,106 @@ module Wakame
     end
 
   end
+
+  class LockQueue
+    def initialize()
+      @locks = {}
+      @id2res = {}
+
+      @queue_by_thread = {}
+      @qbt_m = ::Mutex.new
+    end
+    
+    def set(resource, id)
+      # Ths Job ID already holds/reserves the lock regarding the resource.
+      return if @id2res.has_key?(id) && @id2res[id].has_key?(resource.to_s)
+
+      StatusDB.barrier {
+        @locks[resource.to_s] ||= []
+        @id2res[id] ||= {}
+        
+        @id2res[id][resource.to_s]=1
+        @locks[resource.to_s] << id
+      }
+      Wakame.log.debug("#{self.class}: set(#{resource.to_s}, #{id})" + "\n#{self.inspect}")
+    end
+
+    def reset()
+      @locks.keys { |k|
+        @locks[k].clear
+      }
+      @id2res.clear
+    end
+
+    def test(id)
+      reslist = @id2res[id]
+      return :pass if reslist.nil? || reslist.empty?
+
+      # 
+      if reslist.keys.all? { |r| id == @locks[r.to_s][0] }
+        return :runnable
+      else
+        return :wait
+      end
+    end
+
+    def wait(id, tout=60*30)
+      @qbt_m.synchronize { @queue_by_thread[Thread.current] = ::Queue.new }
+
+      timeout(tout) {
+        while test(id) == :wait
+          Wakame.log.debug("#{self.class}: Job #{id} waits for locked resouces: #{@id2res[id].keys.join(', ')}")
+          break if id == @queue_by_thread[Thread.current].deq
+        end
+      }
+    ensure
+      @qbt_m.synchronize { @queue_by_thread.delete(Thread.current) }
+    end
+    
+    def quit(id)
+      StatusDB.barrier {
+        case test(id)
+        when :runnable, :wait
+          @id2res[id].keys.each { |r| @locks[r.to_s].delete_if{ |i| i == id } }
+          @qbt_m.synchronize {
+            @queue_by_thread.each {|t, q| q.enq(id) }
+          }
+        end
+        
+        @id2res.delete(id)
+      }
+      Wakame.log.debug("#{self.class}: quit(#{id})" + "\n#{self.inspect}")
+    end
+
+    def clear_resource(resource)
+    end
+
+    def inspect
+      output = @locks.collect { |k, lst|
+        [k, lst].flatten
+      }
+      return "" if output.empty?
+
+      # Table display
+      maxcolws = (0..(output.size)).zip(*output).collect { |i| i.shift; i.map!{|i| (i.nil? ? "" : i).length }.max }
+      maxcol = maxcolws.size
+      maxcolws.reverse.each { |i| 
+        break if i > 0
+        maxcol -= 1
+      }
+
+      textrows = output.collect { |x|
+        buf=""
+        maxcol.times { |n|
+          buf << "|" + (x[n] || "").ljust(maxcolws[n])
+        }
+        buf << "|"
+      }
+
+      "+" + (["-"] * (textrows[0].length - 2)).join('') + "+\n" + \
+      textrows.join("\n") + \
+      "\n+" + (["-"] * (textrows[0].length - 2)).join('')+ "+"
+    end
+  end
+
 end

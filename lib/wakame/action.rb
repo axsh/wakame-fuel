@@ -39,7 +39,11 @@ module Wakame
       @trigger = trigger
     end
     
-    def trigger_action(subaction, opts={})
+    def trigger_action(subaction=nil, &blk)
+      if blk 
+        subaction = ProcAction.new(blk)
+      end
+
       subactions << subaction
       subaction.parent_action = self
       subaction.job_id = self.job_id
@@ -117,14 +121,14 @@ module Wakame
 
     # Set the lock flags to resources 
     def acquire_lock(&blk)
-      EM.barrier {
+      StatusDB.barrier {
         reslist = []
         blk.call(reslist)
         reslist.flatten!
-        reslist.each {|r| service_cluster.lock_queue.set(r.to_s, self.job_id) }
+        reslist.each {|r| trigger.rule_engine.lock_queue.set(r.to_s, self.job_id) }
       }
       
-      service_cluster.lock_queue.wait(self.job_id)
+      trigger.rule_engine.lock_queue.wait(self.job_id)
     end
     
     def run
@@ -137,5 +141,20 @@ module Wakame
     def on_canceled
     end
 
+
+    class ProcAction < Action
+      def initialize(proc_obj)
+        raise ArgumentError unless proc_obj.is_a? Proc
+        @proc_obj = proc_obj
+      end
+
+      def run()
+        @proc_obj.call
+      end
+    end
+
+
   end
+
+
 end
