@@ -29,7 +29,6 @@ module Wakame
 
     def process_master
       process
-      load_cluster
       load_resources
       load_core_commands
       load_core_actions
@@ -122,11 +121,6 @@ module Wakame
         #require file.sub(matcher, '\1')
       end
       
-    end
-
-
-    def load_cluster
-      load File.expand_path('config/cluster.rb', configuration.root_path)
     end
 
     def load_actors
