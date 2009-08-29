@@ -31,9 +31,10 @@ module Wakame
       determine_agent_id
       @actor_registry = ActorRegistry.new
       @monitor_registry = MonitorRegistry.new
+    end
 
-      connect(opts)
-
+    # post_setup
+    def init
       setup_monitors
       setup_actors
       setup_dispatcher
