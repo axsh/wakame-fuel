@@ -10,56 +10,80 @@ require 'wakame/vm_manipulator'
 
 module Wakame
 
+  module Manager
+    attr_accessor :master
+
+    def init
+    end
+    
+    def start
+    end
+    
+    def stop
+    end
+    
+    def reload
+    end
+    
+    def terminate
+    end
+  end
+  
+
   class AgentMonitor
+    include Manager
     include ThreadImmutable
-    attr_reader :registered_agents, :unregistered_agents, :master, :gc_period
 
-
-    def initialize(master)
-      bind_thread
-      @master = master
-      @registered_agents = {}
-      @unregistered_agents = {}
+    def init
       @agent_timeout = 31.to_f
       @agent_kill_timeout = @agent_timeout * 2
       @gc_period = 20.to_f
 
+      Service::AgentPool.reset
+
       # GC event trigger for agent timer & status
-      calc_agent_timeout = proc {
-        #Wakame.log.debug("Started agent GC : agents.size=#{@registered_agents.size}")
-        kill_list=[]
-        registered_agents.each { |agent_id, agent|
-          next if agent.status == Service::Agent::STATUS_OFFLINE
-          diff_time = Time.now - agent.last_ping_at
-          #Wakame.log.debug "AgentMonitor GC : #{agent_id}: #{diff_time}"
-          if diff_time > @agent_timeout.to_f
-            agent.status = Service::Agent::STATUS_TIMEOUT
-          end
+      @agent_timeout_timer = EM::PeriodicTimer.new(@gc_period) {
+        StatusDB.pass {
+          #Wakame.log.debug("Started agent GC : agents.size=#{@registered_agents.size}")
+          [self.agent_pool.group_active.keys, self.agent_pool.group_observed.keys].flatten.uniq.each { |agent_id|
+            agent = Service::Agent.find(agent_id)
+            #next if agent.status == Service::Agent::STATUS_OFFLINE
+            
+            diff_time = Time.now - agent.last_ping_at
+            #Wakame.log.debug "AgentMonitor GC : #{agent_id}: #{diff_time}"
+            if diff_time > @agent_timeout.to_f
+              agent.update_status(Service::Agent::STATUS_TIMEOUT)
+            end
+            
+            if diff_time > @agent_kill_timeout.to_f
+              agent_pool.unregister(agent_id)
+            end
+          }
           
-          if diff_time > @agent_kill_timeout.to_f
-            kill_list << agent_id
-          end
+          #Wakame.log.debug("Finished agent GC")
         }
-        
-        kill_list.each { |agent_id|
-          agent = @registered_agents.delete(agent_id)
-          ED.fire_event(Event::AgentUnMonitored.new(agent)) unless agent.nil?
-        }
-        #Wakame.log.debug("Finished agent GC")
       }
       
-      @agent_timeout_timer = EventMachine::PeriodicTimer.new(@gc_period, calc_agent_timeout)
       
       master.add_subscriber('registry') { |data|
         data = eval(data)
+        
+        StatusDB.pass {
+          agent_id = data[:agent_id]
+          
+          agent = agent_pool.create_or_find(agent_id)
+          
+          case data[:class_type]
+          when 'Wakame::Packets::Register'
+            agent.root_path = data[:root_path]
+            agent.vm_attr = data[:attrs]
+            agent.save
+            agent_pool.register(agent)
+          when 'Wakame::Packets::UnRegister'
+            agent_pool.unregister(agent)
+          end
+        }
 
-        agent_id = data[:agent_id]
-        case data[:type]
-        when 'Wakame::Packets::Register'
-          register_agent(data)
-        when 'Wakame::Packets::UnRegister'
-          unregister_agent(agent_id)
-        end
       }
 
       master.add_subscriber('ping') { |data|
@@ -69,131 +93,103 @@ module Wakame
 
         # Variable update function for the common members
         set_report_values = proc { |agent|
-          agent.status = Service::Agent::STATUS_ONLINE
-          agent.uptime = 0
           agent.last_ping_at = Time.parse(ping[:responded_at])
-          
-          agent.attr = ping[:attrs]
-          
-          agent.services.clear
-          ping.services.each { |svc_id, i|
-            agent.services[svc_id] = master.service_cluster.instances[svc_id]
-          }
+          agent.vm_attr = ping[:attrs]
+
+          agent.renew_reported_services(ping[:services])
+          agent.save
+
+          agent.update_status(Service::Agent::STATUS_ONLINE)
         }
         
-        agent = agent(ping[:agent_id])
-        if agent.nil?
-          agent = Service::Agent.new(ping[:agent_id])
+        StatusDB.pass { 
+          agent = Service::Agent.find(ping[:agent_id])
+          if agent.nil?
+            agent = Service::Agent.new
+            agent.id = ping[:agent_id]
+            
+            set_report_values.call(agent)
+
+            agent_pool.register_as_observed(agent)
+          else
+            set_report_values.call(agent)
+          end
           
-          set_report_values.call(agent)
-          
-          unregistered_agents[ping[:agent_id]]=agent
-        else
-          set_report_values.call(agent)
-        end
-        
-        
-        ED.fire_event(Event::AgentPong.new(agent))
+          EventDispatcher.fire_event(Event::AgentPong.new(agent))
+        }
       }
       
       master.add_subscriber('agent_event') { |data|
         response = eval(data)
-#p response
-        case response[:type]
+        case response[:class_type]
         when 'Wakame::Packets::ServiceStatusChanged'
-          svc_inst = Service::ServiceInstance.instance_collection[response[:svc_id]]
+          svc_inst = Service::ServiceInstance.find(response[:svc_id])
           if svc_inst
             response_time = Time.parse(response[:responded_at])
             svc_inst.update_status(response[:new_status], response_time, response[:fail_message])
-            
-#             tmp_event = Event::ServiceStatusChanged.new(response[:svc_id], svc_inst.property, response[:status], response[:previous_status])
-#             tmp_event.time = response_time
-#             ED.fire_event(tmp_event)
-            
-#             if response[:previous_status] != Service::STATUS_ONLINE && response[:new_status] == Service::STATUS_ONLINE
-#               tmp_event = Event::ServiceOnline.new(tmp_event.instance_id, svc_inst.property)
-#               tmp_event.time = response_time
-#               ED.fire_event(tmp_event)
-#             elsif response[:previous_status] != Service::STATUS_OFFLINE && response[:new_status] == Service::STATUS_OFFLINE
-#               tmp_event = Event::ServiceOffline.new(tmp_event.instance_id, svc_inst.property)
-#               tmp_event.time = response_time
-#               ED.fire_event(tmp_event)
-#             elsif response[:previous_status] != Service::STATUS_FAIL && response[:new_status] == Service::STATUS_FAIL
-#               tmp_event = Event::ServiceFailed.new(tmp_event.instance_id, svc_inst.property, response[:fail_message])
-#               tmp_event.time = response_time
-#               ED.fire_event(tmp_event)
-#             end
           end
         when 'Wakame::Packets::ActorResponse'
           case response[:status]
           when Actor::STATUS_RUNNING
-              ED.fire_event(Event::ActorProgress.new(response[:agent_id], response[:token], 0))
+            EventDispatcher.fire_event(Event::ActorProgress.new(response[:agent_id], response[:token], 0))
           else
-              ED.fire_event(Event::ActorComplete.new(response[:agent_id], response[:token], response[:status], response[:opts][:return_value]))
+            EventDispatcher.fire_event(Event::ActorComplete.new(response[:agent_id], response[:token], response[:status], response[:opts][:return_value]))
           end
         else
-          Wakame.log.warn("#{self.class}: Unhandled agent response: #{response[:type]}")
+          Wakame.log.warn("#{self.class}: Unhandled agent response: #{response[:class_type]}")
         end
       }
-    
+      
+    end
+
+    def terminate
+      @agent_timeout_timer.cancel
+    end
+
+    def agent_pool
+      Service::AgentPool.instance
     end
 
 
-    def agent(agent_id)
-      registered_agents[agent_id] || unregistered_agents[agent_id]
-    end
-
-    def register_agent(data)
-      agent_id = data[:agent_id]
-      agent = registered_agents[agent_id]
-      if agent.nil?
-        agent = unregistered_agents[agent_id]
-        if agent.nil?
-          # The agent is going to be registered at first time.
-          agent = Service::Agent.new(agent_id)
-          registered_agents[agent_id] = agent
-        else
-          # Move the reference from unregistered group to the registered group.
-          registered_agents[agent_id] = unregistered_agents[agent_id]
-          unregistered_agents.delete(agent_id)
-        end
-        Wakame.log.debug("The Agent has been registered: #{data.inspect}")
-        #Wakame.log.debug(unregistered_agents)
-        ED.fire_event(Event::AgentMonitored.new(agent))
-      end
-      agent.root_path = data[:root_path]
-      agent.attr = data[:attrs]
-    end
-
-    def unregister_agent(agent_id)
-      agent = registered_agents[agent_id]
-      if agent
-        unregistered_agents[agent_id] = registered_agents[agent_id]
-        registered_agents.delete(agent_id)
-        ED.fire_event(Event::AgentUnMonitored.new(agent))
-      end
-    end
+#    def agent(agent_id)
+#      registered_agents[agent_id] || unregistered_agents[agent_id]
+#    end
 
 
-#     def bind_agent(service_instance, &filter)
-#       agent_id, agent = @agents.find { |agent_id, agent|
+#     def register_agent(data)
+#       agent_id = data[:agent_id]
 
-#         next false if agent.has_service_type?(service_instance.property.class)
-#         filter.call(agent)
-#       }
-#       return nil if agent.nil?
-#       service_instance.bind_agent(agent)
-#       agent
+#       if agent.nil?
+#         agent = unregistered_agents[agent_id]
+#         if agent.nil?
+#           # The agent is going to be registered at first time.
+#           agent = Service::Agent.new(agent_id)
+#           registered_agents[agent_id] = agent
+#         else
+#           # Move the reference from unregistered group to the registered group.
+#           registered_agents[agent_id] = unregistered_agents[agent_id]
+#           unregistered_agents.delete(agent_id)
+#         end
+#         Wakame.log.debug("The Agent has been registered: #{data.inspect}")
+#         #Wakame.log.debug(unregistered_agents)
+#         ED.fire_event(Event::AgentMonitored.new(agent))
+#       end
+#       agent.root_path = data[:root_path]
+#       agent.vm_attr = data[:attrs]
 #     end
 
-#     def unbind_agent(service_instance)
-#       service_instance.unbind_agent
+#     def unregister_agent(agent_id)
+#       agent = registered_agents[agent_id]
+#       if agent
+#         unregistered_agents[agent_id] = registered_agents[agent_id]
+#         registered_agents.delete(agent_id)
+#         ED.fire_event(Event::AgentUnMonitored.new(agent))
+#       end
 #     end
-    
+
     # Retruns the master local agent object
     def master_local
-      agent = registered_agents[@master.master_local_agent_id]
-      puts "#{agent} = registered_agents[#{@master.master_local_agent_id}]"
+      agent = Service::Agent.find(@master.master_local_agent_id)
       raise "Master does not identify the master local agent yet." if agent.nil?
       agent
     end
@@ -205,50 +201,107 @@ module Wakame
       }
     end
 
-     def dump_status
-       ag = []
-       res = {:registered=>[], :unregistered=>[]}
-       
-       @registered_agents.each { |key, a|
-         res[:registered] << a.dump_status
-       }
-       @unregistered_agents.each { |key, a|
-         res[:unregistered] << a.dump_status
-       }
-       res
+   end
+
+
+
+   class ClusterManager
+     include Manager
+
+     class ClusterConfigLoader
+
+       def load(cluster_rb_path=Wakame.config.cluster_config_path)
+         Wakame.log.info("#{self.class}: Loading config/cluster.rb: #{cluster_rb_path}")
+         eval(File.readlines(cluster_rb_path).join(''), binding)
+         #self.instance_eval {
+         #  Kernel.load cluster_rb_path
+         #}
+       end
+
+
+       private
+       def define_cluster(name, &blk)
+         cluster = Service::ServiceCluster.find(Service::ServiceCluster.id(name))
+         if cluster.nil?
+           cluster = Service::ServiceCluster.new
+           cluster.name = name
+         end
+
+         cluster.reset
+
+         blk.call(cluster)
+
+         cluster.save
+       end
      end
-  end
 
-  class Master
-    include Wakame::AMQPClient
-    include Wakame::QueueDeclare
+     attr_reader :clusters
 
-    define_queue 'agent_event', 'agent_event'
-    define_queue 'ping', 'ping'
-    define_queue 'registry', 'registry'
+     def init
+       @clusters = {}
+       
+       # Periodical cluster status updater
+       @status_check_timer = EM::PeriodicTimer.new(5) {
+         @clusters.each_value{|v| v.update_cluster_status }
+       }
+       
+       # Event based cluster status updater
+       @check_event_tickets = []
+       [Event::ServiceOnline, Event::ServiceOffline, Event::ServiceFailed].each { |evclass|
+         @check_event_tickets << EventDispatcher.subscribe(evclass) { |event|
+           @clusters.each_value{|v| v.update_cluster_status }
+         }
+       }
 
-    attr_reader :command_queue, :agent_monitor, :configuration, :service_cluster, :started_at
+       # Load config/cluster.rb at first time
+       load_config_cluster
+     end
+
+     def reload
+
+       load_config_cluster
+     end
+
+
+     def terminate
+       @status_check_timer.cancel
+       @check_event_tickets.each { |t|
+         EventDispatcher.unsubscribe(t)
+       }
+     end
+
+
+     def register(cluster)
+       @clusters[cluster.id] = cluster
+     end
+
+     def unregister(cluster_id)
+       @clusters.delete(cluster_id)
+     end
+
+     private
+     def load_config_cluster
+       ClusterConfigLoader.new.load
+     end
+
+
+   end
+
+   class Master
+     include Wakame::AMQPClient
+     include Wakame::QueueDeclare
+
+     define_queue 'agent_event', 'agent_event'
+     define_queue 'ping', 'ping'
+     define_queue 'registry', 'registry'
+
+     attr_reader :command_queue, :agent_monitor, :cluster_manager, :started_at
+     attr_reader :managers
 
     def initialize(opts={})
       pre_setup
-
-      connect(opts) {
-        post_setup
-      }
-      Wakame.log.info("Started master process : WAKAME_ROOT=#{Wakame.config.root_path} WAKAME_ENV=#{Wakame.config.environment}")
     end
 
-
-#     def send_agent_command(command, agent_id=nil)
-#       raise TypeError unless command.is_a? Packets::RequestBase
-#       EM.next_tick {
-#         if agent_id
-#           publish_to('agent_command', "agent_id.#{agent_id}", Marshal.dump(command))
-#         else
-#           publish_to('agent_command', '*', Marshal.dump(command))
-#         end
-#       }
-#     end
 
     def actor_request(agent_id, path, *args)
       request = Wakame::Packets::ActorRequest.new(agent_id, Util.gen_id, path, *args)
@@ -262,12 +315,35 @@ module Wakame
 
 
     def cleanup
+      @managers.each { |m| m.terminate }
       @command_queue.shutdown
     end
 
     def master_local_agent_id
       @master_local_agent_id
     end
+
+    def register_manager(manager)
+      raise ArgumentError unless manager.kind_of? Manager
+      manager.master = self
+      @managers << manager
+      manager
+    end
+
+    # post_setup
+    def init
+      raise 'has to be put in EM.run context' unless EM.reactor_running?
+      @command_queue = CommandQueue.new(self)
+
+      # WorkerThread has to run earlier than other managers.
+      @agent_monitor = register_manager(AgentMonitor.new)
+      @cluster_manager = register_manager(ClusterManager.new)
+
+      @managers.each {|m| m.init }
+
+      Wakame.log.info("Started master process : WAKAME_ROOT=#{Wakame.config.root_path} WAKAME_ENV=#{Wakame.config.environment}")
+    end
+
 
     private
     def determine_agent_id
@@ -281,20 +357,16 @@ module Wakame
     def pre_setup
       determine_agent_id
       @started_at = Time.now
+      @managers = []
 
-      EM.barrier {
+      StatusDB::WorkerThread.init
+
+      StatusDB.pass {
         Wakame.log.debug("Binding thread info to EventDispatcher.")
         EventDispatcher.instance.bind_thread(Thread.current)
       }
     end
 
-    def post_setup
-      raise 'has to be put in EM.run context' unless EM.reactor_running?
-      @command_queue = CommandQueue.new(self)
-      @agent_monitor = AgentMonitor.new(self)
-
-      @service_cluster = Util.new_(Wakame.config.cluster_class, self)
-    end
 
   end
 
@@ -317,12 +389,12 @@ module Wakame
     def request
       raise "The request has already been sent." if @requested
 
-      @event_ticket = ED.subscribe(Event::ActorComplete) { |event|
+      @event_ticket = EventDispatcher.subscribe(Event::ActorComplete) { |event|
         if event.token == @packet.token
          
           # Any of status except RUNNING are accomplishment of the actor request.
           Wakame.log.debug("#{self.class}: The actor request has been completed: token=#{self.token}, status=#{event.status}, return_value=#{event.return_value}")
-          ED.unsubscribe(@event_ticket)
+          EventDispatcher.unsubscribe(@event_ticket)
           @return_value = event.return_value
           @wait_lock.enq([event.status, event.return_value])
         end
@@ -364,7 +436,7 @@ module Wakame
       }
     end
     alias :wait :wait_completion
-
+    
     private
     def check_requested?
       raise "The request has not been sent yet." unless @requested
