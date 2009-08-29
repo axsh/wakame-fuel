@@ -21,14 +21,13 @@ module Wakame
       @options = path
     end
 
-    def parse(args)
+    def params
+      @options
     end
 
     def run(rule)
     end
 
-    def print_result
-    end
 
   end
 end
