@@ -17,21 +17,28 @@ module Wakame
     end
     
     module ClassMethods
-      attr_reader :instance
       attr_reader :defered_setup_calls
 
+
+      def instance
+        @instance
+      end
+
       def start(*opts)
-        pr = proc {
-          if self.instance.nil?
+        new_instance = proc {
+          if @instance.nil?
             @instance = new(*opts)
+            @instance.connect(*opts) do
+              @instance.init
+            end
           end
           @instance
         }
         
         if EM.reactor_running?
-          return pr.call
+          return new_instance.call
         else
-          EM.run pr
+          EM.run new_instance
         end
       end
       
