@@ -236,7 +236,13 @@ module AttributeHelper
 
       (attr_attributes[name.to_sym] ||= {}).merge!(attr)
 
-      unless attr[:read_only]
+      if attr[:read_only]
+        if self.respond_to? "#{name}=".to_sym
+          class_eval %Q{
+            undef_method "#{name}=".to_sym
+          }
+        end
+      else
         class_eval <<-__E__
         def #{name}=(v)
           self.#{name}
