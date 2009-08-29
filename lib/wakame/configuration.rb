@@ -9,6 +9,7 @@ module Wakame
     PARAMS = {
       #:config_template_root => nil,
       #:config_tmp_root => nil,
+      :status_db_dsn => nil,
       :config_root => nil,
       :cluster_class => 'WebCluster',
       :load_paths => [],
@@ -69,9 +70,14 @@ module Wakame
       %w(lib).map{|dir| File.join(root_path, dir) }.select{|path| File.directory?(path)}
     end
 
+    def cluster_config_path
+      File.expand_path('config/cluster.rb', root_path)
+    end
+
     # 
     class DefaultSet
       def process(config)
+        config.status_db_dsn = "sqlite://" + File.expand_path('tmp/wakame.db', config.root_path)
       end
     end
 
