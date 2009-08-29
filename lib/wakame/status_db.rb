@@ -1,20 +1,107 @@
 
+require 'thread'
+require 'wakame/master'
 
 module Wakame
   module StatusDB
+
+    def self.pass(&blk)
+      if Thread.current == WorkerThread.worker_thread
+        blk.call
+      else
+        WorkerThread.queue.enq(blk)
+      end
+    end
     
+    def self.barrier(&blk)
+      abort "Cant use barrier() in side of the EventMachine thread." if Kernel.const_defined?(:EventMachine) && ::EventMachine.reactor_thread?
+
+      if Thread.current == WorkerThread.worker_thread
+        return blk.call
+      end
+      
+      @q ||= ::Queue.new
+      time_start = ::Time.now
+      
+      self.pass {
+        begin
+          res = blk.call
+          @q << [true, res]
+        rescue => e
+          @q << [false, e]
+        end
+      }
+      
+      res = @q.shift
+      time_elapsed = ::Time.now - time_start
+      Wakame.log.debug("#{self}.barrier: Elapsed time for #{blk}: #{time_elapsed} sec") if time_elapsed > 0.05
+      if res[0] == false && res[1].is_a?(Exception)
+        raise res[1]
+      end
+      res[1]
+    end
+    
+    class WorkerThread
+
+      def self.queue
+        @queue ||= ::Queue.new
+      end
+
+      def self.worker_thread
+        @thread 
+      end
+
+      def self.init
+        @proceed_reqs = 0
+
+        if @thread.nil?
+          @thread = Thread.new {
+            while blk = queue.deq
+              begin
+                blk.call
+              rescue => e
+                Wakame.log.error("#{self.class}: #{e}")
+                Wakame.log.error(e)
+              end
+              @proceed_reqs += 1
+            end
+          }
+        end
+      end
+
+      def self.terminate
+        if self.queue.size > 0
+          Wakame.log.warn("#{self.class}: #{self.class.queue.size} of non-processed reqs are going to be ignored to shutdown the worker thread.")
+          self.queue.clear
+        end
+        self.worker_thread.kill if !self.worker_thread.nil? && self.worker_thread.alive?
+      end
+    end
+
+
     def self.adapter
       @adapter ||= SequelAdapter.new
     end
 
     class SequelAdapter
+      DATA_FORMAT_VERSION='0.4'
 
       def initialize
         require 'sequel/core'
         require 'sequel/model'
 
-        @db = Sequel.sqlite
-        setup_store
+        @db = Sequel.connect(Wakame.config.status_db_dsn, {:logger=>Wakame.log})
+        
+        if [:metadata, :model_stores].all?{ |i| @db.table_exists?(i) }
+          m = @db[:metadata].where(:id=>1).first
+
+          unless m && m[:version] == DATA_FORMAT_VERSION
+            setup_store
+          end
+
+        else
+          setup_store
+        end
 
         # Generate Sequel::Model class dynamically.
         # This is same as below:
@@ -27,6 +114,15 @@ module Wakame
       end
 
       def setup_store
+        @db.drop_table :metadata rescue nil
+        @db.create_table? :metadata do
+          primary_key :id
+          column :version, :string
+          column :created_at, :datetime
+        end
+
+        @db[:metadata].insert(:version=>DATA_FORMAT_VERSION, :created_at=>Time.now)
+
         @db.drop_table :model_stores rescue nil
         @db.create_table? :model_stores do
           primary_key :id, :string, :size=>50, :auto_increment=>false
@@ -43,6 +139,13 @@ module Wakame
           hash = eval(m[:dump])
           blk.call(id, hash)
         end
+      end
+
+      # Find all rows belong to given klass name.
+      # Returns id list which matches class_type == klass
+      def find_all(klass)
+        ds = @model_class.where(:class_type=>klass.to_s)
+        ds.all.map {|r| r[:id] }
       end
 
       def exists?(id)
@@ -126,6 +229,13 @@ module Wakame
           obj
         end
 
+
+        def find_all
+          StatusDB.adapter.find_all(self.to_s).map { |id|
+            find(id)
+          }
+        end
+
         def exists?(id) 
           _instance_cache.has_key?(id) || StatusDB.adapter.exists?(id)
         end
@@ -201,8 +311,9 @@ module Wakame
         }
 
         hash_saved = self.dump_attrs
-        StatusDB.adapter.save(self.id, hash_saved)
         @_orig = hash_saved.dup.freeze
+
+        StatusDB.adapter.save(self.id, hash_saved)
       end
 
       def delete
