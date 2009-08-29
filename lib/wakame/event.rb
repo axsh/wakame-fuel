@@ -100,6 +100,23 @@ module Wakame
       end
     end
 
+    class ServiceUnboundHost < Base
+      attr_reader :service, :host
+      def initialize(service, host)
+        super()
+        @service = service
+        @host = host
+      end
+    end
+    class ServiceBoundHost < Base
+      attr_reader :service, :host
+      def initialize(service, host)
+        super()
+        @service = service
+        @host = host
+      end
+    end
+
     class ServiceBoundCluster < Base
       attr_reader :service, :service_cluster
       def initialize(svc_inst, cluster)
