@@ -21,7 +21,8 @@ module Wakame
       def initialize(args)
         @args = args.dup      
 	@options = {
-          :command_server_uri => Wakame.config.http_command_server_uri
+          :command_server_uri => Wakame.config.http_command_server_uri,
+          :json_print => false
         }
 	@public_key = "1234567890"
       end
@@ -36,6 +37,7 @@ module Wakame
           opts.separator ""
           opts.separator "options:"
           opts.on( "-s", "--server HttpURI", "command server" ) {|str| @options[:command_server_uri] = str }
+          opts.on("--dump", "Print corresponded message body for debugging"){|j| @options[:json_print] = true }
         }
         
 
@@ -62,20 +64,24 @@ module Wakame
           exit 1
         end
 
-        unless req[:json_print].nil?
+        if @options[:json_print]
 	  require 'pp' 
           pp res
         else
+          exit_code = 1
           case res[0]["status"]
           when 404
-            p "Command Error: #{res[0]["message"]}"
+            STDERR.puts "Command Error: #{res[0]["message"]}"
           when 403
-            p "Authentication Error: #{res[0]["message"]}"
+            STDERR.puts "Authentication Error: #{res[0]["message"]}"
           when 500
-            p "Server Error: #{res[0]["message"]}"
+            STDERR.puts "Server Error: #{res[0]["message"]}"
           else
 	    subcommand.print_result(res)
+            exit_code = 0
           end
+
+          exit exit_code
         end
       end
       
@@ -108,8 +114,7 @@ module Wakame
         request_params = {
           :command => subcommand,
           :command_server_uri => @options[:command_server_uri] + "?",
-	  :query_string => query_string,
-          :json_print => options[:json_print]
+	  :query_string => query_string
         }
 
         request_params
@@ -271,7 +276,6 @@ __E__
       opts.banner = "Usage: status [options]"
       opts.separator ""
       opts.separator "options:"
-      opts.on("--dump"){|j| options[:json_print] = "yes" }
     }
     cmd = create_parser(args, &blk)
     options
@@ -319,7 +323,6 @@ __E__
       opts.banner = "Usage: action_status"
       opts.separator ""
       opts.separator "options:"
-      opts.on("--dump"){|j| options[:json_print] = "yes" }
     }
     cmd = create_parser(args, &blk)
     options
