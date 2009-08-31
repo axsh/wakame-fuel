@@ -31,7 +31,7 @@ module Wakame
         args = args.dup
         
         comm_parser = OptionParser.new { |opts|
-          opts.version = VERSION
+          opts.version = Wakame::VERSION
           opts.banner = "Usage: wakameadm [options] command [options]"
           
           opts.separator ""
@@ -228,38 +228,44 @@ class Wakame::Cli::Subcommand::Status
   include Wakame::Cli::Subcommand
 
   STATUS_TMPL = <<__E__
-Cluster : <%= @service_cluster["name"].to_s %> (<%= @service_cluster["status"].to_s %>)
-<%- @service_cluster["properties"].each { |prop, v| -%>
-  <%= v["type"].to_s %> : <current=<%= v["instance_count"] %> min=<%= v["min_instances"] %>, max=<%= v["max_instances"] %><%= v["require_agent"] ? "" : ", AgentLess" %>>
-  <%- v["instances"].each { |id|
-         svc_inst = @service_cluster["instances"][id]
-  -%>
-     <%= svc_inst["instance_id"] %> (<%= trans_svc_status(svc_inst["status"]) %>)
+Cluster : <%= cluster["name"].to_s %> (<%= cluster_status_msg(cluster["status"]) %>)
+<%- cluster["resources"].keys.each { |res_id|
+  resource = body["resources"][res_id]
+-%>
+  <%= resource["class_type"] %> : <current=<%= resource["instance_count"] %> min=<%= resource["min_instances"] %>, max=<%= resource["max_instances"] %><%= resource["require_agent"] ? "" : ", AgentLess" %>>
+  <%- resource["services_ref"].each { |svc_inst| -%>
+     <%= svc_inst["id"] %> (<%= svc_status_msg(svc_inst["status"]) %>)
   <%- } -%>
 <%- } -%>
-<%- if @service_cluster["instances"].size > 0  -%>
+<%- if cluster["services"].size > 0  -%>
 
 Instances :
-  <%- @service_cluster["instances"].each { |k, v| -%>
-  <%= v["instance_id"] %> : <%= v["property"] %> (<%= trans_svc_status(v["status"]) %>)
-    <%- if v["agent_id"] -%>
-    On VM instance: <%= v["agent_id"]%>
+  <%- cluster["services"].keys.each { |svc_id| 
+    svc = body["services"][svc_id]
+  -%>
+  <%= svc_id %> : <%= svc["resource_ref"]["class_type"] %> (<%= svc_status_msg(svc["status"]) %>)
+    <%- if svc["agent_ref"] -%>
+    On VM: <%= svc["agent_ref"]["id"] %>
     <%- end -%>
   <%- } -%>
 <%- end -%>
-<%- if @agent_monitor["registered"].size > 0 -%>
+<%- if agent_pool["group_active"].size > 0 -%>
 
 Agents :
-  <%- @agent_monitor["registered"].each { |a| -%>
-  <%= a["agent_id"] %> : <%= a["attr"]["local_ipv4"] %>, <%= a["attr"]["public_ipv4"] %> load=<%= a["attr"]["uptime"] %>, <%= (Time.now - Time.parse(a["last_ping_at"])).to_i %> sec(s), placement=<%= a["attr"]["availability_zone"] %><%= a["root_path"] %> (<%= a["status"] %>)
-    <%- if !a["services"].nil? && a["services"].size > 0 && !@service_cluster["instances"].empty? -%>
-    Services (<%= a["services"].size %>): <%= a["services"].collect{|id| @service_cluster["instances"][id]["property"] unless @service_cluster["instances"][id].nil? }.join(', ') %>
+  <%- agent_pool["group_active"].keys.each { |agent_id|
+  a = body["agents"][agent_id]
+  -%>
+  <%= a["id"] %> : <%= a["vm_attr"]["local_ipv4"] %>, <%= a["vm_attr"]["public_ipv4"] %>, <%= (Time.now - Time.parse(a["last_ping_at"])).to_i %> sec(s), placement=<%= a["vm_attr"]["availability_zone"] %> (<%= svc_status_msg(a["status"]) %>)
+   <%- if a["reported_services"].size > 0 && !cluster["services"].empty? -%>
+    Services (<%= a["reported_services"].size %>): <%= a["reported_services"].collect{ |id| body["services"][id]["resource_ref"] }.join(', ') %>
    <%- end -%>
   <%- } -%>
 <%- end -%>
 __E__
 
   SVC_STATUS_MSG={
+    Wakame::Service::STATUS_END=>'Terminated',
+    Wakame::Service::STATUS_INIT=>'Inialized',
     Wakame::Service::STATUS_OFFLINE=>'Offline',
     Wakame::Service::STATUS_ONLINE=>'ONLINE',
     Wakame::Service::STATUS_UNKNOWN=>'Unknown',
@@ -267,7 +273,13 @@ __E__
     Wakame::Service::STATUS_STARTING=>'Starting...',
     Wakame::Service::STATUS_STOPPING=>'Stopping...',
     Wakame::Service::STATUS_RELOADING=>'Reloading...',
-    Wakame::Service::STATUS_MIGRATING=>'Migrating...',
+    Wakame::Service::STATUS_MIGRATING=>'Migrating...'
+  }
+
+  CLUSTER_STATUS_MSG={
+    Wakame::Service::ServiceCluster::STATUS_OFFLINE=>'Offline',
+    Wakame::Service::ServiceCluster::STATUS_ONLINE=>'Online',
+    Wakame::Service::ServiceCluster::STATUS_PARTIAL_ONLINE=>'Partial Online'
   }
 
   def parse(args)
@@ -288,18 +300,37 @@ __E__
 
   def print_result(res)
     require 'time'
-    if res[1]["data"].nil?
-      p res[0]["message"]
-    else
-      @service_cluster = res[1]["data"]["service_cluster"]
-      @agent_monitor = res[1]["data"]["agent_monitor"]
-      puts ERB.new(STATUS_TMPL, nil, '-').result(binding)
-    end
+    body = res[1]["data"]
+    map_ref_data(body)
+
+    cluster = body["cluster"]
+    agent_pool = body["agent_pool"]
+    puts ERB.new(STATUS_TMPL, nil, '-').result(binding)
   end
 
   private
-  def trans_svc_status(stat)
+  def svc_status_msg(stat)
     SVC_STATUS_MSG[stat]
+  end
+
+  def cluster_status_msg(stat)
+    CLUSTER_STATUS_MSG[stat]
+  end
+
+  def map_ref_data(body)
+    # Create reference for ServiceInstance to assciated object.(1:1)
+    body["services"].each { |k,v|
+      v["resource_ref"] = body["resources"][v["resource_id"]]
+      v["host_ref"] = body["hosts"][v["host_id"]]
+      if v["host_ref"]
+        v["agent_ref"] = body["agents"][v["host_ref"]["agent_id"]]
+      end
+    }
+
+    # Create reference for Resource object to ServiceInstance array. (1:N)
+    body["resources"].each { |res_id,v|
+      v["services_ref"] = body["services"].values.find_all{|v| v["resource_id"] == res_id }.map{|v| v}
+    }
   end
 end
 
