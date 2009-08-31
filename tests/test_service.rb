@@ -106,9 +106,28 @@ class TestService < Test::Unit::TestCase
       assert( c.resources.member?(r.id) )
     }
 
-    c.propagate(Res2)
+    assert_raise(RuntimeError) {
+      c.propagate(Res2)
+    }
+    assert_raise(RuntimeError) {
+      c.propagate(Res2, h.id)
+    }
+
+    h2 = c.add_host { |h|
+      h.vm_spec.attr1 = "attr1"
+      h.vm_spec.attr2 = "attr2"
+      h.vm_spec.attr3 = "attr3"
+    }
+
+    res2_svc2 = c.propagate(Res2, h2.id)
     assert_equal(2, c.hosts.size)
     assert_equal(5, c.services.size)
+
+    res2_svc3 = c.propagate_service(res2_svc2.id)
+    assert_equal(3, c.hosts.size)
+    assert_equal(6, c.services.size)
+    assert_equal({:attr1=>"attr1", :attr2=>"attr2", :attr3=>"attr3"}, res2_svc3.host.vm_attr)
+    
   end
 
 

@@ -198,6 +198,9 @@ module Wakame
       # cluster_id will not become nil since ServiceCluster has responsibility for the lifecycle of this class.
       property :cluster_id
       
+      # Virtual Machine attributes specified by Resource object.
+      property :vm_attr, {:default=>{}}
+
       def mapped?
         self.agent_id.nil?
       end
@@ -217,14 +220,17 @@ module Wakame
         Agent.find(self.agent_id) || raise("#{self.class}: Could not find the mapped agent: Host.id \"#{self.id}\"")
       end
 
+      def vm_spec
+        spec = VmSpec.current
+        spec.table = self.vm_attr
+        spec
+      end
+
+
       # Delegate methods for Agent class
 
       def status
         self.agent.status
-      end
-
-      def vm_attr
-        self.agent.vm_attr
       end
 
       def reported_services
@@ -306,7 +312,7 @@ module Wakame
         services.clear
         resources.clear
         hosts.clear
-        @status = Service::STATUS_INIT
+        @status = self.class.attr_attributes[:status][:default]
         @status_changed_at = Time.now
       end
 
@@ -406,7 +412,7 @@ module Wakame
         if force == false
           instnum = instance_count(res_obj)
           if instnum >= res_obj.max_instances
-            raise ServicePropagationError, "#{res_obj.class} has been reached to max_instance limit: max=#{res_obj.max_instance}" 
+            raise ServicePropagationError, "#{res_obj.class} has been reached to max_instance limit: max=#{res_obj.max_instances}" 
           end
         end
         
@@ -415,14 +421,8 @@ module Wakame
         svc.bind_resource(res_obj)
 
         if res_obj.require_agent
-          if host_id.nil?
-            host = add_host
-          else
-            host = Host.find(host_id) || raise("#{self.class}: Unknown Host ID: #{host_id}")
-          end
+          host = Host.find(host_id) || raise("#{self.class}: Unknown Host ID: #{host_id}")
           svc.bind_host(host)
-        else
-          
         end
 
         self.services[svc.id]=1
@@ -434,10 +434,47 @@ module Wakame
       end
       thread_immutable_methods :propagate
 
-      def add_host
+      def propagate_service(svc_id, host_id=nil, force=false)
+        src_svc = (self.services.has_key?(svc_id) && ServiceInstance.find(svc_id)) || raise("Unregistered service: #{svc_id.to_s}")
+        res_obj = src_svc.resource
+
+        if force == false
+          instnum = instance_count(res_obj)
+          if instnum >= res_obj.max_instances
+            raise ServicePropagationError, "#{res_obj.class} has been reached to max_instance limit: max=#{res_obj.max_instances}" 
+          end
+        end
+        
+        svc = ServiceInstance.new
+        svc.bind_cluster(self)
+        svc.bind_resource(res_obj)
+
+        if res_obj.require_agent
+          if host_id
+            host = Host.find(host_id) || raise("#{self.class}: Unknown Host ID: #{host_id}")
+          else
+            host = add_host { |h|
+              h.vm_attr = src_svc.host.vm_attr.dup
+            }
+          end
+          svc.bind_host(host)
+        end
+
+        self.services[svc.id]=1
+
+        svc.save
+        self.save
+
+        svc
+      end
+      #thread_immutable_methods :propagate
+
+      def add_host(&blk)
         h = Host.new
         h.cluster_id = self.id
         self.hosts[h.id]=1
+
+        blk.call(h) if blk
 
         h.save
         self.save
@@ -705,15 +742,16 @@ module Wakame
         Host.find(self.host_id)
       end
 
-      def bind_host(host)
+      def bind_host(new_host)
         # UboundHost & BoundHost events occured only when the different agent object is assigned.
-        return if !self.resource.require_agent || self.host_id == host.id
-        raise "The host (#{host.id}) was assigned same service already: #{resource.class}" if host.has_resource_type?(resource)
+        return if !self.resource.require_agent || self.host_id == new_host.id
+        raise "The host (#{host.id}) was assigned same service already: #{resource.class}" if new_host.has_resource_type?(resource)
         
         unbind_host
 
+        self.host_id = new_host.id
         self.save
-
+        
         ED.fire_event(Event::ServiceBoundHost.new(self, host))
       end
       thread_immutable_methods :bind_host
@@ -819,61 +857,79 @@ module Wakame
 
 
     class VmSpec
-      def self.define(&blk)
-        spec = self.new
-        spec.instance_eval(&blk)
-        spec
-      end
-
-      def initialize
-        @environments = {}
-      end
-
-      def current
+      def self.current
         environment(Wakame.config.environment)
       end
 
-      def environment(klass_key, &blk)
+      def self.environment(klass_key, &blk)
+        @environments ||= {}
+
         envobj = @environments[klass_key]
         if envobj.nil?
           #klass = self.class.constants.find{ |c| c.to_s == klass_key.to_s }
-          if self.class.const_defined?(klass_key)
-            envobj = @environments[klass_key] = Util.build_const([self.class.to_s, klass_key.to_s].join('::')).new
+          if self.const_defined?(klass_key)
+            envobj = @environments[klass_key] = Util.build_const([self.to_s, klass_key.to_s].join('::')).new
           else
             raise "Undefined VM Spec template : #{klass_key}"
           end
         end
 
-        envobj.instance_eval(&blk) if blk
+        #envobj.instance_eval(&blk) if blk
 
         envobj
       end
 
-      class Template
-        include AttributeHelper
+      class Template < OpenStruct
+        def self.inherited(klass)
+          klass.class_eval {
+            def self.vm_attr_defs
+              @vm_attr_defs ||= {}
+            end
+          
+            def self.vm_attr(key, opts=nil)
+              opts ||= {}
 
-        def initialize
+              vm_attr_defs[key.to_sym]=opts
+            end
+          }
+          
+        end
+
+        def initialize(vm_attr={})
+          @table = vm_attr
+        end
+
+        def table=(vm_attr)
+          @table = vm_attr
         end
 
         def attrs
-          a={}
-          @attribute_keys.each { |k|
-            a[k.to_sym]=instance_variable_get("@#{k.to_s}")
-          }
-          a
+          table
         end
 
-        def satisfy?(agent)
+        def satisfy?(vm_attr)
           true
         end
+
       end
 
       class EC2 < Template
         AWS_VERSION=''
-        def_attribute :instance_type, {:default=>'m1.small', :persistent=>true}
-        def_attribute :availability_zone, {:persistent=>true}
-        def_attribute :key_name, {:persistent=>true}
-        def_attribute :security_groups, {:default=>[], :persistent=>true}
+        vm_attr :instance_type, {:choice=>%w[m1.small m1.large m1.xlarge c1.medium c1.xlarge]}
+        vm_attr :availability_zone
+        vm_attr :key_name
+        vm_attr :security_groups, {:default=>['default']}
+        vm_attr :image_id
+        vm_attr :kernel_id
+        vm_attr :ramdisk_id
+
+
+        def satisfy?(vm_attr)
+          # Compare critical variables which will return false if they are not same.
+          return false unless [:availability_zone, :image_id, :instance_type].all? { |k| table[k].nil? ? true : table[k] == vm_attr[k] }
+          true
+        end
+
       end
 
       class StandAlone < Template
@@ -887,19 +943,6 @@ module Wakame
       property :max_instances, {:default=>1}
       property :startup, {:default=>true}
       property :require_agent, {:default=>true}
-
-      def initialize()
-        @vm_spec = VmSpec.define {
-          environment(:EC2) { |ec2|
-            ec2.instance_type = 'm1.small'
-            ec2.availability_zone = 'us-east-1c'
-            ec2.security_groups = ['default']
-          }
-          
-          environment(:StandAlone) {
-          }
-        }
-      end
 
       def self.inherited(klass)
         klass.class_eval {
@@ -939,7 +982,6 @@ module Wakame
       def id
         Resource.id(self.class.to_s)
       end
-
 
       def basedir
         File.join(Wakame.config.root_path, 'cluster', 'resources', Util.snake_case(self.class))
