@@ -274,8 +274,8 @@ module Wakame
       STATUS_PARTIAL_ONLINE = 2
 
       property :name
-      property :status, {:readonly=>true}
-      property :status_changed_at, {:readonly=>true}
+      property :status, {:readonly=>true, :default=>STATUS_OFFLINE}
+      property :status_changed_at, {:readonly=>true, :default=>proc{Time.now} }
       property :services, {:default=>{}}
       property :resources, {:default=>{}}
       property :hosts, {:default=>{}}
@@ -284,7 +284,6 @@ module Wakame
       attr_reader :rule_engine
 
       def initialize()
-        bind_thread
         @rule_engine = RuleEngine.new(self)
       end
 
@@ -666,7 +665,7 @@ module Wakame
       property :cluster_id
       property :status, {:read_only=>true, :default=>Service::STATUS_INIT}
       property :progress_status, {:read_only=>true, :default=>Service::STATUS_INIT}
-      property :status_changed_at
+      property :status_changed_at, {:read_only=>true, :default=>proc{Time.now}}
 
       def update_status(new_status, changed_at=Time.now, fail_message=nil)
         if @status != new_status
