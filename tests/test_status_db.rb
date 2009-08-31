@@ -1,12 +1,10 @@
 
-$:.unshift File.dirname(__FILE__) + '/../lib'
-require 'rubygems'
+$:.unshift(File.dirname(__FILE__) + '/../lib')
+$:.unshift(File.dirname(__FILE__))
 
-require 'test/unit'
-require 'wakame'
-require 'wakame/util'
+require 'setup_master.rb'
 
-WAKAME_ROOT="#{File.dirname(__FILE__)}/.."
+Wakame.config.status_db_dsn = 'sqlite:///'
 
 class TestStatusDB < Test::Unit::TestCase
 
