@@ -321,10 +321,10 @@ module AttributeHelper
       }
       t
     when Array
-      root.collect { |a| dump_internal(a) }
+      root.collect { |a| dump_internal(a, &blk) }
     when Hash
       t={}
-      root.each {|k,v| t[k] = dump_internal(v) }
+      root.each {|k,v| t[k] = dump_internal(v, &blk) }
       t
     else
       if CONVERT_CLASSES.any?{|t, p| root.kind_of?(t) }
