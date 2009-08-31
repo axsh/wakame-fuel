@@ -179,13 +179,17 @@ module Wakame
 
       module ClassMethods
         def enable_cache
-          @enable_cache = true
-          @_instance_cache = {}
+          unless @enable_cache
+            @enable_cache = true
+            @_instance_cache = {}
+          end
         end
 
         def disable_cache
-          @enable_cache = false
-          @_instance_cache = {}
+          if @enable_cache
+            @enable_cache = false
+            @_instance_cache = {}
+          end
         end
 
         def _instance_cache
@@ -262,7 +266,10 @@ module Wakame
         klass.extend(ClassMethods)
         klass.class_eval {
           #include(::AttributeHelper)
-          enable_cache
+          #enable_cache
+
+          # Manually set attr option to get :id appeared in dump_attrs.
+          attr_attributes[:id]={:persistent=>false}
         }
       end
 
@@ -310,7 +317,11 @@ module Wakame
           end
         }
 
-        hash_saved = self.dump_attrs
+        hash_saved = self.dump_attrs { |k,v,dumper|
+          if v[:persistent] == true
+            dumper.call(k)
+          end
+        }
         @_orig = hash_saved.dup.freeze
 
         StatusDB.adapter.save(self.id, hash_saved)
