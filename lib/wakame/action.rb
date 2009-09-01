@@ -21,6 +21,10 @@ module Wakame
     def service_cluster
       trigger.service_cluster
     end
+    
+    alias :cluster :service_cluster
+
+
     def status=(status)
       if @status != status
         @status = status
