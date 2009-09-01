@@ -15,6 +15,11 @@ module URI
       return super(tmp)
     end
 
+    def initialize(*args)
+      args[5] = '/' if args[5].nil? || args[5] == ''
+      super(*args)
+    end
+
     alias :vhost :path
     alias :vhost= :path=
   end

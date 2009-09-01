@@ -18,9 +18,12 @@ class TestUriAMQP < Test::Unit::TestCase
   end
 
   def test_build
-    uri = URI::AMQP.build(:host=>'192.168.1.1', :vhost=>'/aaa')
+    uri = URI::AMQP.build(:host=>'192.168.1.1', :path=>'/aaa')
+    assert_equal('amqp://192.168.1.1/aaa', uri.to_s)
     uri.vhost = '/bbb'
-
     assert_equal('amqp://192.168.1.1/bbb', uri.to_s)
+
+    uri = URI::AMQP.build(:host=>'192.168.1.1', :userinfo=>'a', :path=>nil)
+    assert_equal('amqp://a@192.168.1.1/', uri.to_s)
   end
 end
