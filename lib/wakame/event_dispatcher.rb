@@ -20,8 +20,11 @@ module Wakame
 
       def subscribe_once(event_class, *args, &blk)
         tkt = self.subscribe(event_class, *args) { |event|
-          blk.call(event) if blk
-          self.unsubscribe(tkt)
+          begin
+            blk.call(event) if blk
+          ensure
+            self.unsubscribe(tkt)
+          end
         }
       end
 
