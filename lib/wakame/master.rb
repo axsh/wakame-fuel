@@ -212,10 +212,14 @@ module Wakame
 
        def load(cluster_rb_path=Wakame.config.cluster_config_path)
          Wakame.log.info("#{self.class}: Loading config/cluster.rb: #{cluster_rb_path}")
+         @loaded_cluster_names = {}
+
          eval(File.readlines(cluster_rb_path).join(''), binding)
-         #self.instance_eval {
-         #  Kernel.load cluster_rb_path
-         #}
+
+         # Clear uninitialized cluster data in the store.
+         ServiceCluster.find_all.each { |cluster|
+           cluster.delete unless @loaded_cluster_names.has_key?(cluster.name)
+         }
        end
 
 
@@ -232,7 +236,11 @@ module Wakame
          blk.call(cluster)
 
          cluster.save
+
+         Wakame.log.info("#{self.class}: Loaded Service Cluster: #{cluster.name}")
+         @loaded_cluster_names[name]=1
        end
+
      end
 
      attr_reader :clusters
