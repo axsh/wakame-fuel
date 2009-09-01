@@ -114,9 +114,21 @@ module Wakame
 
     attr_reader :mq, :amqp_client
     
+    def amqp_server_uri
+      URI::AMQP.build(:host => @amqp_client.settings[:host],
+                      :port => @amqp_client.settings[:port],
+                      :path => @amqp_client.settings[:vhost]
+                      )
+    end
+
     def connect(*args)
       close() unless connected?
       @amqp_client = AMQP.connect(*args)
+      @amqp_client.instance_eval {
+        def settings
+          @settings
+        end
+      }
       @mq = Thread.current[:mq] = MQ.new(@amqp_client)
 
       run_defered_callbacks
