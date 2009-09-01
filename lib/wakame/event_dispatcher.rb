@@ -14,8 +14,8 @@ module Wakame
         self.instance.subscribe(event_class, *args, &blk)
       end
 
-      def unsubscribe(event_class)
-        self.instance.unsubscribe(event_class)
+      def unsubscribe(ticket)
+        self.instance.unsubscribe(ticket)
       end
 
       def subscribe_once(event_class, *args, &blk)
@@ -55,24 +55,24 @@ module Wakame
                     end
 
       EM.barrier {
-      tlist = @event_handlers[event_class]
-      if tlist.nil?
-        tlist = @event_handlers[event_class] = []
-      end
-      
-      tickets = []
-      args.each { |o|
-        tickets << Util.gen_id
-        @tickets.store(tickets.last, [event_class, o])
-        tlist << tickets.last
-      }
-      
-      if blk
-        tickets << Util.gen_id
-        @tickets.store(tickets.last, [event_class, blk])
-        tlist << tickets.last
-      end
-
+        tlist = @event_handlers[event_class]
+        if tlist.nil?
+          tlist = @event_handlers[event_class] = []
+        end
+        
+        tickets = []
+        args.each { |o|
+          tickets << Util.gen_id
+          @tickets.store(tickets.last, [event_class, o])
+          tlist << tickets.last
+        }
+        
+        if blk
+          tickets << Util.gen_id
+          @tickets.store(tickets.last, [event_class, blk])
+          tlist << tickets.last
+        end
+        
         # Return in array if num of ticket to be returned is more than or equal 2.
         tickets.size > 1 ? tickets : tickets.first
       }
