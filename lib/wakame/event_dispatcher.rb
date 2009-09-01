@@ -54,7 +54,7 @@ module Wakame
                       raise ArgumentError, "event_class has to be a form of String or Class type"
                     end
 
-      EM.barrier {
+      StatusDB.barrier {
         tlist = @event_handlers[event_class]
         if tlist.nil?
           tlist = @event_handlers[event_class] = []
@@ -84,7 +84,7 @@ module Wakame
         return nil
       end
       
-      EM.barrier {
+      StatusDB.barrier {
         Wakame.log.debug("#{self.class}.unsubscribe(#{ticket})")
 
         @unsubscribe_queue << ticket
@@ -132,7 +132,7 @@ module Wakame
     
       #@handler_run_queue.push(run_handlers)
       
-      ::EventMachine.barrier {
+      StatusDB.barrier {
         begin 
           run_callbacks.call
         rescue => e
