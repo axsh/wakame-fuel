@@ -115,6 +115,8 @@ module Wakame
     attr_reader :mq, :amqp_client
     
     def amqp_server_uri
+      raise "The connection is not established yet." unless @amqp_client && connected?
+
       URI::AMQP.build(:host => @amqp_client.settings[:host],
                       :port => @amqp_client.settings[:port],
                       :path => @amqp_client.settings[:vhost]
