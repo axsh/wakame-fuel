@@ -18,6 +18,12 @@ module Wakame
         self.instance.unsubscribe(event_class)
       end
 
+      def subscribe_once(event_class, *args, &blk)
+        tkt = self.subscribe(event_class, *args) { |event|
+          blk.call(event) if blk
+          self.unsubscribe(tkt)
+        }
+      end
 
       def fire_event(event_obj)
         self.instance.fire_event(event_obj)
