@@ -200,7 +200,9 @@ module Wakame
       # Ths Job ID already holds/reserves the lock regarding the resource.
       return if @id2res.has_key?(id) && @id2res[id].has_key?(resource.to_s)
 
-      StatusDB.barrier {
+      # Need to use EM.barrier while RuleEngine is using EventMachine's threads.
+      #StatusDB.barrier {
+      EM.barrier {
         @locks[resource.to_s] ||= []
         @id2res[id] ||= {}
         
@@ -243,7 +245,9 @@ module Wakame
     end
     
     def quit(id)
-      StatusDB.barrier {
+      # Need to use EM.barrier while RuleEngine is using EventMachine's threads.
+      #StatusDB.barrier {
+      EM.barrier {
         case test(id)
         when :runnable, :wait
           @id2res[id].keys.each { |r| @locks[r.to_s].delete_if{ |i| i == id } }
