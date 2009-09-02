@@ -251,6 +251,8 @@ module Wakame
         case test(id)
         when :runnable, :wait
           @id2res[id].keys.each { |r| @locks[r.to_s].delete_if{ |i| i == id } }
+          @locks.delete_if{ |k,v| v.nil? || v.empty? }
+
           @qbt_m.synchronize {
             @queue_by_thread.each {|t, q| q.enq(id) }
           }
