@@ -12,10 +12,10 @@ module Wakame
         }
 
         acquire_lock { |lst|
-          lst << children.map{|c| c.resource.id }.uniq
+          lst << children.map{|c| c.resource.class.to_s }.uniq
         }
         
-        Wakame.log.debug("#{self.class}: Child nodes for #{@svc.resource.class}: " + children.map{|c| c.resource.class }.uniq.inspect )
+        Wakame.log.debug("#{self.class}: Child nodes for #{@parent_svc.resource.class}: " + children.map{|c| c.resource.class }.uniq.inspect )
 
         children.each { |svc|
           if svc.status != Service::STATUS_ONLINE
