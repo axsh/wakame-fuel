@@ -1,6 +1,7 @@
 
 require 'fileutils'
 require 'erb'
+require 'pathname'
 
 module Wakame
   class Template
@@ -17,40 +18,44 @@ module Wakame
       @service_instance.resource.basedir
     end
 
+    def glob_basedir(glob_patterns, &blk)
+      glob_patterns = [glob_patterns] if glob_patterns.is_a? String
+
+      basedir_obj = Pathname.new(basedir)
+      paths = glob_patterns.collect {|pattern| Pathname.glob(File.join(basedir, pattern)).collect {|path| path.relative_path_from(basedir_obj) } }
+      paths = paths.flatten.uniq
+
+      paths.each &blk if blk
+
+      paths
+    end
+
     def render_config
-      service_instance.property.render_config(self)
+      service_instance.resource.render_config(self)
     end
 
     def cleanup
       FileUtils.rm_r( @tmp_basedir, :force=>true)
     end
 
-    def render(args)
-      args = [args] if args.is_a? String
+    def render(path)
+      update(path) { |buf|
+        ERB.new(buf, nil, '-').result(service_instance.export_binding)
+      }
+    end
+
+    def cp(path)
+      destpath = File.expand_path(path, @tmp_basedir)
+      FileUtils.mkpath(File.dirname(destpath)) unless File.directory?(File.dirname(destpath))
       
-      args.each { |path|
-        update(path) { |buf|
-          ERB.new(buf, nil, '-').result(service_instance.export_binding)
-        }
-      }
+      FileUtils.cp_r(File.join(basedir, path),
+                     destpath,
+                     {:preserve=>true}
+                     )
     end
 
-    def cp(args)
-      args = [args] if args.is_a? String
-      args.each { |fname|
-
-        destpath = File.expand_path(fname, @tmp_basedir)
-        FileUtils.mkpath(File.dirname(destpath)) unless File.directory?(File.dirname(destpath))
-
-        FileUtils.cp_r(File.join(basedir, fname),
-                       destpath,
-                       {:preserve=>true}
-                       )
-      }
-    end
-
-    def chmod(fname, mode)
-      File.chmod(mode, File.join(@tmp_basedir, fname))
+    def chmod(path, mode)
+      File.chmod(mode, File.join(@tmp_basedir, path))
     end
 
     def load(path)
