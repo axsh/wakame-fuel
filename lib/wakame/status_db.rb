@@ -199,6 +199,7 @@ module Wakame
         end
 
         def find(id)
+          raise "Can not retrieve the data with nil." if id.nil?
           obj = _instance_cache[id]
           return obj unless obj.nil?
 
