@@ -257,7 +257,7 @@ Agents :
   -%>
   <%= a["id"] %> : <%= a["vm_attr"]["local_ipv4"] %>, <%= a["vm_attr"]["public_ipv4"] %>, <%= (Time.now - Time.parse(a["last_ping_at"])).to_i %> sec(s), placement=<%= a["vm_attr"]["availability_zone"] %> (<%= svc_status_msg(a["status"]) %>)
    <%- if a["reported_services"].size > 0 && !cluster["services"].empty? -%>
-    Services (<%= a["reported_services"].size %>): <%= a["reported_services"].collect{ |id| body["services"][id]["resource_ref"] }.join(', ') %>
+    Services (<%= a["reported_services"].size %>): <%= a["reported_services"].keys.collect{ |svc_id| body["services"][svc_id]["resource_ref"]["class_type"] }.join(', ') %>
    <%- end -%>
   <%- } -%>
 <%- end -%>
