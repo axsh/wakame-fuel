@@ -72,6 +72,7 @@ module Wakame
         end
       }
     end
+    thread_immutable_methods :flush_subactions
     
     def all_subactions_complete?
       subactions.each { |a|
@@ -134,7 +135,8 @@ module Wakame
       
       trigger.rule_engine.lock_queue.wait(self.job_id)
     end
-    
+    thread_immutable_methods :acquire_lock
+
     def run
       raise NotImplementedError
     end
