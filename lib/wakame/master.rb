@@ -49,7 +49,7 @@ module Wakame
             agent = Service::Agent.find(agent_id)
             #next if agent.status == Service::Agent::STATUS_OFFLINE
             
-            diff_time = Time.now - agent.last_ping_at
+            diff_time = Time.now - agent.last_ping_at_time
             #Wakame.log.debug "AgentMonitor GC : #{agent_id}: #{diff_time}"
             if diff_time > @agent_timeout.to_f
               agent.update_status(Service::Agent::STATUS_TIMEOUT)
@@ -93,7 +93,7 @@ module Wakame
 
         # Variable update function for the common members
         set_report_values = proc { |agent|
-          agent.last_ping_at = Time.parse(ping[:responded_at])
+          agent.last_ping_at = ping[:responded_at]
           agent.vm_attr = ping[:attrs]
 
           agent.renew_reported_services(ping[:services])
@@ -139,7 +139,7 @@ module Wakame
           Wakame.log.warn("#{self.class}: Unhandled agent response: #{response[:class_type]}")
         end
       }
-      
+
     end
 
     def terminate
@@ -187,13 +187,6 @@ module Wakame
 #       end
 #     end
 
-    # Retruns the master local agent object
-    def master_local
-      agent = Service::Agent.find(@master.master_local_agent_id)
-      raise "Master does not identify the master local agent yet." if agent.nil?
-      agent
-    end
-
     def each_online(&blk)
       registered_agents.each { |k, v|
         next if v.status != Service::Agent::STATUS_ONLINE
@@ -217,9 +210,11 @@ module Wakame
          eval(File.readlines(cluster_rb_path).join(''), binding)
 
          # Clear uninitialized cluster data in the store.
-         ServiceCluster.find_all.each { |cluster|
+         Service::ServiceCluster.find_all.each { |cluster|
            cluster.delete unless @loaded_cluster_names.has_key?(cluster.name)
          }
+
+         @loaded_cluster_names
        end
 
 
@@ -238,7 +233,7 @@ module Wakame
          cluster.save
 
          Wakame.log.info("#{self.class}: Loaded Service Cluster: #{cluster.name}")
-         @loaded_cluster_names[name]=1
+         @loaded_cluster_names[name]=cluster.id
        end
 
      end
@@ -250,14 +245,22 @@ module Wakame
        
        # Periodical cluster status updater
        @status_check_timer = EM::PeriodicTimer.new(5) {
-         @clusters.each_value{|v| v.update_cluster_status }
+         StatusDB.pass {
+           @clusters.values.each { |cluster_id|
+             Service::ServiceCluster.find(cluster_id).update_cluster_status
+           }
+         }
        }
        
        # Event based cluster status updater
        @check_event_tickets = []
        [Event::ServiceOnline, Event::ServiceOffline, Event::ServiceFailed].each { |evclass|
          @check_event_tickets << EventDispatcher.subscribe(evclass) { |event|
-           @clusters.each_value{|v| v.update_cluster_status }
+           StatusDB.pass {
+             @clusters.values.each { |cluster_id|
+               Service::ServiceCluster.find(cluster_id).update_cluster_status
+             }
+           }
          }
        }
 
@@ -289,9 +292,45 @@ module Wakame
 
      private
      def load_config_cluster
-       ClusterConfigLoader.new.load
+       @clusters = ClusterConfigLoader.new.load
+       resolve_template_vm_attr
      end
 
+
+     def resolve_template_vm_attr
+       @clusters.each { |name, cluster_id|
+         cluster = Service::ServiceCluster.find(cluster_id)
+
+         if cluster.template_vm_attr.nil? || cluster.template_vm_attr.empty?
+           EventDispatcher.subscribe_once(Event::AgentMonitored) { |event|
+             StatusDB.pass {
+               require 'right_aws'
+               ec2 = RightAws::Ec2.new(Wakame.config.aws_access_key, Wakame.config.aws_secret_key)
+               
+               ref_attr = ec2.describe_instances([event.agent.vm_attr[:instance_id]])
+               ref_attr = ref_attr[0]
+               
+               spec = cluster.template_vm_spec
+               Service::VmSpec::EC2.vm_attr_defs.each { |k, v|
+                 spec.attrs[k] = ref_attr[v[:right_aws_key]]
+               }
+               cluster.save
+
+               Wakame.log.debug("ServiceCluster \"#{cluster.name}\" template_vm_attr based on VM \"#{event.agent.vm_attr[:instance_id]}\" : #{spec.attrs.inspect}")
+             }
+           }
+         end
+
+         if cluster.advertised_amqp_servers.nil?
+           StatusDB.pass {
+             cluster.advertised_amqp_servers = master.amqp_server_uri.to_s
+             cluster.save
+             Wakame.log.debug("ServiceCluster \"#{cluster.name}\" advertised_amqp_servers: #{cluster.advertised_amqp_servers}")
+           }
+         end
+
+       }
+     end
 
    end
 
@@ -327,10 +366,6 @@ module Wakame
       @command_queue.shutdown
     end
 
-    def master_local_agent_id
-      @master_local_agent_id
-    end
-
     def register_manager(manager)
       raise ArgumentError unless manager.kind_of? Manager
       manager.master = self
@@ -354,16 +389,7 @@ module Wakame
 
 
     private
-    def determine_agent_id
-      if Wakame.config.environment == :EC2
-        @master_local_agent_id = VmManipulator::EC2::MetadataService.query_metadata_uri('instance-id')
-      else
-        @master_local_agent_id = VmManipulator::StandAlone::INSTANCE_ID
-      end
-    end
-
     def pre_setup
-      determine_agent_id
       @started_at = Time.now
       @managers = []
 
