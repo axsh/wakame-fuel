@@ -7,10 +7,10 @@ module Wakame
 
       def run
         Wakame.log.debug("#{self.class}: run() Begin: #{@svc.resource.class}")
-        raise "" unless @svc.host.mapped?
+        raise "Host is not mapped Agent: Host.id=#{@svc.host.id}" unless @svc.host.mapped?
 
         acquire_lock { |lst|
-          lst << @svc.resource.id
+          lst << @svc.resource.class.to_s
         }
 
         begin
@@ -21,7 +21,7 @@ module Wakame
           src_path.sub!('/$', '') if File.directory? src_path
           
           dest_path = File.expand_path("tmp/config/" + File.basename(tmpl.basedir), @svc.host.root_path)
-          Util.exec("rsync -e 'ssh -i #{Wakame.config.ssh_private_key} -o \"UserKnownHostsFile #{Wakame.config.ssh_known_hosts}\"' -au #{src_path}/ root@#{@svc.host.agent_ip}:#{dest_path}")
+          Wakame::Util.exec("rsync -e 'ssh -i #{Wakame.config.ssh_private_key} -o \"UserKnownHostsFile #{Wakame.config.ssh_known_hosts}\"' -au #{src_path}/ root@#{@svc.host.agent_ip}:#{dest_path}")
           
         ensure
           tmpl.cleanup if tmpl
