@@ -22,11 +22,11 @@ module Wakame
     end
 
     def service_cluster
-      @service_cluster
+      Service::ServiceCluster.find(@service_cluster_id)
     end
 
-    def initialize(service_cluster, &blk)
-      @service_cluster = service_cluster
+    def initialize(service_cluster_id, &blk)
+      @service_cluster_id = service_cluster_id
       @triggers = []
       
       @active_jobs = {}
