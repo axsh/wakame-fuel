@@ -150,50 +150,6 @@ module Wakame
       Service::AgentPool.instance
     end
 
-
-#    def agent(agent_id)
-#      registered_agents[agent_id] || unregistered_agents[agent_id]
-#    end
-
-
-#     def register_agent(data)
-#       agent_id = data[:agent_id]
-
-#       if agent.nil?
-#         agent = unregistered_agents[agent_id]
-#         if agent.nil?
-#           # The agent is going to be registered at first time.
-#           agent = Service::Agent.new(agent_id)
-#           registered_agents[agent_id] = agent
-#         else
-#           # Move the reference from unregistered group to the registered group.
-#           registered_agents[agent_id] = unregistered_agents[agent_id]
-#           unregistered_agents.delete(agent_id)
-#         end
-#         Wakame.log.debug("The Agent has been registered: #{data.inspect}")
-#         #Wakame.log.debug(unregistered_agents)
-#         ED.fire_event(Event::AgentMonitored.new(agent))
-#       end
-#       agent.root_path = data[:root_path]
-#       agent.vm_attr = data[:attrs]
-#     end
-
-#     def unregister_agent(agent_id)
-#       agent = registered_agents[agent_id]
-#       if agent
-#         unregistered_agents[agent_id] = registered_agents[agent_id]
-#         registered_agents.delete(agent_id)
-#         ED.fire_event(Event::AgentUnMonitored.new(agent))
-#       end
-#     end
-
-    def each_online(&blk)
-      registered_agents.each { |k, v|
-        next if v.status != Service::Agent::STATUS_ONLINE
-        blk.call(v)
-      }
-    end
-
    end
 
 
