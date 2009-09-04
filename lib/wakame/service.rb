@@ -485,7 +485,7 @@ module Wakame
 
         svc
       end
-      thread_immutable_methods :propagate
+      thread_immutable_methods :propagate_resource
       alias :propagate :propagate_resource
 
       def propagate_service(svc_id, host_id=nil, force=false)
@@ -521,7 +521,7 @@ module Wakame
 
         svc
       end
-      #thread_immutable_methods :propagate
+      thread_immutable_methods :propagate_service
 
       def add_host(&blk)
         h = Host.new
