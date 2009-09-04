@@ -456,9 +456,10 @@ module Wakame
 
 
       #def propagate(resource, force=false)
-      def propagate(resource, host_id=nil, force=false)
+      def propagate_resource(resource, host_id=nil, force=false)
         res_id = Resource.id(resource)
         res_obj = (self.resources.has_key?(res_id) && Resource.find(res_id)) || raise("Unregistered resource: #{resource.to_s}")
+        raise ArgumentError if res_obj.require_agent && host_id.nil?
 
         if force == false
           instnum = instance_count(res_obj)
@@ -471,6 +472,7 @@ module Wakame
         svc.bind_cluster(self)
         svc.bind_resource(res_obj)
 
+        # host_id must be set when the resource is placed on agent.
         if res_obj.require_agent
           host = Host.find(host_id) || raise("#{self.class}: Unknown Host ID: #{host_id}")
           svc.bind_host(host)
@@ -484,6 +486,7 @@ module Wakame
         svc
       end
       thread_immutable_methods :propagate
+      alias :propagate :propagate_resource
 
       def propagate_service(svc_id, host_id=nil, force=false)
         src_svc = (self.services.has_key?(svc_id) && ServiceInstance.find(svc_id)) || raise("Unregistered service: #{svc_id.to_s}")
