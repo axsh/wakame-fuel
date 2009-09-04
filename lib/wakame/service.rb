@@ -39,9 +39,18 @@ module Wakame
       property :root_path
       property :status, {:read_only=>true, :default=>STATUS_INIT}
       property :reported_services, {:read_only=>true, :default=>{}}
+      property :host_id
+
+      def mapped?
+        !self.host_id.nil?
+      end
 
       def id=(agent_id)
         @id = agent_id
+      end
+
+      def id
+        @id || raise("Agent.id is unset: #{self}")
       end
 
       def agent_ip
@@ -52,11 +61,10 @@ module Wakame
         vm_attr[:instance_id]
       end
 
-      def dump_status
-        self.dump_attrs.merge({:id=>self.id})
-        #{:agent_id => @agent_id, :status => @status, :last_ping_at => @last_ping_at, :attr => attr.dup,
-        #  :services => services.keys.dup
-        #}
+      # Tentative...
+      def last_ping_at_time
+        require 'time'
+        Time.parse(last_ping_at)
       end
 
       def update_status(new_status)
@@ -76,8 +84,8 @@ module Wakame
 
       def renew_reported_services(svc_id_list)
         reported_services.clear
-        svc_id_list.each { |svc_id|
-          reported_services[svc_id] = 1
+        svc_id_list.each { |svc_id, data|
+          reported_services[svc_id] = data
         }
       end
 
@@ -202,21 +210,36 @@ module Wakame
       property :vm_attr, {:default=>{}}
 
       def mapped?
-        self.agent_id.nil?
+        !self.agent_id.nil?
       end
         
       def map_agent(agent)
-        unmap_agent
+        raise TypeError unless agent.is_a?(Agent)
+        raise "Ensure to call unmap_agent() prior to mapping new agent" if self.mapped?
+        raise "The agent \"#{agent.id}\" is already mapped to the host: #{agent.host_id}" if agent.mapped?
+
         self.agent_id = agent.id
+        agent.host_id = self.id
+
+        self.save
+        agent.save
       end
 
       def unmap_agent()
-        unless self.agent_id.nil?
+        if mapped?
+          agent = Agent.find(self.agent_id)
+          if agent && self.agent_id == agent.id
+            agent.host_id = nil
+            agent.save
+          end
+
           self.agent_id = nil
+          self.save
         end
       end
 
       def agent
+        raise "#{self.class}: Agent is not mapped yet to this Host \"#{self.id}\"." unless mapped?
         Agent.find(self.agent_id) || raise("#{self.class}: Could not find the mapped agent: Host.id \"#{self.id}\"")
       end
 
@@ -286,12 +309,10 @@ module Wakame
       property :resources, {:default=>{}}
       property :hosts, {:default=>{}}
       property :dg_id
+      property :template_vm_attr, {:default=>{}}
+      property :advertised_amqp_servers
 
       attr_reader :rule_engine
-
-      def initialize()
-        @rule_engine = RuleEngine.new(self)
-      end
 
       def self.id(name)
         require 'digest/sha1'
@@ -299,13 +320,20 @@ module Wakame
       end
 
       def id
+        raise "Cluster name is not set yes" if self.name.nil?
         self.class.id(self.name)
       end
 
       def define_rule(&blk)
-        @rule_engine ||= RuleEngine.new(self)
+        @rule_engine ||= RuleEngine.new(self.id)
         
         blk.call(@rule_engine)
+      end
+
+      def template_vm_spec
+        spec = VmSpec.current
+        spec.table = self.template_vm_attr
+        spec
       end
 
       def reset
@@ -316,7 +344,22 @@ module Wakame
         @status_changed_at = Time.now
       end
 
-      
+      def mapped_agent?(agent_id)
+        hosts.keys.any? { |host_id|
+          h = Host.find(host_id)
+          h.mapped? && h.agent_id == agent_id
+        }
+      end
+
+      def agents
+        res={}
+        hosts.keys.collect { |host_id|
+          h = Host.find(host_id)
+          res[host_id]=h.agent_id if h.mapped?
+        }
+        res
+      end
+
       def dg
         unless self.dg_id.nil?
           graph = DependencyGraph.find(self.dg_id)
@@ -330,9 +373,16 @@ module Wakame
       end
 
       # 
-      def add_resource(resource, name=nil)
-        raise ArgumentError unless resource.is_a? Resource
-        #raise "Duplicate resource class registration" if self.resources.has_key? resource.id
+      def add_resource(resource, &blk)
+        if resource.is_a?(Class) && resource <= Resource
+          resource = resource.new
+        elsif resource.is_a? Resource
+        else
+          raise ArgumentError
+        end
+        raise "Duplicate resource registration: #{resource.class}" if self.resources.has_key? resource.id
+
+        blk.call(resource) if blk
 
         resources[resource.id]=1
         self.dg.add_object(resource)
@@ -340,6 +390,7 @@ module Wakame
         resource.save
         self.save
         self.dg.save
+        resource
       end
       thread_immutable_methods :add_resource
 
@@ -561,22 +612,7 @@ module Wakame
 
       alias :instances :services
 
-      #def dump_status
-      #  r = {:name => self.class.to_s, :status => self.status, :instances=>{}, :properties=>{} }
-      #  
-      #  instances.each { |k, i|
-      #    r[:instances][k]=i.dump_status
-      #  }
-      #  properties.each { |k, i|
-      #    r[:properties][k] = i.dump_attrs
-      #    r[:properties][k][:instances] = each_instance(i.class).collect{|k, v| k }
-      #  }
-      #
-      #  r
-      #end
-      #thread_immutable_methods :dump_status
-      
-      private
+      #private
 
       def update_cluster_status
         onlines = []
@@ -830,10 +866,6 @@ module Wakame
         binding
       end
       
-      def dump_status
-        self.dump_attrs
-      end
-
       def parent_instances
         ary = []
         self.cluster.dg.parents(resource.class).each { |r|
@@ -856,30 +888,59 @@ module Wakame
     end
 
 
-    class VmSpec
+    class VmSpec < OpenStruct
       def self.current
         environment(Wakame.config.environment)
       end
 
-      def self.environment(klass_key, &blk)
-        @environments ||= {}
+      def self.environment(klass_key)
+        @templates ||= {}
 
-        envobj = @environments[klass_key]
-        if envobj.nil?
+        tmpl_klass = @templates[klass_key]
+        if tmpl_klass.nil?
           #klass = self.class.constants.find{ |c| c.to_s == klass_key.to_s }
           if self.const_defined?(klass_key)
-            envobj = @environments[klass_key] = Util.build_const([self.to_s, klass_key.to_s].join('::')).new
+            tmpl_klass = @templates[klass_key] = Util.build_const([self.to_s, klass_key.to_s].join('::'))
           else
-            raise "Undefined VM Spec template : #{klass_key}"
+            raise "Undefined VM Spec Template : #{klass_key}"
           end
         end
 
-        #envobj.instance_eval(&blk) if blk
-
-        envobj
+        self.new(tmpl_klass.new)
       end
 
-      class Template < OpenStruct
+
+      def initialize(template, vm_attr=nil)
+        @template = template
+        if vm_attr.is_a? Hash
+          @table = vm_attr
+        else
+          h = {}
+          @template.class.vm_attr_defs.keys.each {|k| h[k]=nil }
+          super(h)
+        end
+      end
+      protected :initialize
+      
+      def table=(vm_attr)
+        @table = vm_attr
+      end
+      
+      def attrs
+        table
+      end
+      
+      def satisfy?(vm_attr)
+        @template.satisfy?(vm_attr, table)
+      end
+      
+      def merge(src_vm_attr)
+        @template.merge(src_vm_attr, table)
+      end
+      
+
+
+      class Template
         def self.inherited(klass)
           klass.class_eval {
             def self.vm_attr_defs
@@ -895,41 +956,51 @@ module Wakame
           
         end
 
-        def initialize(vm_attr={})
-          @table = vm_attr
+        def satisfy?(vm_attr, diff)
+          raise ""
         end
 
-        def table=(vm_attr)
-          @table = vm_attr
-        end
-
-        def attrs
-          table
-        end
-
-        def satisfy?(vm_attr)
-          true
+        def merge(src_vm_attr, diff)
+          raise ""
         end
 
       end
 
       class EC2 < Template
         AWS_VERSION=''
-        vm_attr :instance_type, {:choice=>%w[m1.small m1.large m1.xlarge c1.medium c1.xlarge]}
-        vm_attr :availability_zone
-        vm_attr :key_name
-        vm_attr :security_groups, {:default=>['default']}
-        vm_attr :image_id
-        vm_attr :kernel_id
-        vm_attr :ramdisk_id
+        vm_attr :instance_type, {:choice=>%w[m1.small m1.large m1.xlarge c1.medium c1.xlarge], :right_aws_key=>:aws_instance_type}
+        vm_attr :availability_zone, {:right_aws_key=>:aws_availability_zone}
+        vm_attr :key_name, {:right_aws_key=>:ssh_key_name}
+        vm_attr :security_groups, {:default=>['default'], :right_aws_key=>:aws_groups}
+        vm_attr :image_id, {:right_aws_key=>:aws_image_id}
 
 
-        def satisfy?(vm_attr)
+        def satisfy?(vm_attr, diff)
           # Compare critical variables which will return false if they are not same.
-          return false unless [:availability_zone, :image_id, :instance_type].all? { |k| table[k].nil? ? true : table[k] == vm_attr[k] }
+          return false unless [:availability_zone, :instance_type, :image_id].all? { |k| diff[k].nil? ? true : diff[k] == vm_attr[k] }
           true
         end
 
+        def merge(vm_attr, diff)
+          self.class.vm_attr_defs.each_key { |k|
+            raise "Passed VM attribute hash is incomplete data set: #{vm_attr}" unless vm_attr.has_key? k
+          }
+
+          merged = vm_attr.merge(diff){ |k,v1,v2|
+            case k
+            when :security_groups
+              if v1.is_a?(Array)
+                (v1.dup << v2).flatten.uniq
+              else
+                v2
+              end
+            else
+              v2.nil? ? v1 : v2
+            end
+          }
+
+          merged
+        end
       end
 
       class StandAlone < Template
@@ -985,13 +1056,6 @@ module Wakame
 
       def basedir
         File.join(Wakame.config.root_path, 'cluster', 'resources', Util.snake_case(self.class))
-      end
-
-      def dump_status
-        self.dump_attrs
-        #{:type => self.class.to_s, :min_instances => min_instances, :max_instances=> max_instances,
-        #  :duplicable=>duplicable
-        #}
       end
 
       def start(service_instance, action); end
