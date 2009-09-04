@@ -1,6 +1,8 @@
 
 require 'rubygems'
 
+require 'uri'
+require 'ext/uri'
 # For debugging
 Thread.abort_on_exception = true 
 

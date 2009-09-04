@@ -1,7 +1,6 @@
 
 require 'uri'
 require 'cgi'
-require 'ext/uri'
 require 'optparse'
 require 'net/http'
 require 'json'

@@ -1,11 +1,7 @@
 #!/usr/bin/ruby
 
-
-require 'amqp'
-
-require 'uri'
-require 'ext/uri'
 require 'optparse'
+require 'amqp'
 
 module Wakame
   module Runner
