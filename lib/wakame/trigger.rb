@@ -13,6 +13,7 @@ module Wakame
     def service_cluster
       @rule_engine.service_cluster
     end
+    alias :cluster :service_cluster
 
     def master
       @rule_engine.master
