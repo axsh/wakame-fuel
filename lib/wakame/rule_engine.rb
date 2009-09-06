@@ -127,7 +127,7 @@ module Wakame
               ED.fire_event(Event::ActionFailed.new(action, e))
               res = e
             rescue => e
-              Wakame.log.debug("Failed action : #{action.class.to_s} due to #{e}")
+              Wakame.log.error("Failed action : #{action.class.to_s} due to #{e}")
               Wakame.log.error(e)
               action.completion_status = :failed
               begin
