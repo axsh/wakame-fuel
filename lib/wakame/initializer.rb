@@ -59,6 +59,7 @@ module Wakame
                      #log = Logger.new((Wakame.root||Dir.pwd) / "log.log")
                      out = ::Log4r::StdoutOutputter.new('stdout',
                                                         :formatter => Log4r::PatternFormatter.new(
+                                                                                                  :depth => 9999, # stack trace depth
                                                                                                   :pattern => "%d %C [%l]: %M",
                                                                                                   :date_format => "%Y/%m/%d %H:%M:%S"
                                                                                                   )
