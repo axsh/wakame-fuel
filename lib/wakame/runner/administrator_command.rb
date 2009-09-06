@@ -156,8 +156,11 @@ module Wakame
       def print_result(res)
       end
 
-      def create_parser(args,&blk)
-        parser = OptionParser.new(&blk)
+      
+      def create_parser(args, &blk)
+        parser = OptionParser.new { |opts|
+          blk.call(opts) if blk
+        }
         parser.order!(args)
         parser
       end
@@ -390,14 +393,49 @@ class Wakame::Cli::Subcommand::PropagateService
 
   def parse(args)
     params = {}
-    blk = Proc.new {|opts|
-      opts.banner = "Usage: propagate_service"
-      opts.separator ""
-      opts.separator "options:"
-      opts.on("-s SERVICE_NAME", "--service SERVICE_NAME"){|str| params[:service] = str}
-      opts.on("-n NUMBER", "--number NUMBER"){|i| params["num"] = i}
+    cmd = create_parser(args) {|opts|
+      opts.banner = 'Usage: propagate_service [options] "Service ID"'
+      opts.separator('Options:')
+      opts.on('-h HOST_ID', '--host HOST_ID', String, "Number (>0) to propagate the specified service."){ |i| params["number"] = i.to_i }
+      opts.on('-n NUMBER', '--number NUMBER', Integer, "Number (>0) to propagate the specified service."){ |i| params["number"] = i.to_i }
     }
-    cmd = create_parser(args, &blk)
+    raise "Unknown Service ID: #{args}" unless args.size > 0
+    params[:service_id] = args.shift
+
+    options = {}
+    options[:query] = "&" + params.collect{|k,v| "#{CGI.escape(k.to_s)}=#{CGI.escape(v)}"}.join("&")
+    options
+  end
+
+  def run(options)
+    res = uri(options)
+    res
+  end
+
+  def print_result(res)
+    p res[0]["message"]
+  end
+end
+
+class Wakame::Cli::Subcommand::PropagateResource
+  include Wakame::Cli::Subcommand
+
+  def parse(args)
+    params = {}
+    create_parser(args) {|opts|
+      opts.banner = 'Usage: propagate_resource [options] "Resource Name" "Host ID"'
+      opts.separator("  Resource Name: ....")
+      opts.separator("  Host ID: ....")
+      opts.separator("  ")
+      opts.separator("  Options:")
+      opts.on("-n NUMBER", "--number NUMBER", Integer, "Number (>0) to propagate the specified resource."){|i| params["number"] = i}
+    }
+    raise "Unknown Resource Name: #{args}" unless args.size > 0
+    params["resource"] = args.shift
+
+    raise "Unknown Host ID: #{args}" unless args.size > 0
+    params["host_id"] = args.shift
+
     options = {}
     options[:query] = "&" + params.collect{|k,v| "#{CGI.escape(k.to_s)}=#{CGI.escape(v)}"}.join("&")
     options
