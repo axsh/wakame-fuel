@@ -92,7 +92,7 @@ module Wakame
       def has_resource_type?(key)
         res_id = key.is_a?(ServiceInstance) ? key.resource.id : Resource.id(key)
 
-        reported_services.any? { |k|
+        reported_services.keys.any? { |k|
           svc = ServiceInstance.find(k)
           svc.resource.id == res_id
         }
