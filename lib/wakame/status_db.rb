@@ -257,8 +257,15 @@ module Wakame
         end
 
         def delete(id)
-          StatusDB.adapter.delete(self.id)
-          _instance_cache.delete(id)
+          obj = find(id)
+          if obj
+            obj.on_before_delete
+
+            StatusDB.adapter.delete(id)
+            _instance_cache.delete(id)
+
+            obj.on_after_delete 
+          end
         end
 
       end
@@ -344,6 +351,12 @@ module Wakame
       end
       # Called after copying data from database in self.find().
       def on_after_load
+      end
+
+      def on_before_delete
+      end
+
+      def on_after_delete
       end
 
       protected
