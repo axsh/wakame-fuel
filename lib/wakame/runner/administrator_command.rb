@@ -241,7 +241,7 @@ Cluster : <%= cluster["name"].to_s %> (<%= cluster_status_msg(cluster["status"])
 <%- } -%>
 <%- if cluster["services"].size > 0  -%>
 
-Instances :
+Instances (<%= cluster["services"].size %>):
   <%- cluster["services"].keys.each { |svc_id| 
     svc = body["services"][svc_id]
   -%>
@@ -251,9 +251,18 @@ Instances :
     <%- end -%>
   <%- } -%>
 <%- end -%>
+<%- if cluster["cloud_hosts"].size > 0 -%>
+
+Cloud Host (<%= cluster["cloud_hosts"].size %>):
+  <%- cluster["cloud_hosts"].keys.each { |host_id| 
+    cloud_host = body["cloud_hosts"][host_id]
+  -%>
+  <%= host_id %> : <% if cloud_host["agent_id"] %>bind to <%= cloud_host["agent_id"] %><% end %>
+  <%- } -%>
+<%- end -%>
 <%- if agent_pool["group_active"].size > 0 -%>
 
-Agents :
+Agents (<%= agent_pool["group_active"].size %>):
   <%- agent_pool["group_active"].keys.each { |agent_id|
   a = body["agents"][agent_id]
   -%>
@@ -323,9 +332,9 @@ __E__
     # Create reference for ServiceInstance to assciated object.(1:1)
     body["services"].each { |k,v|
       v["resource_ref"] = body["resources"][v["resource_id"]]
-      v["host_ref"] = body["hosts"][v["host_id"]]
-      if v["host_ref"]
-        v["agent_ref"] = body["agents"][v["host_ref"]["agent_id"]]
+      v["cloud_host_ref"] = body["cloud_hosts"][v["host_id"]]
+      if v["cloud_host_ref"]
+        v["agent_ref"] = body["agents"][v["cloud_host_ref"]["agent_id"]]
       end
     }
 
@@ -396,7 +405,7 @@ class Wakame::Cli::Subcommand::PropagateService
     cmd = create_parser(args) {|opts|
       opts.banner = 'Usage: propagate_service [options] "Service ID"'
       opts.separator('Options:')
-      opts.on('-h HOST_ID', '--host HOST_ID', String, "Number (>0) to propagate the specified service."){ |i| params["number"] = i.to_i }
+      opts.on('-h CLOUD_HOST_ID', '--host CLOUD_HOST_ID', String, "Cloud Host ID to be used as template."){ |i| params["cloud_host_id"] = i }
       opts.on('-n NUMBER', '--number NUMBER', Integer, "Number (>0) to propagate the specified service."){ |i| params["number"] = i.to_i }
     }
     raise "Unknown Service ID: #{args}" unless args.size > 0
@@ -423,9 +432,9 @@ class Wakame::Cli::Subcommand::PropagateResource
   def parse(args)
     params = {}
     create_parser(args) {|opts|
-      opts.banner = 'Usage: propagate_resource [options] "Resource Name" "Host ID"'
+      opts.banner = 'Usage: propagate_resource [options] "Resource Name" "Cloud Host ID"'
       opts.separator("  Resource Name: ....")
-      opts.separator("  Host ID: ....")
+      opts.separator("  Cloud Host ID: ....")
       opts.separator("  ")
       opts.separator("  Options:")
       opts.on("-n NUMBER", "--number NUMBER", Integer, "Number (>0) to propagate the specified resource."){|i| params["number"] = i}
@@ -433,8 +442,8 @@ class Wakame::Cli::Subcommand::PropagateResource
     raise "Unknown Resource Name: #{args}" unless args.size > 0
     params["resource"] = args.shift
 
-    raise "Unknown Host ID: #{args}" unless args.size > 0
-    params["host_id"] = args.shift
+    raise "Unknown Cloud Host ID: #{args}" unless args.size > 0
+    params["cloud_host_id"] = args.shift
 
     options = {}
     options[:query] = "&" + params.collect{|k,v| "#{CGI.escape(k.to_s)}=#{CGI.escape(v)}"}.join("&")

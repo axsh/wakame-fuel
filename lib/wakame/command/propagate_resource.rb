@@ -13,16 +13,16 @@ class Wakame::Command::PropagateResource
       raise "Unknown Resource: #{resname}" 
     end
 
-    host_id = @options["host_id"]
-    if host_id.nil?
-      host = trigger.cluster.add_host { |h|
+    cloud_host_id = @options["cloud_host_id"]
+    if cloud_host_id.nil?
+      cloud_host = trigger.cluster.add_cloud_host { |h|
         if @options["vm_attr"].is_a? Hash
           h.vm_attr = @options["vm_attr"]
         end
       }
     else
-      host = Service::Host.find(host_id) || raise("Specified host was not found: #{host_id}")
-      raise "Same resouce type is already assigned: #{resobj.class} on #{host_id}" if host.has_resource_type?(resobj)
+      cloud_host = Service::CloudHost.find(cloud_host_id) || raise("Specified host was not found: #{cloud_host_id}")
+      raise "Same resouce type is already assigned: #{resobj.class} on #{cloud_host_id}" if cloud_host.has_resource_type?(resobj)
     end
     
 
@@ -35,7 +35,7 @@ class Wakame::Command::PropagateResource
     end
 
     num.times {
-      trigger.trigger_action(Wakame::Actions::PropagateResource.new(resobj, host.id))
+      trigger.trigger_action(Wakame::Actions::PropagateResource.new(resobj, cloud_host.id))
     }
 
   end

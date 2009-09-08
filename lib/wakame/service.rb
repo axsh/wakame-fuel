@@ -39,10 +39,10 @@ module Wakame
       property :root_path
       property :status, {:read_only=>true, :default=>STATUS_INIT}
       property :reported_services, {:read_only=>true, :default=>{}}
-      property :host_id
+      property :cloud_host_id
 
       def mapped?
-        !self.host_id.nil?
+        !self.cloud_host_id.nil?
       end
 
       def id=(agent_id)
@@ -200,7 +200,7 @@ module Wakame
 
     end
 
-    class Host < StatusDB::Model
+    class CloudHost < StatusDB::Model
       property :agent_id
 
       # cluster_id will not become nil since ServiceCluster has responsibility for the lifecycle of this class.
@@ -216,10 +216,10 @@ module Wakame
       def map_agent(agent)
         raise TypeError unless agent.is_a?(Agent)
         raise "Ensure to call unmap_agent() prior to mapping new agent" if self.mapped?
-        raise "The agent \"#{agent.id}\" is already mapped to the host: #{agent.host_id}" if agent.mapped?
+        raise "The agent \"#{agent.id}\" is already mapped to the cloud host: #{agent.cloud_host_id}" if agent.mapped?
 
         self.agent_id = agent.id
-        agent.host_id = self.id
+        agent.cloud_host_id = self.id
 
         self.save
         agent.save
@@ -229,7 +229,7 @@ module Wakame
         if mapped?
           agent = Agent.find(self.agent_id)
           if agent && self.agent_id == agent.id
-            agent.host_id = nil
+            agent.cloud_host_id = nil
             agent.save
           end
 
@@ -239,8 +239,8 @@ module Wakame
       end
 
       def agent
-        raise "#{self.class}: Agent is not mapped yet to this Host \"#{self.id}\"." unless mapped?
-        Agent.find(self.agent_id) || raise("#{self.class}: Could not find the mapped agent: Host.id \"#{self.id}\"")
+        raise "#{self.class}: Agent is not mapped yet to this cloud host \"#{self.id}\"." unless mapped?
+        Agent.find(self.agent_id) || raise("#{self.class}: Could not find the mapped agent for #{self.class}.id=\"#{self.id}\"")
       end
 
       def vm_spec
@@ -279,7 +279,7 @@ module Wakame
 
       def assigned_services()
         cluster = ServiceCluster.find(self.cluster_id)
-        cluster.services.keys.find_all { |svc_id| ServiceInstance.find(svc_id).host_id == self.id }
+        cluster.services.keys.find_all { |svc_id| ServiceInstance.find(svc_id).cloud_host_id == self.id }
       end
 
       def assigned_resources()
@@ -289,9 +289,35 @@ module Wakame
       end
 
       def validate_on_save
-        raise "Host.cluster_id property can't be nil." if self.cluster_id.nil?
+        raise "#{self.class}.cluster_id property can't be nil." if self.cluster_id.nil?
       end
 
+    end
+
+    class EC2 < CloudHost
+      def ec2
+      end
+      def elb
+      end
+    end
+
+    class EC2UsEast1 < EC2
+      def ec2
+        require 'right_aws'
+        RightAws::Ec2.new(Wakame.config.aws_access_key, Wakame.config.aws_secret_key, {:endpoint_url=>'https://us-east-1.ec2.amazonaws.com'})
+      end
+
+      def elb
+        require 'right_aws'
+        RightAws::Elb.new(Wakame.config.aws_access_key, Wakame.config.aws_secret_key)
+      end
+    end
+
+    class EC2EuWest1 < EC2
+      def ec2
+        require 'right_aws'
+        RightAws::Ec2.new(Wakame.config.aws_access_key, Wakame.config.aws_secret_key, {:endpoint_url=>'https://eu-west-1.ec2.amazonaws.com'})
+      end
     end
 
 
@@ -307,7 +333,7 @@ module Wakame
       property :status_changed_at, {:readonly=>true, :default=>proc{Time.now} }
       property :services, {:default=>{}}
       property :resources, {:default=>{}}
-      property :hosts, {:default=>{}}
+      property :cloud_hosts, {:default=>{}}
       property :dg_id
       property :template_vm_attr, {:default=>{}}
       property :advertised_amqp_servers
@@ -339,23 +365,23 @@ module Wakame
       def reset
         services.clear
         resources.clear
-        hosts.clear
+        cloud_hosts.clear
         @status = self.class.attr_attributes[:status][:default]
         @status_changed_at = Time.now
       end
 
       def mapped_agent?(agent_id)
-        hosts.keys.any? { |host_id|
-          h = Host.find(host_id)
+        cloud_hosts.keys.any? { |cloud_host_id|
+          h = CloudHost.find(cloud_host_id)
           h.mapped? && h.agent_id == agent_id
         }
       end
 
       def agents
         res={}
-        hosts.keys.collect { |host_id|
-          h = Host.find(host_id)
-          res[host_id]=h.agent_id if h.mapped?
+        cloud_hosts.keys.collect { |cloud_host_id|
+          h = CloudHost.find(cloud_host_id)
+          res[cloud_host_id]=h.agent_id if h.mapped?
         }
         res
       end
@@ -441,7 +467,7 @@ module Wakame
         svc = ServiceInstance.find(svc_id)
         svc.unbind_cluster
         self.services.delete(svc.id)
-        old_host = svc.unbind_host
+        old_host = svc.unbind_cloud_host
 
         if old_host
           Wakame.log.debug("#{svc.resource.class}(#{svc.id}) has been destroied from Host #{old_host.inspect}")
@@ -456,10 +482,10 @@ module Wakame
 
 
       #def propagate(resource, force=false)
-      def propagate_resource(resource, host_id=nil, force=false)
+      def propagate_resource(resource, cloud_host_id=nil, force=false)
         res_id = Resource.id(resource)
         res_obj = (self.resources.has_key?(res_id) && Resource.find(res_id)) || raise("Unregistered resource: #{resource.to_s}")
-        raise ArgumentError if res_obj.require_agent && host_id.nil?
+        raise ArgumentError if res_obj.require_agent && cloud_host_id.nil?
 
         if force == false
           instnum = instance_count(res_obj)
@@ -472,10 +498,10 @@ module Wakame
         svc.bind_cluster(self)
         svc.bind_resource(res_obj)
 
-        # host_id must be set when the resource is placed on agent.
+        # cloud_host_id must be set when the resource is placed on agent.
         if res_obj.require_agent
-          host = Host.find(host_id) || raise("#{self.class}: Unknown Host ID: #{host_id}")
-          svc.bind_host(host)
+          host = CloudHost.find(cloud_host_id) || raise("#{self.class}: Unknown CloudHost ID: #{cloud_host_id}")
+          svc.bind_cloud_host(host)
         end
 
         self.services[svc.id]=1
@@ -488,7 +514,7 @@ module Wakame
       thread_immutable_methods :propagate_resource
       alias :propagate :propagate_resource
 
-      def propagate_service(svc_id, host_id=nil, force=false)
+      def propagate_service(svc_id, cloud_host_id=nil, force=false)
         src_svc = (self.services.has_key?(svc_id) && ServiceInstance.find(svc_id)) || raise("Unregistered service: #{svc_id.to_s}")
         res_obj = src_svc.resource
 
@@ -504,14 +530,14 @@ module Wakame
         svc.bind_resource(res_obj)
 
         if res_obj.require_agent
-          if host_id
-            host = Host.find(host_id) || raise("#{self.class}: Unknown Host ID: #{host_id}")
+          if cloud_host_id
+            host = CloudHost.find(cloud_host_id) || raise("#{self.class}: Unknown Host ID: #{cloud_host_id}")
           else
-            host = add_host { |h|
+            host = add_cloud_host { |h|
               h.vm_attr = src_svc.host.vm_attr.dup
             }
           end
-          svc.bind_host(host)
+          svc.bind_cloud_host(host)
         end
 
         self.services[svc.id]=1
@@ -523,10 +549,10 @@ module Wakame
       end
       thread_immutable_methods :propagate_service
 
-      def add_host(&blk)
-        h = Host.new
+      def add_cloud_host(&blk)
+        h = CloudHost.new
         h.cluster_id = self.id
-        self.hosts[h.id]=1
+        self.cloud_hosts[h.id]=1
 
         blk.call(h) if blk
 
@@ -536,15 +562,14 @@ module Wakame
         h
       end
 
-      def del_host(host_id)
-        if self.hosts.has_key?(host_id)
-          self.hosts.delete(host_id)
+      def remove_cloud_host(cloud_host_id)
+        if self.cloud_hosts.has_key?(cloud_host_id)
+          self.cloud_hosts.delete(cloud_host_id)
         
           self.save
         end
 
-        Host.delete(host_id) rescue nil
-
+        CloudHost.delete(cloud_host_id) rescue nil
       end
 
 
@@ -736,7 +761,7 @@ module Wakame
     class ServiceInstance < StatusDB::Model
       include ThreadImmutable
 
-      property :host_id
+      property :cloud_host_id
       property :resource_id
       property :cluster_id
       property :status, {:read_only=>true, :default=>Service::STATUS_INIT}
@@ -770,43 +795,38 @@ module Wakame
 
         end
       end
-
       
-      def host
-        if self.resource.require_agent
+      def cloud_host
+        raise "The associated resource is not needed to have agent." unless self.resource.require_agent
           
-        elsif self.host_id.nil?
-          return nil
-        end
-        Host.find(self.host_id)
+        self.cloud_host_id.nil? ? nil : CloudHost.find(self.cloud_host_id)
       end
 
-      def bind_host(new_host)
-        # UboundHost & BoundHost events occured only when the different agent object is assigned.
-        return if !self.resource.require_agent || self.host_id == new_host.id
-        raise "The host (#{host.id}) was assigned same service already: #{resource.class}" if new_host.has_resource_type?(resource)
+      def bind_cloud_host(new_cloud_host)
+        return if !self.resource.require_agent || self.cloud_host_id == new_cloud_host.id
+        raise "The host (#{new_cloud_host.id}) was assigned same service already: #{resource.class}" if new_cloud_host.has_resource_type?(resource)
         
-        unbind_host
+        unbind_cloud_host
 
-        self.host_id = new_host.id
+        self.cloud_host_id = new_cloud_host.id
         self.save
         
-        ED.fire_event(Event::ServiceBoundHost.new(self, host))
+        ED.fire_event(Event::ServiceBoundHost.new(self, new_cloud_host))
       end
-      thread_immutable_methods :bind_host
+      thread_immutable_methods :bind_cloud_host
       
-      def unbind_host
-        return if self.host_id.nil?
+      def unbind_cloud_host
+        return if self.cloud_host_id.nil?
 
-        old_item = self.host
-        self.host_id = nil
+        old_item = self.cloud_host
+        self.cloud_host_id = nil
         
         self.save
 
         ED.fire_event(Event::ServiceUnboundHost.new(self, old_item))
         old_item
       end
-      thread_immutable_methods :unbind_host
+      thread_immutable_methods :unbind_cloud_host
 
       def resource
         return nil if self.resource_id.nil?
@@ -1082,7 +1102,7 @@ end
 module Wakame
   module Service
     module ApacheBasicProps
-      attr_accessor :listen_port, :listen_port_https, :server_root
+      
     end
   end
 end

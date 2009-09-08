@@ -6,12 +6,14 @@ class Wakame::Command::PropagateService
   command_name='propagate_service'
 
   def run(trigger)
-    refsvc = Service::ServiceInstance.find(@options["service_id"]) || raise("Unknown ServiceInstance: #{@options["service_id"]}")
+    refsvc = Service::ServiceInstance.find(@options["service_id"]) || raise("Unknown ServiceInstance ID: #{@options["service_id"]}")
 
-    host_id = @options["host_id"]
-    unless host_id.nil?
-      host = Service::Host.find(host_id) || raise("Specified host was not found: #{host_id}")
-      raise "Same resouce type is already assigned: #{refsvc.resource.class} on #{host_id}" if host.has_resource_type?(refsvc.resource)
+    cloud_host_id = @options["cloud_host_id"]
+    if cloud_host_id.nil? || cloud_host_id == ""
+      cloud_host_id = nil
+    else
+      cloud_host = Service::CloudHost.find(cloud_host_id) || raise("Specified cloud host was not found: #{cloud_host_id}")
+      raise "Same resouce type is already assigned: #{refsvc.resource.class} on #{cloud_host_id}" if cloud_host.has_resource_type?(refsvc.resource)
     end
 
     num = @options["number"] || 1
@@ -23,7 +25,7 @@ class Wakame::Command::PropagateService
     end
 
     num.times {
-      trigger.trigger_action(Wakame::Actions::PropagateService.new(refsvc))
+      trigger.trigger_action(Wakame::Actions::PropagateService.new(refsvc, cloud_host_id))
     }
   end
 end

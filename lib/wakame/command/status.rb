@@ -11,7 +11,7 @@ class Wakame::Command::Status
         :agents=>{}, 
         :services=>{}, 
         :resources=>{},
-        :hosts=>{}
+        :cloud_hosts=>{}
       }
 
       cluster = ServiceCluster.find_all.first
@@ -30,8 +30,8 @@ class Wakame::Command::Status
         res[:resources][id]=Resource.find(id).dump_attrs
       }
 
-      cluster.hosts.keys.each { |id|
-        res[:hosts][id]=Host.find(id).dump_attrs
+      cluster.cloud_hosts.keys.each { |id|
+        res[:cloud_hosts][id]=CloudHost.find(id).dump_attrs
       }
 #p res[:cluster]
       res
