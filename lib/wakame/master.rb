@@ -312,11 +312,6 @@ module Wakame
     end
 
 
-    def attr
-      agent_monitor.master_local.attr
-    end
-
-
     def cleanup
       @managers.each { |m| m.terminate }
       @command_queue.shutdown
