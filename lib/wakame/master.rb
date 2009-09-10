@@ -132,6 +132,8 @@ module Wakame
           case response[:status]
           when Actor::STATUS_RUNNING
             EventDispatcher.fire_event(Event::ActorProgress.new(response[:agent_id], response[:token], 0))
+          when Actor::STATUS_FAILED
+            EventDispatcher.fire_event(Event::ActorComplete.new(response[:agent_id], response[:token], response[:status], nil))
           else
             EventDispatcher.fire_event(Event::ActorComplete.new(response[:agent_id], response[:token], response[:status], response[:opts][:return_value]))
           end
