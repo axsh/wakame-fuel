@@ -275,16 +275,18 @@ Agents (<%= agent_pool["group_active"].size %>):
 __E__
 
   SVC_STATUS_MSG={
-    Wakame::Service::STATUS_END=>'Terminated',
-    Wakame::Service::STATUS_INIT=>'Inialized',
+    Wakame::Service::STATUS_TERMINATE=>'Terminated',
+    Wakame::Service::STATUS_INIT=>'Initialized',
     Wakame::Service::STATUS_OFFLINE=>'Offline',
-    Wakame::Service::STATUS_ONLINE=>'ONLINE',
+    Wakame::Service::STATUS_ONLINE=>'Online',
     Wakame::Service::STATUS_UNKNOWN=>'Unknown',
     Wakame::Service::STATUS_FAIL=>'Fail',
     Wakame::Service::STATUS_STARTING=>'Starting...',
     Wakame::Service::STATUS_STOPPING=>'Stopping...',
     Wakame::Service::STATUS_RELOADING=>'Reloading...',
-    Wakame::Service::STATUS_MIGRATING=>'Migrating...'
+    Wakame::Service::STATUS_MIGRATING=>'Migrating...',
+    Wakame::Service::STATUS_ENTERING=>'Entering...',
+    Wakame::Service::STATUS_QUITTING=>'Quitting...'
   }
 
   CLUSTER_STATUS_MSG={
