@@ -125,6 +125,20 @@ module Wakame
     class Nop < RequestBase
     end
 
+    class StatusCheckResult < ResponseBase
+      def_attribute :svc_id
+      def_attribute :status
+      def_attribute :new_status
+      def_attribute :fail_message
+
+      def initialize(agent, svc_id, status, fail_message=nil)
+        super(agent)
+        @svc_id = svc_id
+        @status = status
+        @fail_message = fail_message
+      end
+    end
+
     class ServiceStatusChanged < ResponseBase
       #attr_accessor :svc_id, :prev_status, :new_status, :fail_message
       def_attribute :svc_id

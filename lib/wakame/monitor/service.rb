@@ -14,7 +14,7 @@ class Wakame::Monitor::Service
       @service_monitor = svc_mon
       @status = Wakame::Service::STATUS_OFFLINE
       count = 0
-      @timer = Wakame::Monitor::CheckerTimer.new(3) {
+      @timer = Wakame::Monitor::CheckerTimer.new(5) {
         self.signal_checker
       }
     end
@@ -60,8 +60,10 @@ class Wakame::Monitor::Service
         case res
         when Exception
           update_status(Wakame::Service::STATUS_FAIL) 
+          @service_monitor.send_event(Wakame::Packets::StatusCheckResult.new(@service_monitor.agent, self.svc_id, Wakame::Service::STATUS_FAIL, res.message))
         when Wakame::Service::STATUS_ONLINE, Wakame::Service::STATUS_OFFLINE
-          update_status(res) 
+          update_status(res)
+          @service_monitor.send_event(Wakame::Packets::StatusCheckResult.new(@service_monitor.agent, self.svc_id, res))
         else
           Wakame.log.error("#{self.class}: Unknown response type from the checker: #{self.svc_id}, ")
         end
@@ -143,7 +145,7 @@ class Wakame::Monitor::Service
   end
 
   def send_event(a)
-    Wakame.log.debug("Sending back a event: #{a.class}")
+    Wakame.log.debug("Sending back the event: #{a.class}")
     publish_to('agent_event', a.marshal)
   end
 
@@ -158,8 +160,7 @@ class Wakame::Monitor::Service
   def register(svc_id, checker_type, *args)
     chk = @checkers[svc_id]
     if chk
-      Wakame.log.error("#{self.class}: Service registory duplication. #{svc_id}")
-      raise "Service registory duplication. #{svc_id}"
+      unregister(svc_id)
     end
     case checker_type.to_sym
     when :pidfile

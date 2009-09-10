@@ -121,25 +121,35 @@ module Wakame
       
       master.add_subscriber('agent_event') { |data|
         response = eval(data)
-        case response[:class_type]
-        when 'Wakame::Packets::ServiceStatusChanged'
-          svc_inst = Service::ServiceInstance.find(response[:svc_id])
-          if svc_inst
-            response_time = Time.parse(response[:responded_at])
-            svc_inst.update_status(response[:new_status], response_time, response[:fail_message])
-          end
-        when 'Wakame::Packets::ActorResponse'
-          case response[:status]
-          when Actor::STATUS_RUNNING
-            EventDispatcher.fire_event(Event::ActorProgress.new(response[:agent_id], response[:token], 0))
-          when Actor::STATUS_FAILED
-            EventDispatcher.fire_event(Event::ActorComplete.new(response[:agent_id], response[:token], response[:status], nil))
+        StatusDB.pass {
+          case response[:class_type]
+          when 'Wakame::Packets::StatusCheckResult'
+            svc_inst = Service::ServiceInstance.find(response[:svc_id])
+            if svc_inst
+              svc_inst.monitor_status = response[:status]
+              svc_inst.save
+            else
+              Wakame.log.error("#{self.class}: Unknown service ID: #{response[:svc_id]}")
+            end
+          when 'Wakame::Packets::ServiceStatusChanged'
+            svc_inst = Service::ServiceInstance.find(response[:svc_id])
+            if svc_inst
+              response_time = Time.parse(response[:responded_at])
+              svc_inst.update_status(response[:new_status], response_time, response[:fail_message])
+            end
+          when 'Wakame::Packets::ActorResponse'
+            case response[:status]
+            when Actor::STATUS_RUNNING
+              EventDispatcher.fire_event(Event::ActorProgress.new(response[:agent_id], response[:token], 0))
+            when Actor::STATUS_FAILED
+              EventDispatcher.fire_event(Event::ActorComplete.new(response[:agent_id], response[:token], response[:status], nil))
+            else
+              EventDispatcher.fire_event(Event::ActorComplete.new(response[:agent_id], response[:token], response[:status], response[:opts][:return_value]))
+            end
           else
-            EventDispatcher.fire_event(Event::ActorComplete.new(response[:agent_id], response[:token], response[:status], response[:opts][:return_value]))
+            Wakame.log.warn("#{self.class}: Unhandled agent response: #{response[:class_type]}")
           end
-        else
-          Wakame.log.warn("#{self.class}: Unhandled agent response: #{response[:class_type]}")
-        end
+        }
       }
 
     end
