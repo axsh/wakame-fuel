@@ -30,7 +30,7 @@ class Wakame::Actor::System
     Wakame.log.debug("#{mount_point_dev}: #{dev}, /bin/mount | awk '$3==path {print $1}' path=\"#{path}\"")
     if mount_point_dev != dev
       Wakame.log.debug("Mounting volume: #{dev} as #{path} (with options: #{opts})")
-      Wakame::Util.exec("/bin/mount -o #{mount_opts(opts)} '#{Shellwords.shellescape(dev)}' '#{Shellwords.shellescape(path)}'")
+      Wakame::Util.exec("/bin/mount #{escape_mount_opts(opts)} '#{Shellwords.shellescape(dev)}' '#{Shellwords.shellescape(path)}'")
     else
       Wakame.log.debug("Mounting EBS volume: #{dev} as #{path} (with options: #{opts})")
     end
@@ -45,11 +45,14 @@ class Wakame::Actor::System
   end
   
   private
-  def mount_opts(opts)
+  def escape_mount_opts(opts)
+    return '' if opts.nil?
+    return "-o '#{Shellwords.shellescape(opts)}'" if opts.is_a? String
+
     out = opts.collect { |k,v|
       v.nil? ? k : "#{k}=#{v}"
     }.join(',')
-    Shellwords.shellescape(out)
+    "-o #{Shellwords.shellescape(out)}"
   end
 
 end
