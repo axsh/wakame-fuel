@@ -113,6 +113,12 @@ module Wakame
     end
 
     def load_resources
+      load_path = File.expand_path('cluster/resources/markers', configuration.root_path)
+      Dir.glob("#{load_path}/*.rb").sort.each do |file|
+        Wakame.log.debug("Loading resource marker: #{file}")
+        load file
+      end
+      
       load_path = File.expand_path('cluster/resources', configuration.root_path)
       Dir.glob("#{load_path}/*/*.rb").sort.each do |file|
         if file =~ %r{\A#{Regexp.escape(load_path)}/([^/]+)/([^/]+)\.rb\Z} && $1 == $2
@@ -121,7 +127,6 @@ module Wakame
         end
         #require file.sub(matcher, '\1')
       end
-      
     end
 
     def load_actors
