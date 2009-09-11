@@ -194,6 +194,7 @@ module Wakame
            cluster.name = name
          end
 
+         Service::AgentPool.reset
          cluster.reset
 
          blk.call(cluster)
