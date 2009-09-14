@@ -56,13 +56,14 @@ module Wakame
       trigger.rule_engine.run_action(subaction)
     end
     
-    def flush_subactions(sec=nil)
+    def flush_subactions(sec=60*30)
       job_context = trigger.rule_engine.active_jobs[self.job_id]
       return if job_context.nil?
       
-      timeout(sec.nil? ? nil : sec) {
+      timeout(sec) {
         until all_subactions_complete?
           #Wakame.log.debug "#{self.class} all_subactions_complete?=#{all_subactions_complete?}"
+          Thread.pass
           src = notify_queue.deq
           # Exit the current action when a subaction notified exception.
           if src.is_a?(Exception)
@@ -155,7 +156,7 @@ module Wakame
       end
 
       def run()
-        @proc_obj.call
+        @proc_obj.call(self)
       end
     end
 
