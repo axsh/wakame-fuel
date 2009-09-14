@@ -56,7 +56,7 @@ module Wakame
             end
             
             if diff_time > @agent_kill_timeout.to_f
-              agent_pool.unregister(agent_id)
+              agent_pool.unregister(agent)
             end
           }
           
