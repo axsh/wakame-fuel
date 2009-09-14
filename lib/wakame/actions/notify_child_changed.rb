@@ -22,8 +22,8 @@ module Wakame
             next
           end
 
-          trigger_action {
-            svc.resource.on_child_changed(svc, self)
+          trigger_action { |proc_action|
+            svc.resource.on_child_changed(svc, proc_action)
           }
         }
         flush_subactions
