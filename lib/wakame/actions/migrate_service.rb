@@ -2,44 +2,55 @@
 module Wakame
   module Actions
     class MigrateService < Action
-      def initialize(service_instance, dest_agent=nil)
-        @service_instance = service_instance
-        @destination_agent = dest_agent
+      def initialize(svc, dest_cloud_host=nil)
+        raise ArgumentError unless svc.is_a?(Service::ServiceInstance)
+        @svc = svc
+        @dest_cloud_host = dest_cloud_host
       end
 
       def run
         acquire_lock { |list|
-          list << @service_instance.resource.class
+          list << @svc.resource.class
         }
 
-        raise CancelActionError if @service_instance.status == Service::STATUS_MIGRATING
+        if @svc.status == Service::STATUS_MIGRATING 
+          Wakame.log.info("Ignore to migrate the service as is already MIGRATING: #{@svc.resource.class}")
+          return
+        end
 
-        EM.barrier {
-          @service_instance.update_status(Service::STATUS_MIGRATING)
+        StatusDB.barrier {
+          @svc.update_status(Service::STATUS_MIGRATING)
         }
-        prop = @service_instance.resource
-        if prop.duplicable
-          clone_service(prop)
+        if @svc.resource.duplicable
+          clone_service()
           flush_subactions
-          trigger_action(StopService.new(@service_instance))
+          trigger_action(StopService.new(@svc))
         else
-          
-          trigger_action(StopService.new(@service_instance))
+          trigger_action(StopService.new(@svc))
           flush_subactions
-          clone_service(prop)
+          clone_service()
         end
         flush_subactions
       end
 
+      def on_failed
+        StatusDB.barrier {
+          @svc.update_status(Service::STATUS_FAIL)
+          if @new_svc
+            @new_svc.update_status(Service::STATUS_FAIL)
+          end
+        }
+      end
+
       private
-      def clone_service(resource)
+      def clone_service()
         new_svc = nil
-        EM.barrier {
-          new_svc = service_cluster.propagate(resource, true)
+        StatusDB.barrier {
+          new_svc = service_cluster.propagate_service(@svc.id, @dest_cloud_host, true)
         }
 
-        trigger_action(StartService.new(new_svc, @destination_agent))
-        new_svc
+        trigger_action(StartService.new(new_svc))
+        @new_svc = new_svc
       end
     end
   end

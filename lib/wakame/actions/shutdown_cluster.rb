@@ -2,7 +2,7 @@ module Wakame
   module Actions
     class ShutdownCluster < Action
       def run
-        levels = service_cluster.dg.levels
+        levels = cluster.dg.levels
         Wakame.log.debug("#{self.class}: Resource shutdown order: " + levels.collect {|lv| '['+ lv.collect{|prop| "#{prop.class}" }.join(', ') + ']' }.join(', '))
         acquire_lock { |list|
           levels.each {|lv| list << lv.collect{|res| res.class } }
@@ -17,8 +17,8 @@ module Wakame
           flush_subactions
         }
 
-        agent_monitor.registered_agents.each { |id, agent|
-          trigger_action(ShutdownVM.new(agent))
+        agent_monitor.agent_pool.group_active.keys.each { |agent_id|
+          trigger_action(ShutdownVM.new(Service::Agent.find(agent_id)))
         }
       end
     end

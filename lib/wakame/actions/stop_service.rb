@@ -1,41 +1,55 @@
 module Wakame
   module Actions
     class StopService < Action
-      def initialize(service_instance)
-        @service_instance = service_instance
+      def initialize(svc, do_terminate=true)
+        raise ArgumentError unless svc.is_a?(Service::ServiceInstance)
+        @svc = svc
+        @do_terminate = do_terminate
       end
 
 
       def run
-        acquire_lock { |lst|
-          lst << @service_instance.resource.id
-        }
-        if @service_instance.resource.require_agent && @service_instance.host.mapped?
-          raise "Agent is not bound on this service : #{@service_instance}"
-        end
-        
         # Skip to act when the service is having below status.
-        if @service_instance.status == Service::STATUS_STOPPING || @service_instance.status == Service::STATUS_OFFLINE
-          raise CancelActionError, "Canceled as the service is being or already OFFLINE: #{@service_instance.resource}"
+        if @svc.status == Service::STATUS_STOPPING || @svc.status == Service::STATUS_OFFLINE
+          Wakame.log.info("Ignore to stop the service as is being or already OFFLINE: #{@svc.resource.class}")
+          return
+        end
+
+        acquire_lock { |lst|
+          lst << @svc.resource.class.to_s
+        }
+
+        if @svc.resource.require_agent && !@svc.cloud_host.mapped?
+          raise "Agent is not bound on this service : #{@svc}"
         end
 
         StatusDB.barrier {
-          @service_instance.update_status(Service::STATUS_STOPPING)
+          @svc.update_status(Service::STATUS_STOPPING)
         }
         
-        trigger_action(NotifyChildChanged.new(@service_instance))
+        trigger_action(NotifyChildChanged.new(@svc))
         flush_subactions
 
-        @service_instance.resource.stop(@service_instance, self)
-        
-        StatusDB.barrier {
-          service_cluster.destroy(@service_instance.id)
-        }
+        @svc.resource.stop(@svc, self)
+
+        if @do_terminate
+          if @svc.resource.require_agent
+            StatusDB.barrier {
+              @svc.update_status(Service::STATUS_QUITTING)
+            }
+            @svc.resource.on_quit_agent(@svc, self)
+          end
+
+          StatusDB.barrier {
+            @svc.update_status(Service::STATUS_TERMINATE)
+            cluster.destroy(@svc.id)
+          }
+        end
       end
 
       def on_failed
         StatusDB.barrier {
-          @service_instance.update_status(Service::STATUS_FAIL)
+          @svc.update_status(Service::STATUS_FAIL)
         }
       end
 
