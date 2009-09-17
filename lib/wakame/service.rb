@@ -12,7 +12,7 @@ module Wakame
     class ServicePropagationError < ServiceError; end
 
 
-    STATUS_END     = -2
+    STATUS_TERMINATE = -2
     STATUS_INIT    = -1
     STATUS_OFFLINE = 0
     STATUS_ONLINE  = 1
@@ -22,6 +22,8 @@ module Wakame
     STATUS_STOPPING = 5
     STATUS_RELOADING = 6
     STATUS_MIGRATING = 7
+    STATUS_ENTERING = 8
+    STATUS_QUITTING = 9
 
     # Data model for agent
     # Status life cycle:
@@ -97,8 +99,10 @@ module Wakame
           svc.resource.id == res_id
         }
       end
-    end
 
+      def terminate
+      end
+    end
 
     class AgentPool < StatusDB::Model
       property :group_observed, {:default=>{}}
@@ -117,8 +121,15 @@ module Wakame
 
       def self.reset
         ap = self.instance
-        ap.group_observed = {}
-        ap.group_active = {}
+        
+        nil_cloud_host_id = lambda { |agent_id|
+          agent = Agent.find(agent_id)
+          agent.cloud_host_id = nil
+          agent.save
+        }
+
+        ap.group_observed.keys.each &nil_cloud_host_id
+        ap.group_active.keys.each &nil_cloud_host_id
         ap.save
       end
 
@@ -156,7 +167,7 @@ module Wakame
       end
 
       def register(agent)
-
+        raise ArgumentError unless agent.is_a?(Agent)
         agent_id = agent.id
         if group_active.has_key?(agent_id)
         else
@@ -177,6 +188,7 @@ module Wakame
       end
 
       def unregister(agent)
+        raise ArgumentError unless agent.is_a?(Agent)
         agent_id = agent.id
         
         unregistered = false
@@ -198,6 +210,11 @@ module Wakame
         end
       end
 
+      def find_agent(agent_id)
+        raise "The agent ID \"#{agent_id}\" is not registered in the pool" unless group_active.has_key? agent_id
+        Agent.find(agent_id) || raise("The agent ID #{agent_id} is registered. but not in the database.")
+      end
+
     end
 
     class CloudHost < StatusDB::Model
@@ -214,7 +231,7 @@ module Wakame
       end
         
       def map_agent(agent)
-        raise TypeError unless agent.is_a?(Agent)
+        raise ArgumentError unless agent.is_a?(Agent)
         raise "Ensure to call unmap_agent() prior to mapping new agent" if self.mapped?
         raise "The agent \"#{agent.id}\" is already mapped to the cloud host: #{agent.cloud_host_id}" if agent.mapped?
 
@@ -294,30 +311,19 @@ module Wakame
 
     end
 
-    class EC2 < CloudHost
-      def ec2
-      end
-      def elb
-      end
-    end
-
-    class EC2UsEast1 < EC2
-      def ec2
-        require 'right_aws'
-        RightAws::Ec2.new(Wakame.config.aws_access_key, Wakame.config.aws_secret_key, {:endpoint_url=>'https://us-east-1.ec2.amazonaws.com'})
+    class TriggerSet
+      def initialize(service_cluster_id)
+        @service_cluster_id = service_cluster_id
+        @triggers = []
       end
 
-      def elb
-        require 'right_aws'
-        RightAws::Elb.new(Wakame.config.aws_access_key, Wakame.config.aws_secret_key)
+      def add_trigger(trigger)
+        raise ArguemntError unless trigger.is_a?(Trigger)
+        @triggers << trigger
+        Wakame.log.debug(trigger.inspect)
+        trigger.register_hooks(@service_cluster_id)
       end
-    end
-
-    class EC2EuWest1 < EC2
-      def ec2
-        require 'right_aws'
-        RightAws::Ec2.new(Wakame.config.aws_access_key, Wakame.config.aws_secret_key, {:endpoint_url=>'https://eu-west-1.ec2.amazonaws.com'})
-      end
+      alias :register_trigger :add_trigger
     end
 
 
@@ -338,7 +344,7 @@ module Wakame
       property :template_vm_attr, {:default=>{}}
       property :advertised_amqp_servers
 
-      attr_reader :rule_engine
+      attr_reader :trigger_set
 
       def self.id(name)
         require 'digest/sha1'
@@ -350,10 +356,9 @@ module Wakame
         self.class.id(self.name)
       end
 
-      def define_rule(&blk)
-        @rule_engine ||= RuleEngine.new(self.id)
-        
-        blk.call(@rule_engine)
+      def define_triggers(&blk)
+        @trigger_set ||= TriggerSet.new(self.id)
+        blk.call(@trigger_set)
       end
 
       def template_vm_spec
@@ -449,21 +454,21 @@ module Wakame
 
       # Create service instance objects which will be equivalent with the number min_instance.
       # The agents are not assigned at this point.
-      def launch
-        self.resources.keys.each { |res_id|
-          res = Resource.find(res_id)
-          count = instance_count(res.class)
-          if res.min_instances > count
-            (res.min_instances - count).times {
-              propagate(res.class)
-            }
-          end
-        }
-      end
-      thread_immutable_methods :launch
+      #def launch
+      #  self.resources.keys.each { |res_id|
+      #    res = Resource.find(res_id)
+      #    count = instance_count(res.class)
+      #    if res.min_instances > count
+      #      (res.min_instances - count).times {
+      #        propagate(res.class)
+      #      }
+      #    end
+      #  }
+      #end
+      #thread_immutable_methods :launch
 
       def destroy(svc_id)
-        raise("Unknown service instance : #{service_instance_id}") unless self.services.has_key?(svc_id)
+        raise("Unknown service instance : #{svc_id}") unless self.services.has_key?(svc_id)
         svc = ServiceInstance.find(svc_id)
         svc.unbind_cluster
         self.services.delete(svc.id)
@@ -534,7 +539,7 @@ module Wakame
             host = CloudHost.find(cloud_host_id) || raise("#{self.class}: Unknown Host ID: #{cloud_host_id}")
           else
             host = add_cloud_host { |h|
-              h.vm_attr = src_svc.host.vm_attr.dup
+              h.vm_attr = src_svc.cloud_host.vm_attr.dup
             }
           end
           svc.bind_cloud_host(host)
@@ -572,6 +577,10 @@ module Wakame
         CloudHost.delete(cloud_host_id) rescue nil
       end
 
+      def find_service(svc_id)
+        raise "The service ID #{svc_id} is not registered to this cluster \"#{self.name}\"" unless self.services.has_key? svc_id
+        ServiceInstance.find(svc_id) || raise("The service ID #{svc_id} is registered. but not in the database.")
+      end
 
       def instance_count(resource=nil)
         return self.services.size if resource.nil?
@@ -765,7 +774,7 @@ module Wakame
       property :resource_id
       property :cluster_id
       property :status, {:read_only=>true, :default=>Service::STATUS_INIT}
-      property :progress_status, {:read_only=>true, :default=>Service::STATUS_INIT}
+      property :monitor_status, {:default=>Service::STATUS_INIT}
       property :status_changed_at, {:read_only=>true, :default=>proc{Time.now}}
 
       def update_status(new_status, changed_at=Time.now, fail_message=nil)
@@ -776,7 +785,7 @@ module Wakame
           
           self.save
 
-          event = Event::ServiceStatusChanged.new(@instance_id, resource, new_status, prev_status)
+          event = Event::ServiceStatusChanged.new(self.id, resource, new_status, prev_status)
           event.time = @status_changed_at.dup
           ED.fire_event(event)
 
@@ -1091,6 +1100,11 @@ module Wakame
       def on_child_changed(service_instance, action)
       end
       def on_parent_changed(service_instance, action)
+      end
+      
+      def on_enter_agent(service_instance, action)
+      end
+      def on_quit_agent(service_instance, action)
       end
 
     end
