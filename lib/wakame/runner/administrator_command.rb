@@ -21,9 +21,11 @@ module Wakame
         @args = args.dup      
 	@options = {
           :command_server_uri => Wakame.config.http_command_server_uri,
-          :json_print => false
+          :json_print => false,
+          :public_key => '1234567890'
         }
-	@public_key = "1234567890"
+
+        load_subcommands
       end
       
       def parse(args=@args)
@@ -32,13 +34,14 @@ module Wakame
         comm_parser = OptionParser.new { |opts|
           opts.version = Wakame::VERSION
           opts.banner = "Usage: wakameadm [options] command [options]"
-          
-          opts.separator ""
-          opts.separator "options:"
+          opts.separator " "
+          opts.separator "Sub Commands:"
+          opts.separator show_subcommand_summary()
+          opts.separator " "
+          opts.separator "Common Options:"
           opts.on( "-s", "--server HttpURI", "command server" ) {|str| @options[:command_server_uri] = str }
           opts.on("--dump", "Print corresponded message body for debugging"){|j| @options[:json_print] = true }
         }
-        
 
         comm_parser.order!(args)
         @options.freeze
@@ -47,87 +50,145 @@ module Wakame
       end
       
       def run
-        req = parse
-        subcommand = req[:command]
+        parse
 
-	if Wakame.config.enable_authentication == "true"
-	  get_params = authentication(req[:command_server_uri], req[:query_string])
-	else
-	  get_params = req[:command_server_uri] + req[:query_string]
-	end
+	#if Wakame.config.enable_authentication == "true"
+	#  get_params = authentication(req[:command_server_uri], req[:query_string])
+	#else
+	#  get_params = req[:command_server_uri] + req[:query_string]
+	#end
+
         begin
-          res = subcommand.run(get_params)
-          res = JSON.parse(res)
+          requester = JsonRequester.new(options.dup, {:action=>@subcmd.class.command_name})
+          @subcmd.run(requester)
+
+
+          @subcmd.print_result
+
+        rescue JsonRequester::ResponseError => e
+          abort(e)
         rescue => e
-          res = STDERR.puts e
-          exit 1
+          abort("Unknown Error: #{e}\n" + e.backtrace.join("\n")  )
         end
 
-        if @options[:json_print]
-	  require 'pp' 
-          pp res
-        else
-          exit_code = 1
-          case res[0]["status"]
-          when 404
-            STDERR.puts "Command Error: #{res[0]["message"]}"
-          when 403
-            STDERR.puts "Authentication Error: #{res[0]["message"]}"
-          when 500
-            STDERR.puts "Server Error: #{res[0]["message"]}"
-          else
-	    subcommand.print_result(res)
-            exit_code = 0
-          end
-
-          exit exit_code
-        end
+        exit 0
       end
       
       private
       
       def parse_subcommand(args)
-        @subcmd = args.shift
-        if @subcmd.nil?
+        subcmd_name = args.shift
+        if subcmd_name.nil?
           fail "Please pass a sub command." 
         end
-        subcommands = {}
+        subcommand_class = @subcommand_types[subcmd_name]
+        fail "No such sub command: #{subcmd_name}" if subcommand_class.nil?
+
+        @subcmd = subcommand_class.new
+
+        options = @subcmd.parse(args)
+      end
+
+      def load_subcommands
+        @subcommand_types = {}
         (Wakame::Cli::Subcommand.constants - $root_constants).each { |c|
           const = Util.build_const("Wakame::Cli::Subcommand::#{c}")
           if const.is_a?(Class)
-            cmdobj = nil
-            begin
-              cmdobj = const.new
-              raise '' unless cmdobj.kind_of?(Wakame::Cli::Subcommand)
-            rescue => e
-              next
-            end
-            subcommands[cmdobj.class.command_name] = cmdobj
+            next unless const < Wakame::Cli::Subcommand
+            @subcommand_types[const.command_name] = const
           end
         }
-        subcommand = subcommands[@subcmd]
-        fail "No such sub command: #{@subcmd}" if subcommand.nil?
-
-        options = subcommand.parse(args)
-	query_string = CGI.escape('action') + "=" + CGI.escape(@subcmd) + options[:query].to_s
-        request_params = {
-          :command => subcommand,
-          :command_server_uri => @options[:command_server_uri] + "?",
-	  :query_string => query_string
-        }
-
-        request_params
       end
 
-      def authentication(uri, query)
-        key = @public_key
-	req = query + "&" + CGI.escape('timestamp') + "=" + CGI.escape(Time.now.utc.strftime("%Y%m%dT%H%M%SZ"))
-	hash = OpenSSL::HMAC::digest(OpenSSL::Digest::SHA256.new, key, req)
-	sign = uri.to_s + req.to_s + "&signature=" + Base64.encode64(hash).gsub(/\+/, "").gsub(/\n/, "").to_s
-	sign
+      def show_subcommand_summary
+        @subcommand_types.map { |k,v|
+          "  #{k}: #{v.summary.nil? ? '' : v.summary.to_s}"
+        }
       end
     end
   end
+
+  class JsonRequester
+    class ResponseError < StandardError
+      attr_reader :json_hash
+      def initialize(json_hash=nil, message_prefix=self.class.to_s)
+        super(message_prefix + ":" + json_hash[0]["message"])
+        @json_hash = json_hash
+      end
+    end
+
+    class CommandError < ResponseError
+      def initialize(hash)
+        super(hash, "Command Error")
+      end
+    end
+    class AuthenticationError < ResponseError
+      def initialize(hash)
+        super(hash, "Authentication Error")
+      end
+    end
+    class ServerError < ResponseError
+      def initialize(hash)
+        super(hash, "Server Error")
+      end
+    end
+
+
+    def initialize(common_opts, merge_opts={})
+      @common_opts = common_opts
+      @merge_opts = merge_opts.dup
+    end
+
+    def request(options={})
+      request_uri = URI.parse(@common_opts[:command_server_uri])
+      @merge_opts[:timestamp] = Time.now.utc.strftime("%Y%m%dT%H%M%SZ")
+      request_uri.path = (request_uri.path.nil? || request_uri.path == '') ? '/' : request_uri.path
+      request_uri.query = sign_query(build_escaped_query(options.merge(@merge_opts)))
+
+      res = Net::HTTP.get_response(request_uri)
+      hash = JSON.parse(res.body)
+      if res.is_a?(Net::HTTPSuccess)
+        # 
+      else
+        case res.code
+        when '404'
+          raise CommandError.new(hash)
+        when '403'
+          raise AuthenticationError.new(hash)
+        when '500'
+          raise ServerError.new(hash)
+        else
+          fail "Unknown HTTP Error Code: #{res.code}: #{res.message}"
+        end
+      end
+
+      if @common_opts[:json_print]
+        require 'pp'
+        puts "Response for: #{request_uri.to_s}"
+        pp hash
+      end
+
+      hash
+    end
+
+    private
+    def sign_query(query_str)
+      require 'openssl'
+      require 'base64'
+
+      hash = OpenSSL::HMAC::digest(OpenSSL::Digest::SHA256.new, @common_opts[:public_key], query_str)
+      (query_str + "&signature=" + CGI::escape(Base64.encode64(hash).gsub(/\+/, "").gsub(/\n/, "").to_s))
+    end
+
+
+    def build_escaped_query(hash)
+      hash.map { |k,v|
+        CGI::escape(k.to_s) + '=' + CGI::escape(v.to_s)
+      }.join('&')
+    end
+
+  end
+
 
   module Cli
     module Subcommand
@@ -143,6 +204,14 @@ module Wakame
             def command_name=(name)
               @command_name=name
             end
+
+            def summary
+              @summary
+            end
+
+            def summary=(summary)
+              @summary=summary
+            end
           end
         }
       end
@@ -150,10 +219,10 @@ module Wakame
       def parse(args)
       end
 
-      def run(options)
+      def run(requester)
       end
 
-      def print_result(res)
+      def print_result()
       end
 
       
@@ -165,14 +234,6 @@ module Wakame
         parser
       end
 
-      def uri(options)
-        uri = options
-        res = Net::HTTP.get(URI.parse("#{uri}"))
-        return res
-      end
-
-      def summary
-      end
     end
   end
 end
@@ -182,47 +243,32 @@ class Wakame::Cli::Subcommand::LaunchCluster
 
   #command_name = 'launch_cluster'
   def parse(args)
-    blk = Proc.new {|opts|
+    create_parser(args) {|opts|
       opts.banner = "Usage: launch_cluster [options]"
       opts.separator ""
       opts.separator "options:"
     }
-    cmd = create_parser(args, &blk)
-    options = {}
-    options
   end
 
-  def run(options)
-    res = uri(options)
-    res
+  def run(requester)
+    requester.request()
   end
 
-  def print_result(res)
-    p res[0]["message"]
-  end
 end
 
 class Wakame::Cli::Subcommand::ShutdownCluster
   include Wakame::Cli::Subcommand
 
   def parse(args)
-    blk = Proc.new {|opts|
+    create_parser(args) {|opts|
       opts.banner = "Usage: shutdown_cluster"
       opts.separator ""
       opts.separator "options:"
     }
-    cmd = create_parser(args, &blk)
-    options = {}
-    options
   end
 
-  def run(options)
-    res = uri(options)
-    res
-  end
-
-  def print_result(res)
-    p res[0]["message"]
+  def run(requester)
+    requester.request()
   end
 end
 
@@ -268,7 +314,7 @@ Agents (<%= agent_pool["group_active"].size %>):
   -%>
   <%= a["id"] %> : <%= a["vm_attr"]["local_ipv4"] %>, <%= a["vm_attr"]["public_ipv4"] %>, <%= (Time.now - Time.parse(a["last_ping_at"])).to_i %> sec(s), placement=<%= a["vm_attr"]["availability_zone"] %> (<%= svc_status_msg(a["status"]) %>)
    <%- if a["reported_services"].size > 0 && !cluster["services"].empty? -%>
-    Services (<%= a["reported_services"].size %>): <%= a["reported_services"].keys.collect{ |svc_id| body["services"][svc_id]["resource_ref"]["class_type"] }.join(', ') %>
+    Services (<%= a["reported_services"].size %>): <%= a["reported_services"] %><%# a["reported_services"].keys.collect{ |svc_id| body["services"][svc_id]["resource_ref"]["class_type"] }.join(', ') %>
    <%- end -%>
   <%- } -%>
 <%- end -%>
@@ -296,24 +342,21 @@ __E__
   }
 
   def parse(args)
-    options = {}
-    blk = Proc.new {|opts|
+    @params = {}
+    create_parser(args){|opts|
       opts.banner = "Usage: status [options]"
       opts.separator ""
       opts.separator "options:"
     }
-    cmd = create_parser(args, &blk)
-    options
   end
 
-  def run(options)
-    res = uri(options)
-    res
+  def run(requester)
+    @res = requester.request(@params)
   end
 
-  def print_result(res)
+  def print_result()
     require 'time'
-    body = res[1]["data"]
+    body = @res[1]["data"]
     map_ref_data(body)
 
     cluster = body["cluster"]
@@ -351,9 +394,9 @@ class Wakame::Cli::Subcommand::ActionStatus
   include Wakame::Cli::Subcommand
 
   ACTION_STATUS_TMPL= <<__E__
-Running Actions : <%= @status.size %> action(s)
-<%- if @status.size > 0 -%>
-<%- @status.each { |id, j| -%>
+Running Actions : <%= status.size %> action(s)
+<%- if status.size > 0 -%>
+<%- status.each { |id, j| -%>
 JOB <%= id %> :
   start : <%= j["created_at"] %>
   <%= tree_subactions(j["root_action"]) %>
@@ -362,26 +405,23 @@ JOB <%= id %> :
 __E__
 
   def parse(args)
-    options = {}
-    blk = Proc.new {|opts|
+    @params = {}
+    cmd = create_parser(args){|opts|
       opts.banner = "Usage: action_status"
       opts.separator ""
       opts.separator "options:"
     }
-    cmd = create_parser(args, &blk)
-    options
   end
 
-  def run(options)
-    res = uri(options)
-    res
+  def run(requester)
+    @res = requester.request()
   end
 
-  def print_result(res)
-    if res[1]["data"].nil?
-      p res[0]["message"]
+  def print_result
+    if @res[1]["data"].nil?
+      abort( @res[0]["message"] )
     else
-      @status = res[1]['data']
+      status = @res[1]['data']
       puts ERB.new(ACTION_STATUS_TMPL, nil, '-').result(binding)
     end
   end
@@ -403,219 +443,206 @@ class Wakame::Cli::Subcommand::PropagateService
   include Wakame::Cli::Subcommand
 
   def parse(args)
-    params = {}
-    cmd = create_parser(args) {|opts|
+    @params = {}
+    create_parser(args) {|opts|
       opts.banner = 'Usage: propagate_service [options] "Service ID"'
       opts.separator('Options:')
-      opts.on('-h CLOUD_HOST_ID', '--host CLOUD_HOST_ID', String, "Cloud Host ID to be used as template."){ |i| params["cloud_host_id"] = i }
-      opts.on('-n NUMBER', '--number NUMBER', Integer, "Number (>0) to propagate the specified service."){ |i| params["number"] = i.to_i }
+      opts.on('-h CLOUD_HOST_ID', '--host CLOUD_HOST_ID', String, "Cloud Host ID to be used as template."){ |i| @params["cloud_host_id"] = i }
+      opts.on('-n NUMBER', '--number NUMBER', Integer, "Number (>0) to propagate the specified service."){ |i| @params["number"] = i.to_i }
     }
     raise "Unknown Service ID: #{args}" unless args.size > 0
-    params[:service_id] = args.shift
-
-    options = {}
-    options[:query] = "&" + params.collect{|k,v| "#{CGI.escape(k.to_s)}=#{CGI.escape(v)}"}.join("&")
-    options
+    @params[:service_id] = args.shift
   end
 
-  def run(options)
-    res = uri(options)
-    res
+  def run(requester)
+    requester.request(@params)
   end
 
-  def print_result(res)
-    p res[0]["message"]
-  end
 end
 
 class Wakame::Cli::Subcommand::PropagateResource
   include Wakame::Cli::Subcommand
 
   def parse(args)
-    params = {}
+    @params = {}
     create_parser(args) {|opts|
       opts.banner = 'Usage: propagate_resource [options] "Resource Name" "Cloud Host ID"'
       opts.separator("  Resource Name: ....")
       opts.separator("  Cloud Host ID: ....")
       opts.separator("  ")
       opts.separator("  Options:")
-      opts.on("-n NUMBER", "--number NUMBER", Integer, "Number (>0) to propagate the specified resource."){|i| params["number"] = i}
+      opts.on("-n NUMBER", "--number NUMBER", Integer, "Number (>0) to propagate the specified resource."){|i| @params["number"] = i}
     }
     raise "Unknown Resource Name: #{args}" unless args.size > 0
-    params["resource"] = args.shift
+    @params["resource"] = args.shift
 
     raise "Unknown Cloud Host ID: #{args}" unless args.size > 0
-    params["cloud_host_id"] = args.shift
-
-    options = {}
-    options[:query] = "&" + params.collect{|k,v| "#{CGI.escape(k.to_s)}=#{CGI.escape(v)}"}.join("&")
-    options
+    @params["cloud_host_id"] = args.shift
   end
 
-  def run(options)
-    res = uri(options)
-    res
+  def run(requester)
+    requester.request(@params)
   end
 
-  def print_result(res)
-    p res[0]["message"]
-  end
 end
 
 class Wakame::Cli::Subcommand::StopService
   include Wakame::Cli::Subcommand
 
   def parse(args)
-    params = {}
-    blk = Proc.new {|opts|
+    @params = {}
+    create_parser(args) {|opts|
       opts.banner = "Usage: stop_service [options] \"Service ID\""
       opts.separator ""
       opts.separator "options:"
-      opts.on("-i INSTANCE_ID", "--instance INSTANCE_ID"){|i| params[:service_id] = i}
-      opts.on("-s SERVICE_NAME", "--service SERVICE_NAME"){|str| params[:service_name] = str}
-      opts.on("-a AGENT_ID", "--agent AGENT_ID"){|i| params[:agent_id] = i}
+      opts.on("-i INSTANCE_ID", "--instance INSTANCE_ID"){|i| @params[:service_id] = i}
+      opts.on("-s SERVICE_NAME", "--service SERVICE_NAME"){|str| @params[:service_name] = str}
+      opts.on("-a AGENT_ID", "--agent AGENT_ID"){|i| @params[:agent_id] = i}
     }
-    cmd = create_parser(args, &blk)
-    options = {}
-    options[:query] = "&" + params.collect{|k,v| CGI.escape(k.to_s) + "=" + CGI.escape(v)}.join("&")
-    options
+    @params
   end
 
-  def run(options)
-    res = uri(options)
-    res
+  def run(requester)
+    requester.request(@params)
   end
 
-  def print_result(res)
-    p res[0]["message"]
-  end
 end
 
 class Wakame::Cli::Subcommand::MigrateService
   include Wakame::Cli::Subcommand
+
   def parse(args)
-    params = {}
-     blk = Proc.new {|opts|
+    @params = {}
+    cmd = create_parser(args){|opts|
       opts.banner = "Usage: migrate_service [options] \"Service ID\""
       opts.separator ""
       opts.separator "options:"
-      opts.on("-a Agent ID", "--agent Agent ID"){ |i| params[:agent_id] = i}
+      opts.on("-a Agent ID", "--agent Agent ID"){ |i| @params[:agent_id] = i}
     }
-    cmd = create_parser(args, &blk)
     service_id = args.shift || abort("[ERROR]: Service ID was not given")
-    params[:service_id] = service_id
-    options = {}
-    options[:query] = "&" + params.collect{|k,v| "#{CGI.escape(k.to_s)}=#{CGI.escape(v)}"}.join("&")
-    options
+    @params[:service_id] = service_id
   end
 
-  def run(options)
-    res = uri(options)
-    res
+  def run(requester)
+    requester.request(@params)
   end
 
-  def print_result(res)
-    p res[0]["message"]
-  end
 end
 
 class Wakame::Cli::Subcommand::ShutdownVm
   include Wakame::Cli::Subcommand
 
   def parse(args)
-    params = {}
-    blk = Proc.new {|opts|
+    @params = {}
+    cmd = create_parser(args) {|opts|
       opts.banner = "Usage: shutdown_vm [options] \"Agent ID\""
       opts.separator ""
       opts.separator "options:"
-      opts.on("-f", "--force"){|str| params[:force] = "yes"}
+      opts.on("-f", "--force"){|str| @params[:force] = "yes"}
     }
-    cmd = create_parser(args, &blk)
     agent_id = args.shift || abort("[ERROR]: Agent ID was not given")
-    params[:agent_id] = agent_id
-    options = {}
-    options[:query] = "&" + params.collect{|k,v| CGI.escape(k.to_s) + "=" + CGI.escape(v)}.join("&")
-    options
+    @params[:agent_id] = agent_id
   end
 
-  def run(options)
-    res = uri(options)
-    res
+  def run(requester)
+    requester.request(@params)
   end
 
-  def print_result(res)
-    p res[0]["message"]
-  end
 end
 
 class Wakame::Cli::Subcommand::LaunchVm
   include Wakame::Cli::Subcommand
 
   def parse(args)
-    blk = Proc.new {|opts|
+    @params={}
+    cmd = create_parser(args) {|opts|
       opts.banner = "Usage: launch_vm"
       opts.separator ""
       opts.separator "options:"
     }
-    cmd = create_parser(args, &blk)
-    options = {}
-    options
   end
 
-  def run(options)
-    res = uri(options)
-    res
+  def run(requester)
+    requester.request(@params)
   end
 
-  def print_result(res)
-    p res[0]["message"]
-  end
 end
 
 class Wakame::Cli::Subcommand::ReloadService
   include Wakame::Cli::Subcommand
 
   def parse(args)
-    params = {}
-    blk = Proc.new {|opts|
-      opts.banner = "Usage: ReloadService [options] \"Service NAME\""
+    @params = {}
+    cmd = create_parser(args) {|opts|
+      opts.banner = "Usage: ReloadService [options] \"Service ID\""
       opts.separator ""
       opts.separator "options:"
     }
-    cmd = create_parser(args, &blk)
-    service_name = args.shift || abort("[ERROR]: Service NAME was not given")
-    params[:service_name] = service_name
-    options = {}
-    options[:query] = "&" + params.collect{|k,v| CGI.escape(k.to_s) + "=" + CGI.escape(v)}.join("&")
-    options
+    service_id = args.shift || abort("[ERROR]: Service ID was not given")
+    @params[:service_id] = service_id
   end
 
-  def run(options)
-    res = uri(options)
-    res
+  def run(requester)
+    requester.request(@params)
   end
 
-  def print_result(res)
-    p res[0]["message"]
+end
+
+class Wakame::Cli::Subcommand::StartService
+  include Wakame::Cli::Subcommand
+
+  def parse(args)
+    @params = {}
+    cmd = create_parser(args) { |opts|
+      opts.banner = "Usage: start_service [options] \"Service ID\""
+      opts.separator ""
+      opts.separator "options:"
+    }
+    service_id = args.shift || abort("[ERROR]: Service ID was not given")
+    @params[:service_id] = service_id
   end
+
+  def run(requester)
+    requester.request(@params)
+  end
+
+end
+
+class Wakame::Cli::Subcommand::ImportClusterConfig
+  include Wakame::Cli::Subcommand
+
+  def parse(args)
+    @params = {}
+    cmd = create_parser(args) { |opts|
+      opts.banner = "Usage: import_cluster_config"
+      opts.separator ""
+      opts.separator "options:"
+    }
+    @params
+  end
+
+  def run(requester)
+    requester.request(@params)
+  end
+
 end
 
 class Wakame::Cli::Subcommand::AgentStatus
   include Wakame::Cli::Subcommand
 
 STATUS_TMPL = <<__E__
-Agent :<%= @agent["agent_id"]%> load=<%= @agent["attr"]["uptime"]%>, <%= (Time.now - Time.parse(@agent["last_ping_at"])).to_i%> sec(s), placement=<%= @agent["attr"]["availability_zone"]%><%= @agent["root_path"] %> (<%= trans_svc_status(@agent["status"]) %>)
-  Instance ID : <%= @agent["attr"]["instance_id"]%>
-  AMI ID : <%= @agent["attr"]["ami_id"]%>
-  Public DNS Name : <%= @agent["attr"]["public_hostname"]%>
-  Private DNS Name : <%= @agent["attr"]["local_hostname"]%>
-  Instance Type : <%= @agent["attr"]["instance_type"]%>
-  Availability Zone : <%= @agent["attr"]["availability_zone"]%>
+Agent :<%= agent["agent_id"]%> load=<%= agent["attr"]["uptime"]%>, <%= (Time.now - Time.parse(agent["last_ping_at"])).to_i%> sec(s), placement=<%= agent["attr"]["availability_zone"]%><%= agent["root_path"] %> (<%= trans_svc_status(agent["status"]) %>)
+  Instance ID : <%= agent["attr"]["instance_id"]%>
+  AMI ID : <%= agent["attr"]["ami_id"]%>
+  Public DNS Name : <%= agent["attr"]["public_hostname"]%>
+  Private DNS Name : <%= agent["attr"]["local_hostname"]%>
+  Instance Type : <%= agent["attr"]["instance_type"]%>
+  Availability Zone : <%= agent["attr"]["availability_zone"]%>
 
-<%- if !@agent["services"].nil? && @agent["services"].size > 0 -%>
-Services (<%= @agent["services"].size%>):
-  <%- @agent["services"].each {|id| -%>
-      <%= @service_cluster["instances"][id]["instance_id"]%> : <%= @service_cluster["instances"][id]["property"]%> (<%= trans_svc_status(@service_cluster["instances"][id]["status"])%>)
+<%- if !agent["services"].nil? && agent["services"].size > 0 -%>
+Services (<%= agent["services"].size%>):
+  <%- agent["services"].each {|id| -%>
+      <%= service_cluster["instances"][id]["instance_id"]%> : <%= service_cluster["instances"][id]["property"]%> (<%= trans_svc_status(service_cluster["instances"][id]["status"])%>)
   <%- } -%>
 <%- end -%>
 __E__
@@ -632,29 +659,24 @@ __E__
   }
 
   def parse(args)
-    params = {}
-    blk = Proc.new {|opts|
+    @params = {}
+    blk = Proc.new 
+    cmd = create_parser(args) {|opts|
       opts.banner = "Usage: AgentStatus [options] \"Agent ID\""
       opts.separator ""
       opts.separator "options:"
     }
-    cmd = create_parser(args, &blk)
-    agent_id = args.shift || abort("[ERROR]: Agent ID was not given")
-    params[:agent_id] = agent_id
-    options = {}
-    options[:query] = "&" + params.collect{|k,v| CGI.escape(k.to_s) + "=" + CGI.escape(v)}.join("&")
-    options
+    @params[:agent_id] = args.shift || abort("[ERROR]: Agent ID was not given")
   end
 
-  def run(options)
-    res = uri(options)
-    res
+  def run(requester)
+    @res = requester.request(@params)
   end
 
   def print_result(res)
     require 'time'
-    @agent = res[1]["data"]["agent_status"]
-    @service_cluster = res[1]["data"]["service_cluster"]
+    agent = @res[1]["data"]["agent_status"]
+    service_cluster = res[1]["data"]["service_cluster"]
     puts ERB.new(STATUS_TMPL, nil, '-').result(binding)
   end
 
