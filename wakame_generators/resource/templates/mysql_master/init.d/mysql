@@ -44,7 +44,7 @@ export HOME=/etc/mysql/
 #
 # Usage: void mysqld_get_param option
 mysqld_get_param() {
-	/usr/sbin/mysqld --defaults-file=$CONF --print-defaults \
+	/usr/sbin/mysqld --print-defaults \
 		| tr " " "\n" \
 		| grep -- "--$1" \
 		| tail -n 1 \
@@ -114,8 +114,8 @@ case "${1:-''}" in
 	    if mysqld_status check_alive warn; then
                 log_end_msg 0
 	        # Now start mysqlcheck or whatever the admin wants.
-	        #output=$(/etc/mysql/debian-start)
-		#[ -n "$output" ] && log_action_msg "$output"
+	        output=$(/etc/mysql/debian-start)
+		[ -n "$output" ] && log_action_msg "$output"
 	    else
 	        log_end_msg 1
 		log_failure_msg "Please take a look at the syslog"
