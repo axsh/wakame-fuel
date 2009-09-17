@@ -172,7 +172,7 @@ module Wakame
      class ClusterConfigLoader
 
        def load(cluster_rb_path=Wakame.config.cluster_config_path)
-         Wakame.log.info("#{self.class}: Loading config/cluster.rb: #{cluster_rb_path}")
+         Wakame.log.info("#{self.class}: Loading cluster.rb: #{cluster_rb_path}")
          @loaded_cluster_names = {}
 
          eval(File.readlines(cluster_rb_path).join(''), binding)
@@ -215,7 +215,7 @@ module Wakame
        # Periodical cluster status updater
        @status_check_timer = EM::PeriodicTimer.new(5) {
          StatusDB.pass {
-           @clusters.values.each { |cluster_id|
+           @clusters.keys.each { |cluster_id|
              Service::ServiceCluster.find(cluster_id).update_cluster_status
            }
          }
@@ -226,20 +226,16 @@ module Wakame
        [Event::ServiceOnline, Event::ServiceOffline, Event::ServiceFailed].each { |evclass|
          @check_event_tickets << EventDispatcher.subscribe(evclass) { |event|
            StatusDB.pass {
-             @clusters.values.each { |cluster_id|
+             @clusters.keys.each { |cluster_id|
                Service::ServiceCluster.find(cluster_id).update_cluster_status
              }
            }
          }
        }
 
-       # Load config/cluster.rb at first time
-       load_config_cluster
      end
 
      def reload
-
-       load_config_cluster
      end
 
 
@@ -250,27 +246,30 @@ module Wakame
        }
      end
 
-
      def register(cluster)
-       @clusters[cluster.id] = cluster
+       raise ArgumentError unless cluster.is_a?(Service::ServiceCluster)
+       @clusters[cluster.id]=1
      end
 
      def unregister(cluster_id)
        @clusters.delete(cluster_id)
      end
 
-     private
      def load_config_cluster
-       @clusters = ClusterConfigLoader.new.load
+       ClusterConfigLoader.new.load.each { |name, id|
+         @clusters[id]=1
+       }
        resolve_template_vm_attr
      end
 
 
+     private
      def resolve_template_vm_attr
-       @clusters.each { |name, cluster_id|
+       @clusters.keys.each { |cluster_id|
          cluster = Service::ServiceCluster.find(cluster_id)
 
          if cluster.template_vm_attr.nil? || cluster.template_vm_attr.empty?
+           # Set a single shot event handler to set the template values up from the first connected agent.
            EventDispatcher.subscribe_once(Event::AgentMonitored) { |event|
              StatusDB.pass {
                require 'right_aws'
@@ -279,6 +278,7 @@ module Wakame
                ref_attr = ec2.describe_instances([event.agent.vm_attr[:instance_id]])
                ref_attr = ref_attr[0]
                
+               cluster = Service::ServiceCluster.find(cluster_id)
                spec = cluster.template_vm_spec
                Service::VmSpec::EC2.vm_attr_defs.each { |k, v|
                  spec.attrs[k] = ref_attr[v[:right_aws_key]]
@@ -292,6 +292,7 @@ module Wakame
 
          if cluster.advertised_amqp_servers.nil?
            StatusDB.pass {
+             cluster = Service::ServiceCluster.find(cluster_id)
              cluster.advertised_amqp_servers = master.amqp_server_uri.to_s
              cluster.save
              Wakame.log.debug("ServiceCluster \"#{cluster.name}\" advertised_amqp_servers: #{cluster.advertised_amqp_servers}")
@@ -311,7 +312,7 @@ module Wakame
      define_queue 'ping', 'ping'
      define_queue 'registry', 'registry'
 
-     attr_reader :command_queue, :agent_monitor, :cluster_manager, :started_at
+     attr_reader :command_queue, :agent_monitor, :cluster_manager, :action_manager, :started_at
      attr_reader :managers
 
     def initialize(opts={})
@@ -340,13 +341,17 @@ module Wakame
     # post_setup
     def init
       raise 'has to be put in EM.run context' unless EM.reactor_running?
-      @command_queue = CommandQueue.new(self)
+      @command_queue = register_manager(CommandQueue.new)
 
       # WorkerThread has to run earlier than other managers.
       @agent_monitor = register_manager(AgentMonitor.new)
       @cluster_manager = register_manager(ClusterManager.new)
+      @action_manager = register_manager(ActionManager.new)
 
-      @managers.each {|m| m.init }
+      @managers.each {|m|
+        Wakame.log.debug("Initializing Manager Module: #{m.class}")
+        m.init
+      }
 
       Wakame.log.info("Started master process : WAKAME_ROOT=#{Wakame.config.root_path} WAKAME_ENV=#{Wakame.config.environment}")
     end
