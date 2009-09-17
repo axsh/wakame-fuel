@@ -3,7 +3,7 @@ class Wakame::Command::Status
   include Wakame::Command
   include Wakame::Service
 
-  def run(rule)
+  def run
     Wakame::StatusDB.barrier {
       res = {
         :cluster=>nil, 
@@ -13,8 +13,12 @@ class Wakame::Command::Status
         :resources=>{},
         :cloud_hosts=>{}
       }
+      cluster_id = master.cluster_manager.clusters.keys.first
+      if cluster_id.nil?
+        raise "There is no cluster setting"
+      end
 
-      cluster = ServiceCluster.find_all.first
+      cluster = ServiceCluster.find(cluster_id)
       res[:cluster] = cluster.dump_attrs
       res[:agent_pool] = AgentPool.instance.dump_attrs
 

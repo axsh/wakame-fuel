@@ -24,10 +24,27 @@ module Wakame
     def params
       @options
     end
+    alias :options :params
 
-    def run(rule)
+    def run
     end
 
+    protected
+    def master
+      Master.instance
+    end
 
+    def trigger_action(action)
+      master.action_manager.trigger_action(action)
+    end
+
+    # Tentative utility method for 
+    def service_cluster
+      cluster_id = master.cluster_manager.clusters.keys.first
+      raise "There is no cluster loaded" if cluster_id.nil?
+
+      Service::ServiceCluster.find(cluster_id)
+    end
+    alias :cluster :service_cluster
   end
 end

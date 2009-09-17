@@ -5,7 +5,7 @@ class Wakame::Command::LaunchCluster
 
   command_name='launch_cluster'
 
-  def run(rule)
-    rule.trigger_action(Wakame::Actions::LaunchCluster.new)
+  def run
+    trigger_action(Wakame::Actions::LaunchCluster.new)
   end
 end

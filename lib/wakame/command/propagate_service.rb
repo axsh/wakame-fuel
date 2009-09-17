@@ -5,8 +5,11 @@ class Wakame::Command::PropagateService
 
   command_name='propagate_service'
 
-  def run(trigger)
-    refsvc = Service::ServiceInstance.find(@options["service_id"]) || raise("Unknown ServiceInstance ID: #{@options["service_id"]}")
+  def run
+    refsvc = service_cluster.find_service(@options["service_id"])
+    if refsvc.nil?
+      raise("Unknown ServiceInstance ID: #{@options["service_id"]}")
+    end
 
     cloud_host_id = @options["cloud_host_id"]
     if cloud_host_id.nil? || cloud_host_id == ""
@@ -20,12 +23,12 @@ class Wakame::Command::PropagateService
     raise "Invalid format of number: #{num}" unless /^(\d+)$/ =~ num.to_s
     num = num.to_i
 
-    if num < 1 || refsvc.resource.max_instances < trigger.cluster.instance_count(refsvc.resource) + num
-      raise "The number must be between 1 and #{refsvc.resource.max_instances - trigger.cluster.instance_count(refsvc.resource)} (max limit: #{refsvc.resource.max_instances})"
+    if num < 1 || refsvc.resource.max_instances < service_cluster.instance_count(refsvc.resource) + num
+      raise "The number must be between 1 and #{refsvc.resource.max_instances - service_cluster.instance_count(refsvc.resource)} (max limit: #{refsvc.resource.max_instances})"
     end
 
     num.times {
-      trigger.trigger_action(Wakame::Actions::PropagateService.new(refsvc, cloud_host_id))
+      trigger_action(Wakame::Actions::PropagateService.new(refsvc, cloud_host_id))
     }
   end
 end

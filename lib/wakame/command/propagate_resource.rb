@@ -5,7 +5,7 @@ class Wakame::Command::PropagateResource
 
   command_name='propagate_resource'
 
-  def run(trigger)
+  def run
     resname = @options["resource"]
 
     resobj = Service::Resource.find(Service::Resource.id(resname))
@@ -15,7 +15,7 @@ class Wakame::Command::PropagateResource
 
     cloud_host_id = @options["cloud_host_id"]
     if cloud_host_id.nil?
-      cloud_host = trigger.cluster.add_cloud_host { |h|
+      cloud_host = service_cluster.add_cloud_host { |h|
         if @options["vm_attr"].is_a? Hash
           h.vm_attr = @options["vm_attr"]
         end
@@ -26,16 +26,16 @@ class Wakame::Command::PropagateResource
     end
     
 
-    num = @options["number"] || 1
+    num = options["number"] || 1
     raise "Invalid format of number: #{num}" unless /^(\d+)$/ =~ num.to_s
     num = num.to_i
 
-    if num < 1 || resobj.max_instances < trigger.cluster.instance_count(resobj) + num
-      raise "The number must be between 1 and #{resobj.max_instances - trigger.cluster.instance_count(resobj)} (max limit: #{resobj.max_instances})"
+    if num < 1 || resobj.max_instances < service_cluster.instance_count(resobj) + num
+      raise "The number must be between 1 and #{resobj.max_instances - service_cluster.instance_count(resobj)} (max limit: #{resobj.max_instances})"
     end
 
     num.times {
-      trigger.trigger_action(Wakame::Actions::PropagateResource.new(resobj, cloud_host.id))
+      trigger_action(Wakame::Actions::PropagateResource.new(resobj, cloud_host.id))
     }
 
   end

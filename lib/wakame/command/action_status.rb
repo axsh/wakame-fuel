@@ -1,10 +1,8 @@
 
-require 'erb'
-
 class Wakame::Command::ActionStatus
   include Wakame::Command
 
-  def run(rule)
+  def run
     walk_subactions = proc { |a, level|
       res = a.dump_attrs
       unless a.subactions.empty?
@@ -15,12 +13,14 @@ class Wakame::Command::ActionStatus
       res
     }
 
-    EM.barrier {
+    StatusDB.barrier {
       result = {}
 
-      rule.rule_engine.active_jobs.each { |id, v|
-
-        result[id]={:created_at=>v[:created_at], :src_rule=>v[:src_rule].class.to_s}        
+      master.action_manager.active_jobs.each { |id, v|
+        result[id]={}
+        (v.keys - [:root_action]).each { |k|
+          result[id][k]=v[k]
+        }
         result[id][:root_action] = walk_subactions.call(v[:root_action], 0)
 
       }

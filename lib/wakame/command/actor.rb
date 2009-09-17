@@ -1,23 +1,23 @@
 
 class Wakame::Command::Actor
   include Wakame::Command
+  include Wakame::Service
 
-  command_name='launch_cluster'
+  command_name='actor'
 
   def parse(args)
     raise "Not enugh number of arguments" if args.size < 2
-    @agent_id = args.shift
-    @path = args.shift
-    @args = *args
   end
 
-  def run(rule)
-    request = rule.master.actor_request(@agent_id, @path, *@args).request
-    request
+  def run
+    agent = Agent.find(params[:agent_id])
+    raise "Unknown agent: #{params[:agent_id]}" if agent.nil?
+    raise "Invalid agent status (Not Online): #{agent.status} #{params[:agent_id]}" if agent.status != Agent::STATUS_ONLINE
+
+    raise "Invalid actor path: #{params[:path]}" if params[:path].nil? || params[:path] == ''
+
+    request = rule.master.actor_request(params[:agent_id], params[:path], *params[:args]).request
+    request.wait
   end
 
-
-  def print_result
-    
-  end
 end
