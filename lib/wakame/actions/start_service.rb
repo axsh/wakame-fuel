@@ -1,6 +1,4 @@
 
-require 'wakame/rule'
-
 module Wakame
   module Actions
     class StartService < Action
@@ -9,11 +7,19 @@ module Wakame
       end
 
       def run
+        # Skip to act when the service is having below status.
+        if @service_instance.status == Service::STATUS_STARTING || @service_instance.status == Service::STATUS_ONLINE
+          Wakame.log.info("Ignore to start the service as is being or already Online: #{@service_instance.resource.class}")
+          return
+        end
+
         acquire_lock { |lst|
           lst << @service_instance.resource.class.to_s
         }
 
         if @service_instance.resource.require_agent
+          raise "The service is not bound cloud host object: #{@service_instance.id}" if @service_instance.cloud_host_id.nil?
+
           unless @service_instance.cloud_host.mapped?
             acquire_lock { |lst|
               lst << Service::AgentPool.class.to_s
@@ -50,15 +56,14 @@ module Wakame
             end
             
             raise "Could not find the agent to be assigned to : #{@service_instance.resource.class}" unless @service_instance.cloud_host.mapped?
+
+            @service_instance.resource.on_enter_agent(@service_instance, self)
           end
           
           raise "The assigned agent \"#{@service_instance.cloud_host.agent_id}\" for the service instance #{@service_instance.id} is not online."  unless @service_instance.cloud_host.status == Service::Agent::STATUS_ONLINE
+
         end
         
-        # Skip to act when the service is having below status.
-        if @service_instance.status == Service::STATUS_STARTING || @service_instance.status == Service::STATUS_ONLINE
-          raise "Canceled as the service is being or already ONLINE: #{@service_instance.resource.class}"
-        end
 
         StatusDB.barrier {
           @service_instance.update_status(Service::STATUS_STARTING)
