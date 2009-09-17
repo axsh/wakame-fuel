@@ -21,7 +21,8 @@ module Wakame
           src_path.sub!('/$', '') if File.directory? src_path
           
           dest_path = File.expand_path("tmp/config/" + File.basename(tmpl.basedir), @svc.cloud_host.root_path)
-          Wakame::Util.exec("rsync -e 'ssh -i #{Wakame.config.ssh_private_key} -o \"UserKnownHostsFile #{Wakame.config.ssh_known_hosts}\"' -au #{src_path}/ root@#{@svc.cloud_host.agent_ip}:#{dest_path}")
+          #Wakame::Util.exec("rsync -e 'ssh -i #{Wakame.config.ssh_private_key} -o \"UserKnownHostsFile #{Wakame.config.ssh_known_hosts}\"' -au #{src_path}/ root@#{@svc.cloud_host.agent_ip}:#{dest_path}")
+          Wakame::Util.exec("rsync -e 'ssh -i #{Wakame.config.ssh_private_key} -o \"StrictHostKeyChecking no\"' -au #{src_path}/ root@#{@svc.cloud_host.agent_ip}:#{dest_path}")
           
         ensure
           tmpl.cleanup if tmpl
