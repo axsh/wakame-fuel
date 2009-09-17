@@ -6,8 +6,8 @@ module Wakame
 
       def run
         if service_cluster.status == Service::ServiceCluster::STATUS_ONLINE
-          Wakame.log.info("The service cluster is up & running already")
-          raise CancelActionError
+          Wakame.log.info("Ignore to launch the cluster as is already ONLINE: #{service_cluster.name}")
+          return
         end
 
         levels = service_cluster.dg.levels
