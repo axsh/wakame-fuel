@@ -8,22 +8,24 @@ module Wakame
     def_attribute :completion_status
     def_attribute :parent_action
     
-    attr_reader :trigger
+    attr_accessor :action_manager
 
     def master
-      trigger.master
+      action_manager.master
     end
     
     def agent_monitor
-      trigger.agent_monitor
+      master.agent_monitor
     end
     
+    # Tentative utility method for 
     def service_cluster
-      trigger.service_cluster
-    end
-    
-    alias :cluster :service_cluster
+      cluster_id = master.cluster_manager.clusters.keys.first
+      raise "There is no cluster loaded" if cluster_id.nil?
 
+      Service::ServiceCluster.find(cluster_id)
+    end
+    alias :cluster :service_cluster
 
     def status=(status)
       if @status != status
@@ -39,10 +41,6 @@ module Wakame
       @subactions ||= []
     end
     
-    def bind_trigger(trigger)
-      @trigger = trigger
-    end
-    
     def trigger_action(subaction=nil, &blk)
       if blk 
         subaction = ProcAction.new(blk)
@@ -51,13 +49,13 @@ module Wakame
       subactions << subaction
       subaction.parent_action = self
       subaction.job_id = self.job_id
-      subaction.bind_trigger(self.trigger)
+      subaction.action_manager = self.action_manager
       
-      trigger.rule_engine.run_action(subaction)
+      action_manager.run_action(subaction)
     end
     
     def flush_subactions(sec=60*30)
-      job_context = trigger.rule_engine.active_jobs[self.job_id]
+      job_context = action_manager.active_jobs[self.job_id]
       return if job_context.nil?
       
       timeout(sec) {
@@ -86,6 +84,7 @@ module Wakame
     def notify_queue
       @notify_queue ||= ::Queue.new
     end
+    private :notify_queue
     
     def notify(src=nil)
       #Wakame.log.debug("#{self.class}.notify() has been called")
@@ -106,7 +105,7 @@ module Wakame
         a.walk_subactions(&blk)
       }
     end
-    
+        
     def actor_request(agent_id, path, *args, &blk)
       request = master.actor_request(agent_id, path, *args)
       if blk
@@ -120,9 +119,9 @@ module Wakame
       request = actor_request(agent_id, path, *args).request
       request.wait
     end
-    
+
     def notes
-      trigger.rule_engine.active_jobs[self.job_id][:notes]
+      action_manager.active_jobs[self.job_id][:notes]
     end
 
     # Set the lock flags to resources 
@@ -131,10 +130,10 @@ module Wakame
         reslist = []
         blk.call(reslist)
         reslist.flatten!
-        reslist.each {|r| trigger.rule_engine.lock_queue.set(r.to_s, self.job_id) }
+        reslist.each {|r| action_manager.lock_queue.set(r.to_s, self.job_id) }
       }
       
-      trigger.rule_engine.lock_queue.wait(self.job_id)
+      action_manager.lock_queue.wait(self.job_id)
     end
     thread_immutable_methods :acquire_lock
 

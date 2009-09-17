@@ -5,37 +5,28 @@ module Wakame
 
     def_attribute :enabled, true
 
-    attr_reader :rule_engine
-    def command_queue
-      @rule_engine.command_queue
-    end
-
-    def service_cluster
-      @rule_engine.service_cluster
-    end
-    alias :cluster :service_cluster
+    #def service_cluster
+    #  action_manager.service_cluster
+    #end
+    #alias :cluster :service_cluster
 
     def master
-      @rule_engine.master
+      Master.instance
     end
 
     def agent_monitor
-      @rule_engine.agent_monitor
+      master.agent_monitor
     end
 
-    def bind_engine(rule_engine)
-      @rule_engine = rule_engine
+    def command_queue
+      master.command_queue
     end
 
     def trigger_action(action)
-      rule_engine.create_job_context(self, action)
-      action.bind_trigger(self)
-      
-      rule_engine.run_action(action)
-      action.job_id
+      job_id = master.action_manager.trigger_action(action)
     end
 
-    def register_hooks
+    def register_hooks(service_cluster_id)
     end
 
     def cleanup

@@ -1,4 +1,5 @@
 
+require 'thread'
 require 'timeout'
 
 module Wakame
@@ -6,8 +7,9 @@ module Wakame
   class CancelBroadcast < StandardError; end
   class GlobalLockError < StandardError; end
 
-  class RuleEngine
-    attr_reader :triggers, :active_jobs, :lock_queue
+  class ActionManager
+    include Manager
+    attr_reader :active_jobs, :lock_queue
 
     def master
       Wakame::Master.instance
@@ -21,39 +23,16 @@ module Wakame
       master.agent_monitor
     end
 
-    def service_cluster
-      Service::ServiceCluster.find(@service_cluster_id)
-    end
-
-    def initialize(service_cluster_id, &blk)
-      @service_cluster_id = service_cluster_id
-      @triggers = []
-      
+    def initialize()
       @active_jobs = {}
       @job_history = []
       @lock_queue = LockQueue.new
-      instance_eval(&blk) if blk
     end
 
-    def register_trigger(trigger)
-      Wakame.log.debug("Registering trigger #{trigger.class}")
-      trigger.bind_engine(self)
-      trigger.register_hooks
-      @triggers << trigger
+    def init
     end
 
-    def create_job_context(trigger, root_action)
-      root_action.job_id = job_id = Wakame.gen_id
-
-      @active_jobs[job_id] = {
-        :job_id=>job_id,
-        :src_trigger=>trigger,
-        :create_at=>Time.now,
-        :start_at=>nil,
-        :complete_at=>nil,
-        :root_action=>root_action,
-        :notes=>{}
-      }
+    def terminate
     end
 
     def cancel_action(job_id)
@@ -90,7 +69,19 @@ module Wakame
       end
     end
 
+    def trigger_action(action)
+      raise ArguemntError unless action.is_a?(Action)
+      context = create_job_context(action)
+      action.action_manager = self
+      action.job_id = context[:job_id]
+
+      run_action(action)
+      action.job_id
+    end
+
+
     def run_action(action)
+      raise ArguemntError unless action.is_a?(Action)
       job_context = @active_jobs[action.job_id]
       raise "The job session is killed.: job_id=#{action.job_id}" if job_context.nil?
 
@@ -108,7 +99,7 @@ module Wakame
             begin
               action.bind_thread(Thread.current)
               action.status = :running
-              Wakame.log.debug("Start action : #{action.class.to_s} triggered by [#{action.trigger.class}]")
+              Wakame.log.debug("Start action : #{action.class.to_s} #{action.parent_action.nil? ? '' : ('sub-action of ' + action.parent_action.class.to_s)}")
               ED.fire_event(Event::ActionStart.new(action))
               begin
                 action.run
@@ -159,7 +150,7 @@ module Wakame
             
             actary = []
             job_context[:root_action].walk_subactions {|a| actary << a }
-            Wakame.log.debug(actary.collect{|a| {a.class.to_s=>a.status}}.inspect)
+            #Wakame.log.debug(actary.collect{|a| {a.class.to_s=>a.status}}.inspect)
 
             if res.is_a?(Exception)
               job_context[:exception]=res
@@ -182,6 +173,21 @@ module Wakame
         rescue => e
           Wakame.log.error(e)
         end
+      }
+    end
+
+    private
+    def create_job_context(root_action)
+      raise ArguemntError unless root_action.is_a?(Action)
+      root_action.job_id = job_id = Wakame.gen_id
+
+      @active_jobs[job_id] = {
+        :job_id=>job_id,
+        :create_at=>Time.now,
+        :start_at=>nil,
+        :complete_at=>nil,
+        :root_action=>root_action,
+        :notes=>{}
       }
     end
 
