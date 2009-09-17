@@ -5,7 +5,7 @@ module Wakame
         rule.service_cluster.status == Service::ServiceCluster::STATUS_ONLINE
       }
 
-      def register_hooks
+      def register_hooks(cluster_id)
         @instance_counters = {}
         ms = Scheduler::PerHourSequence.new
         #ms[0]=1

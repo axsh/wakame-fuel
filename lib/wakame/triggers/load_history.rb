@@ -42,7 +42,7 @@ module Wakame
         @history_period = 3
       end
       
-      def register_hooks
+      def register_hooks(cluster_id)
         event_subscribe(Event::AgentMonitored) { |event|
           @agent_data[event.agent.agent_id]={:load_history=>[], :last_event=>:normal}
           service_cluster.properties.each { |klass, prop|

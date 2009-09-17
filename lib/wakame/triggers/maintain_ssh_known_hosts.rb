@@ -32,7 +32,7 @@ module Wakame
       end
 
 
-      def register_hooks
+      def register_hooks(cluster_id)
         event_subscribe(Event::AgentMonitored) { |event|
           trigger_action(UpdateKnownHosts.new)
         }
