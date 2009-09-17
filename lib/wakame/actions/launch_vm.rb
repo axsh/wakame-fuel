@@ -38,9 +38,20 @@ __END__
           }
           
           cond.poll(5, 360) {
-            d = ec2.describe_instances([inst_id])[0]
-            Wakame.log.debug("#{self.class}: Polling describe_instances(#{inst_id}): #{d[:aws_state]} ")
-            d[:aws_state] == "running"
+            begin
+              d = ec2.describe_instances([inst_id])[0]
+              Wakame.log.debug("#{self.class}: Polling describe_instances(#{inst_id}): #{d[:aws_state]} ")
+              d[:aws_state] == "running"
+            rescue RightAws::AwsError => e
+              if e.include?(%r'InvalidInstanceID.NotFound')
+                # describe_instances() sometime fails due to this error when it is called just after sending run_instances().
+                # This is the timing issue in AWS so that continues the polling check.
+                Wakame.log.warn("Polling to describe_instances() got InvalidInstanceID.NotFound error with #{inst_id}. Retry again.")
+                next
+              else
+                raise e
+              end
+            end
           }
         }
 
