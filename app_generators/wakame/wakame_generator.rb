@@ -14,6 +14,7 @@ class WakameGenerator < RubiGen::Base
     cluster/actions
     cluster/triggers
     cluster/resources
+    cluster/resources/markers
     cluster/commands
     config
     config/init.d
@@ -58,7 +59,10 @@ class WakameGenerator < RubiGen::Base
       BASEDIRS.each { |path| m.directory path }
 
       m.file_copy_each %w(Rakefile README)
-      m.file_copy_each %w(config/boot.rb config/cluster.rb config/environments/common.rb config/environments/stand_alone.rb  config/environments/ec2.rb)
+      m.file_copy_each %w(config/boot.rb config/cluster.rb config/environments/common.rb config/environments/stand_alone.rb  config/environments/ec2.rb
+                          cluster/resources/markers/http_application_server.rb
+                          cluster/resources/markers/http_asset_server.rb
+                          cluster/resources/markers/http_server.rb)
       m.dependency "install_rubigen_scripts", [destination_root, :wakame]
 
       %w(wakame-master wakame-agent wakameadm).each do |script|
