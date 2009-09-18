@@ -428,7 +428,7 @@ module Wakame
       # Set dependency between two resources.
       def set_dependency(res_name1, res_name2)
         validate_arg = proc {|o|
-          o = Utils.build_const(o) if o.is_a? String
+          o = Util.build_const(o) if o.is_a? String
           raise ArgumentError unless o.is_a?(Class) && o <= Resource
           raise "This is not a member of this cluster \"#{self.class}\": #{o}" unless resources.member?(o.id)
           raise "Unknown resource object: #{o}" unless Resource.exists?(o.id)
