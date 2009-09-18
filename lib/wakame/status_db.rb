@@ -1,6 +1,5 @@
 
 require 'thread'
-require 'wakame/master'
 
 module Wakame
   module StatusDB
@@ -90,7 +89,8 @@ module Wakame
         require 'sequel/core'
         require 'sequel/model'
 
-        @db = Sequel.connect(Wakame.config.status_db_dsn, {:logger=>Wakame.log})
+        #@db = Sequel.connect(Wakame.config.status_db_dsn, {:logger=>Wakame.log})
+        @db = Sequel.connect(Wakame.config.status_db_dsn)
         
         if [:metadata, :model_stores].all?{ |i| @db.table_exists?(i) }
           m = @db[:metadata].where(:id=>1).first
@@ -111,6 +111,17 @@ module Wakame
         @model_class = Class.new(Sequel::Model(:model_stores)) { |klass|
           klass.unrestrict_primary_key
         }
+        @model_class.plugin :schema
+        @model_class.plugin :hook_class_methods
+        @model_class.class_eval {
+          before_create(:set_created_at) do
+            self.updated_at = self.created_at = Time.now
+          end
+          before_update(:set_updated_at) do
+            self.updated_at = Time.now
+          end
+        }
+        # @model_class.plugin :caching, store
       end
 
       def setup_store
