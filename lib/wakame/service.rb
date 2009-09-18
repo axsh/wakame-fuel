@@ -371,6 +371,8 @@ module Wakame
         services.clear
         resources.clear
         cloud_hosts.clear
+        template_vm_attr.clear
+        advertised_amqp_servers = nil
         @status = self.class.attr_attributes[:status][:default]
         @status_changed_at = Time.now
       end
