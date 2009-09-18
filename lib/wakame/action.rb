@@ -20,7 +20,7 @@ module Wakame
     
     # Tentative utility method for 
     def service_cluster
-      cluster_id = master.cluster_manager.clusters.keys.first
+      cluster_id = master.cluster_manager.clusters.first
       raise "There is no cluster loaded" if cluster_id.nil?
 
       Service::ServiceCluster.find(cluster_id)

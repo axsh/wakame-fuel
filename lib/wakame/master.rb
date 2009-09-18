@@ -3,10 +3,7 @@
 require 'rubygems'
 
 require 'wakame'
-require 'wakame/packets'
-require 'wakame/service'
 require 'wakame/queue_declare'
-require 'wakame/vm_manipulator'
 
 module Wakame
 
@@ -207,15 +204,11 @@ module Wakame
 
      end
 
-     attr_reader :clusters
-
      def init
-       @clusters = {}
-       
        # Periodical cluster status updater
        @status_check_timer = EM::PeriodicTimer.new(5) {
          StatusDB.pass {
-           @clusters.keys.each { |cluster_id|
+           clusters.each { |cluster_id|
              Service::ServiceCluster.find(cluster_id).update_cluster_status
            }
          }
@@ -226,7 +219,7 @@ module Wakame
        [Event::ServiceOnline, Event::ServiceOffline, Event::ServiceFailed].each { |evclass|
          @check_event_tickets << EventDispatcher.subscribe(evclass) { |event|
            StatusDB.pass {
-             @clusters.keys.each { |cluster_id|
+             clusters.each { |cluster_id|
                Service::ServiceCluster.find(cluster_id).update_cluster_status
              }
            }
@@ -238,7 +231,6 @@ module Wakame
      def reload
      end
 
-
      def terminate
        @status_check_timer.cancel
        @check_event_tickets.each { |t|
@@ -246,9 +238,13 @@ module Wakame
        }
      end
 
+     def clusters
+       ServiceClusterPool.all.map{|r| r.service_cluster_id }
+     end
+
      def register(cluster)
        raise ArgumentError unless cluster.is_a?(Service::ServiceCluster)
-       @clusters[cluster.id]=1
+       ServiceClusterPool.register_cluster(cluster.name)
      end
 
      def unregister(cluster_id)
@@ -257,7 +253,7 @@ module Wakame
 
      def load_config_cluster
        ClusterConfigLoader.new.load.each { |name, id|
-         @clusters[id]=1
+         ServiceClusterPool.register_cluster(name)
        }
        resolve_template_vm_attr
      end
@@ -265,29 +261,43 @@ module Wakame
 
      private
      def resolve_template_vm_attr
-       @clusters.keys.each { |cluster_id|
-         cluster = Service::ServiceCluster.find(cluster_id)
+       ServiceClusterPool.each_cluster { |cluster|
+         cluster_id = cluster.id
 
          if cluster.template_vm_attr.nil? || cluster.template_vm_attr.empty?
-           # Set a single shot event handler to set the template values up from the first connected agent.
-           EventDispatcher.subscribe_once(Event::AgentMonitored) { |event|
-             StatusDB.pass {
-               require 'right_aws'
-               ec2 = RightAws::Ec2.new(Wakame.config.aws_access_key, Wakame.config.aws_secret_key)
-               
-               ref_attr = ec2.describe_instances([event.agent.vm_attr[:instance_id]])
-               ref_attr = ref_attr[0]
-               
-               cluster = Service::ServiceCluster.find(cluster_id)
-               spec = cluster.template_vm_spec
-               Service::VmSpec::EC2.vm_attr_defs.each { |k, v|
-                 spec.attrs[k] = ref_attr[v[:right_aws_key]]
-               }
-               cluster.save
+           update_template_spec = lambda { |agent|
+             raise ArgumentError unless agent.is_a?(Service::Agent)
 
-               Wakame.log.debug("ServiceCluster \"#{cluster.name}\" template_vm_attr based on VM \"#{event.agent.vm_attr[:instance_id]}\" : #{spec.attrs.inspect}")
+             require 'right_aws'
+             ec2 = RightAws::Ec2.new(Wakame.config.aws_access_key, Wakame.config.aws_secret_key)
+             
+             ref_attr = ec2.describe_instances([agent.vm_attr[:instance_id]])
+             ref_attr = ref_attr[0]
+                 
+             cluster = Service::ServiceCluster.find(cluster_id)
+             spec = cluster.template_vm_spec
+             Service::VmSpec::EC2.vm_attr_defs.each { |k, v|
+               spec.attrs[k] = ref_attr[v[:right_aws_key]]
              }
+             cluster.save
+             
+             Wakame.log.debug("ServiceCluster \"#{cluster.name}\" template_vm_attr based on VM \"#{agent.vm_attr[:instance_id]}\" : #{spec.attrs.inspect}")
            }
+
+
+           agent_id = Service::AgentPool.instance.group_active.keys.first
+           if agent_id.nil?
+             # Set a single shot event handler to set the template values up from the first connected agent.
+             EventDispatcher.subscribe_once(Event::AgentMonitored) { |event|
+               StatusDB.pass {
+                 update_template_spec.call(event.agent)
+               }
+             }
+           else
+             StatusDB.pass {
+               update_template_spec.call(Service::Agent.find(agent_id))
+             }
+           end
          end
 
          if cluster.advertised_amqp_servers.nil?
@@ -302,6 +312,39 @@ module Wakame
        }
      end
 
+
+     class ServiceClusterPool < Sequel::Model
+       plugin :schema
+       
+       def self.initialize_table
+         set_schema do
+           primary_key :id, :type => Integer
+           varchar :service_cluster_id
+         end
+         create_table unless table_exists?
+       end
+       
+       
+       def self.register_cluster(name)
+         id = Service::ServiceCluster.id(name)
+         
+         self.find_or_create(:service_cluster_id=>id)
+       end
+       
+       def self.unregister_cluster(name)
+         id = Service::ServiceCluster.id(name)
+         self.delete(:service_cluster_id=>id)
+       end
+       
+       def self.each_cluster(&blk)
+         self.all.each { |m|
+           cluster = Service::ServiceCluster.find(m.service_cluster_id)
+           blk.call(cluster)
+         }
+       end
+    end
+
+     ServiceClusterPool.initialize_table
    end
 
    class Master
