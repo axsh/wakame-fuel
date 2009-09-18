@@ -241,10 +241,12 @@ end
 class Wakame::Cli::Subcommand::LaunchCluster
   include Wakame::Cli::Subcommand
 
-  #command_name = 'launch_cluster'
+  command_name = 'launch_cluster'
+  summary = "Start up the cluster"
+
   def parse(args)
     create_parser(args) {|opts|
-      opts.banner = "Usage: launch_cluster [options]"
+      opts.banner = "Usage: launch_cluster"
       opts.separator ""
       opts.separator "options:"
     }
@@ -258,6 +260,8 @@ end
 
 class Wakame::Cli::Subcommand::ShutdownCluster
   include Wakame::Cli::Subcommand
+
+  summary = "Shutdown the cluster"
 
   def parse(args)
     create_parser(args) {|opts|
@@ -275,7 +279,10 @@ end
 class Wakame::Cli::Subcommand::Status
   include Wakame::Cli::Subcommand
 
+  summary = "Show summary status across the cluster"
+
   STATUS_TMPL = <<__E__
+<%- if cluster -%>
 Cluster : <%= cluster["name"].to_s %> (<%= cluster_status_msg(cluster["status"]) %>)
 <%- cluster["resources"].keys.each { |res_id|
   resource = body["resources"][res_id]
@@ -306,7 +313,11 @@ Cloud Host (<%= cluster["cloud_hosts"].size %>):
   <%= host_id %> : <% if cloud_host["agent_id"] %>bind to <%= cloud_host["agent_id"] %><% end %>
   <%- } -%>
 <%- end -%>
-<%- if agent_pool["group_active"].size > 0 -%>
+<%- else # if cluster -%>
+Cluster: 
+  No cluster data is loaded in master. (Run import_cluster_config first)
+<%- end # if cluster -%>
+<%- if agent_pool && agent_pool["group_active"].size > 0 -%>
 
 Agents (<%= agent_pool["group_active"].size %>):
   <%- agent_pool["group_active"].keys.each { |agent_id|
@@ -314,9 +325,13 @@ Agents (<%= agent_pool["group_active"].size %>):
   -%>
   <%= a["id"] %> : <%= a["vm_attr"]["local_ipv4"] %>, <%= a["vm_attr"]["public_ipv4"] %>, <%= (Time.now - Time.parse(a["last_ping_at"])).to_i %> sec(s), placement=<%= a["vm_attr"]["availability_zone"] %> (<%= svc_status_msg(a["status"]) %>)
    <%- if a["reported_services"].size > 0 && !cluster["services"].empty? -%>
-    Services (<%= a["reported_services"].size %>): <%= a["reported_services"] %><%# a["reported_services"].keys.collect{ |svc_id| body["services"][svc_id]["resource_ref"]["class_type"] }.join(', ') %>
+    Services (<%= a["reported_services"].size %>): <%= a["reported_services"].keys.collect{ |svc_id| body["services"][svc_id]["resource_ref"]["class_type"] }.join(', ') %>
    <%- end -%>
   <%- } -%>
+<%- else -%>
+
+Agents (0):
+  None of agents are observed.
 <%- end -%>
 __E__
 
@@ -344,9 +359,9 @@ __E__
   def parse(args)
     @params = {}
     create_parser(args){|opts|
-      opts.banner = "Usage: status [options]"
-      opts.separator ""
-      opts.separator "options:"
+      opts.banner = "Usage: status"
+      #opts.separator ""
+      #opts.separator "options:"
     }
   end
 
@@ -408,8 +423,8 @@ __E__
     @params = {}
     cmd = create_parser(args){|opts|
       opts.banner = "Usage: action_status"
-      opts.separator ""
-      opts.separator "options:"
+      #opts.separator ""
+      #opts.separator "options:"
     }
   end
 
