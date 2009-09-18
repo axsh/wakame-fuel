@@ -17,8 +17,7 @@ __END__
     gem.rubyforge_project = 'wakame'
     gem.executables = ['wakame']
     [['amqp','>= 0.6.0'],
-     ['amazon-ec2','>= 0.3.6'],
-     ['right_aws','>= 1.10.0'],
+     ['right_aws','>= 1.10.0'], # Ec2ELB works with 1.10.99 in their github.
      ['eventmachine','>= 0.12.8'],
      ['rake', '>= 0.8.7'],
      ['log4r', '>= 1.0.5'],
@@ -28,7 +27,8 @@ __END__
      ['jeweler', '>= 1.0.0'],
      ['rack', '>= 1.0.0'],
      ['thin', '>= 1.2.2'],
-     ['json', '>= 1.1.7']
+     ['json', '>= 1.1.7'],
+     ['sequel', '>= 3.2.0']
     ].each { |i|
       gem.add_dependency(i[0], i[1])
     }
