@@ -29,6 +29,7 @@ module Wakame
 
     def process_master
       process
+      setup_database
       load_resources
       load_core_commands
       load_core_actions
@@ -42,7 +43,6 @@ module Wakame
     
     def process_cli
       process
-      load_core_commands
     end
 
     def setup_load_paths
@@ -157,6 +157,9 @@ module Wakame
       }
     end
 
+    def setup_database
+      Wakame::StatusDB.adapter
+    end
 
   end
 end
