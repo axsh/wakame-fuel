@@ -13,7 +13,7 @@ class Wakame::Command::ActionStatus
       res
     }
 
-    StatusDB.barrier {
+    Wakame::StatusDB.barrier {
       result = {}
 
       master.action_manager.active_jobs.each { |id, v|
