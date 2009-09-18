@@ -27,7 +27,7 @@ module Wakame
             
             # Try to arrange agent from existing agent pool.
             StatusDB.barrier {
-              break if Service::AgentPool.instance.group_active.empty?
+              next if Service::AgentPool.instance.group_active.empty?
               agent2host = cluster.agents.invert
               
               Service::AgentPool.instance.group_active.keys.each { |agent_id|
