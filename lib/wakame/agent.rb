@@ -9,8 +9,8 @@ require 'thread'
 require 'wakame'
 require 'wakame/amqp_client'
 require 'wakame/queue_declare'
-require 'wakame/event'
-require 'wakame/vm_manipulator'
+#require 'wakame/event'
+#require 'wakame/vm_manipulator'
 
 
 module Wakame
@@ -39,7 +39,11 @@ module Wakame
       setup_actors
       setup_dispatcher
 
-      attrs = Wakame::VmManipulator.create.fetch_local_attrs
+      if Wakame.config.environment == :EC2
+        attrs = self.class.ec2_fetch_local_attrs
+      else
+        attrs = {}
+      end
       publish_to('registry', Packets::Register.new(self, Wakame.config.root_path.to_s, attrs).marshal)
       Wakame.log.info("Started agent process : WAKAME_ROOT=#{Wakame.config.root_path} WAKAME_ENV=#{Wakame.config.environment}, attrs=#{attrs.inspect}")
     end
@@ -56,9 +60,9 @@ module Wakame
 
     def determine_agent_id
       if Wakame.config.environment == :EC2
-        @agent_id = VmManipulator::EC2::MetadataService.query_metadata_uri('instance-id')
+        @agent_id = self.class.ec2_query_metadata_uri('instance-id')
       else
-        @agent_id = VmManipulator::StandAlone::INSTANCE_ID
+        @agent_id = '__STAND_ALONE__'
       end
     end
 
@@ -113,6 +117,23 @@ module Wakame
           agent.publish_to('agent_event', Packets::ActorResponse.new(self, request[:token], Actor::STATUS_FAILED).marshal)
         end
       }
+    end
+
+    def self.ec2_query_metadata_uri(key)
+      require 'open-uri'
+      open("http://169.254.169.254/2008-02-01/meta-data/#{key}") { |f|
+        return f.readline
+      }
+    end
+
+    def self.ec2_fetch_local_attrs
+      attrs = {}
+      %w[instance-id instance-type local-ipv4 local-hostname public-hostname public-ipv4 ami-id].each { |key|
+        rkey = key.tr('-', '_')
+        attrs[rkey.to_sym]=ec2_query_metadata_uri(key)
+      }
+      attrs[:availability_zone] = ec2_query_metadata_uri('placement/availability-zone')
+      attrs
     end
 
   end

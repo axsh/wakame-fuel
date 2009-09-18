@@ -23,7 +23,11 @@ class Wakame::Monitor::Agent
 
 
   def check
-    attrs = Wakame::VmManipulator.create.fetch_local_attrs
+    if Wakame.config.environment == :EC2
+      attrs = Wakame::Agent.ec2_fetch_local_attrs
+    else
+      attrs = {}
+    end
 
     res = {:attrs=>attrs, :monitors=>[], :actors=>[], :services=>{}}
     EM.barrier {
