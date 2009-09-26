@@ -28,6 +28,30 @@ module Wakame
 
     end
 
+    class ClusterFrozen < Base
+      attr_reader :cluster_id
+      def initialize(cluster_id)
+        super()
+        @cluster_id = cluster_id
+      end
+
+      def log_message
+        "#{@cluster_id}, frozen"
+      end
+    end
+
+    class ClusterUnfrozen < Base
+      attr_reader :cluster_id
+      def initialize(cluster_id)
+        super()
+        @cluster_id = cluster_id
+      end
+
+      def log_message
+        "#{@cluster_id}, unfrozen"
+      end
+    end
+
     class ServiceStatus < Base
       attr_reader :instance_id, :property
       def initialize(instance_id, property)

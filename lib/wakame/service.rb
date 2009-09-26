@@ -333,10 +333,13 @@ module Wakame
       STATUS_OFFLINE = 0
       STATUS_ONLINE = 1
       STATUS_PARTIAL_ONLINE = 2
+      STATUS_FROZEN = 3
+      STATUS_UNFROZEN = 4
 
       property :name
       property :status, {:readonly=>true, :default=>STATUS_OFFLINE}
       property :status_changed_at, {:readonly=>true, :default=>proc{Time.now} }
+      property :freeze_status, {:readonly=>true, :default=>STATUS_UNFROZEN}
       property :services, {:default=>{}}
       property :resources, {:default=>{}}
       property :cloud_hosts, {:default=>{}}
@@ -368,6 +371,7 @@ module Wakame
       end
 
       def reset
+        check_freeze
         services.clear
         resources.clear
         cloud_hosts.clear
@@ -407,6 +411,7 @@ module Wakame
 
       # 
       def add_resource(resource, &blk)
+        check_freeze
         if resource.is_a?(Class) && resource <= Resource
           resource = resource.new
         elsif resource.is_a? Resource
@@ -429,6 +434,7 @@ module Wakame
 
       # Set dependency between two resources.
       def set_dependency(res_name1, res_name2)
+        check_freeze
         validate_arg = proc {|o|
           o = Util.build_const(o) if o.is_a? String
           raise ArgumentError unless o.is_a?(Class) && o <= Resource
@@ -470,6 +476,7 @@ module Wakame
       #thread_immutable_methods :launch
 
       def destroy(svc_id)
+        check_freeze
         raise("Unknown service instance : #{svc_id}") unless self.services.has_key?(svc_id)
         svc = ServiceInstance.find(svc_id)
         svc.unbind_cluster
@@ -490,6 +497,7 @@ module Wakame
 
       #def propagate(resource, force=false)
       def propagate_resource(resource, cloud_host_id=nil, force=false)
+        check_freeze
         res_id = Resource.id(resource)
         res_obj = (self.resources.has_key?(res_id) && Resource.find(res_id)) || raise("Unregistered resource: #{resource.to_s}")
         raise ArgumentError if res_obj.require_agent && cloud_host_id.nil?
@@ -522,6 +530,7 @@ module Wakame
       alias :propagate :propagate_resource
 
       def propagate_service(svc_id, cloud_host_id=nil, force=false)
+        check_freeze
         src_svc = (self.services.has_key?(svc_id) && ServiceInstance.find(svc_id)) || raise("Unregistered service: #{svc_id.to_s}")
         res_obj = src_svc.resource
 
@@ -557,6 +566,7 @@ module Wakame
       thread_immutable_methods :propagate_service
 
       def add_cloud_host(&blk)
+        check_freeze
         h = CloudHost.new
         h.cluster_id = self.id
         self.cloud_hosts[h.id]=1
@@ -570,6 +580,7 @@ module Wakame
       end
 
       def remove_cloud_host(cloud_host_id)
+        check_freeze
         if self.cloud_hosts.has_key?(cloud_host_id)
           self.cloud_hosts.delete(cloud_host_id)
         
@@ -651,8 +662,6 @@ module Wakame
 
       alias :instances :services
 
-      #private
-
       def update_cluster_status
         onlines = []
         all_offline = false
@@ -677,6 +686,28 @@ module Wakame
       end
       thread_immutable_methods :update_cluster_status
 
+
+      def update_freeze_status(new_status)
+        raise "Invalid freeze status: #{new_status}" unless [STATUS_FROZEN, STATUS_UNFROZEN].member?(new_status)
+        if @freeze_status != new_status
+          @freeze_status = new_status
+
+          self.save
+
+          case @freeze_status 
+          when STATUS_FROZEN
+            ED.fire_event(Event::ClusterFrozen.new(id))
+          when STATUS_UNFROZEN
+            ED.fire_event(Event::ClusterUnfrozen.new(id))
+          end
+        end
+      end
+
+      private
+      def check_freeze
+        raise "#{self.class}: The cluster #{self.name} is in freeze mode." if freeze_status == STATUS_FROZEN
+      end
+      
     end
 
     
