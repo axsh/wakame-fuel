@@ -6,6 +6,8 @@ require 'setup_master.rb'
 
 Wakame.config.status_db_dsn = 'sqlite:///'
 
+Wakame::Initializer.run(:setup_database)
+
 class TestStatusDB < Test::Unit::TestCase
 
   class Model1 < Wakame::StatusDB::Model

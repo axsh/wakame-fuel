@@ -83,65 +83,9 @@ module Wakame
     end
 
     class SequelAdapter
-      DATA_FORMAT_VERSION='0.4'
 
       def initialize
-        require 'sequel/core'
-        require 'sequel/model'
-
-        #@db = Sequel.connect(Wakame.config.status_db_dsn, {:logger=>Wakame.log})
-        @db = Sequel.connect(Wakame.config.status_db_dsn)
-        
-        if [:metadata, :model_stores].all?{ |i| @db.table_exists?(i) }
-          m = @db[:metadata].where(:id=>1).first
-
-          unless m && m[:version] == DATA_FORMAT_VERSION
-            setup_store
-          end
-
-        else
-          setup_store
-        end
-
-        # Generate Sequel::Model class dynamically.
-        # This is same as below:
-        # class ModelStore < Sequel::Model
-        #    unrestrict_primary_key
-        # end
-        @model_class = Class.new(Sequel::Model(:model_stores)) { |klass|
-          klass.unrestrict_primary_key
-        }
-        @model_class.plugin :schema
-        @model_class.plugin :hook_class_methods
-        @model_class.class_eval {
-          before_create(:set_created_at) do
-            self.updated_at = self.created_at = Time.now
-          end
-          before_update(:set_updated_at) do
-            self.updated_at = Time.now
-          end
-        }
-        # @model_class.plugin :caching, store
-      end
-
-      def setup_store
-        @db.drop_table :metadata rescue nil
-        @db.create_table? :metadata do
-          primary_key :id
-          column :version, :string
-          column :created_at, :datetime
-        end
-
-        @db[:metadata].insert(:version=>DATA_FORMAT_VERSION, :created_at=>Time.now)
-
-        @db.drop_table :model_stores rescue nil
-        @db.create_table? :model_stores do
-          primary_key :id, :string, :size=>50, :auto_increment=>false
-          column :class_type, :string
-          column :dump, :text
-          column :created_at, :datetime
-          column :updated_at, :datetime
-        end
+        @model_class = Wakame::Models::ObjectStore
       end
 
       def find(id, &blk)

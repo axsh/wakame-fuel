@@ -13,6 +13,10 @@ module Wakame
       def instance
         @instance
       end
+
+      def loaded_classes
+        @loaded_classes ||= []
+      end
     end
 
     attr_reader :configuration
@@ -158,7 +162,34 @@ module Wakame
     end
 
     def setup_database
-      Wakame::StatusDB.adapter
+      require 'sequel'
+      
+      #@db = Sequel.connect(Wakame.config.status_db_dsn, {:logger=>Wakame.log})
+      db = Sequel.connect(Wakame.config.status_db_dsn)
+
+
+      if db.table_exists?(:metadata)
+      else
+        db.create_table? :metadata do
+          primary_key :id
+          column :version, :string
+          column :created_at, :datetime
+        end
+        db[:metadata].insert(:version=>'0.4', :created_at=>Time.now)
+      end
+
+      Dir.glob("#{configuration.framework_root_path}/lib/wakame/models/**/*.rb").each{ |f|
+        self.class.loaded_classes.clear
+
+        load f
+        
+        self.class.loaded_classes.each { |model_class|
+          next unless model_class.is_a?(Class) && model_class < Sequel::Model
+
+          model_class.create_table?
+        }
+      }
+    
     end
 
   end

@@ -239,12 +239,12 @@ module Wakame
      end
 
      def clusters
-       ServiceClusterPool.all.map{|r| r.service_cluster_id }
+       Models::ServiceClusterPool.all.map{|r| r.service_cluster_id }
      end
 
      def register(cluster)
        raise ArgumentError unless cluster.is_a?(Service::ServiceCluster)
-       ServiceClusterPool.register_cluster(cluster.name)
+       Models::ServiceClusterPool.register_cluster(cluster.name)
      end
 
      def unregister(cluster_id)
@@ -253,7 +253,7 @@ module Wakame
 
      def load_config_cluster
        ClusterConfigLoader.new.load.each { |name, id|
-         ServiceClusterPool.register_cluster(name)
+         Models::ServiceClusterPool.register_cluster(name)
        }
        resolve_template_vm_attr
      end
@@ -261,7 +261,7 @@ module Wakame
 
      private
      def resolve_template_vm_attr
-       ServiceClusterPool.each_cluster { |cluster|
+       Models::ServiceClusterPool.each_cluster { |cluster|
          cluster_id = cluster.id
 
          if cluster.template_vm_attr.nil? || cluster.template_vm_attr.empty?
@@ -311,40 +311,6 @@ module Wakame
 
        }
      end
-
-
-     class ServiceClusterPool < Sequel::Model
-       plugin :schema
-       
-       def self.initialize_table
-         set_schema do
-           primary_key :id, :type => Integer
-           varchar :service_cluster_id
-         end
-         create_table unless table_exists?
-       end
-       
-       
-       def self.register_cluster(name)
-         id = Service::ServiceCluster.id(name)
-         
-         self.find_or_create(:service_cluster_id=>id)
-       end
-       
-       def self.unregister_cluster(name)
-         id = Service::ServiceCluster.id(name)
-         self.delete(:service_cluster_id=>id)
-       end
-       
-       def self.each_cluster(&blk)
-         self.all.each { |m|
-           cluster = Service::ServiceCluster.find(m.service_cluster_id)
-           blk.call(cluster)
-         }
-       end
-    end
-
-     ServiceClusterPool.initialize_table
    end
 
    class Master
