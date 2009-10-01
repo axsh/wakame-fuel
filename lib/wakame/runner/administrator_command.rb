@@ -197,20 +197,14 @@ module Wakame
       def self.included(klass)
         klass.class_eval {
           class << self
-            def command_name
+            def command_name(name=nil)
+              @command_name = name if name
               @command_name ||= Util.snake_case(self.to_s.split('::').last)
             end
 
-            def command_name=(name)
-              @command_name=name
-            end
-
-            def summary
+            def summary(str=nil)
+              @summary = str if str
               @summary
-            end
-
-            def summary=(summary)
-              @summary=summary
             end
           end
         }
@@ -241,8 +235,8 @@ end
 class Wakame::Cli::Subcommand::LaunchCluster
   include Wakame::Cli::Subcommand
 
-  command_name = 'launch_cluster'
-  summary = "Start up the cluster"
+  command_name 'launch_cluster'
+  summary "Start up the cluster"
 
   def parse(args)
     create_parser(args) {|opts|
@@ -261,7 +255,7 @@ end
 class Wakame::Cli::Subcommand::ShutdownCluster
   include Wakame::Cli::Subcommand
 
-  summary = "Shutdown the cluster"
+  summary "Shutdown the cluster"
 
   def parse(args)
     create_parser(args) {|opts|
@@ -279,7 +273,7 @@ end
 class Wakame::Cli::Subcommand::Status
   include Wakame::Cli::Subcommand
 
-  summary = "Show summary status across the cluster"
+  summary "Show summary status across the cluster"
 
   STATUS_TMPL = <<__E__
 <%- if cluster -%>
