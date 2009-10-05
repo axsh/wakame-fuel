@@ -29,11 +29,9 @@ module Wakame
             end
 
             res = nil
-            StatusDB.barrier {
-              Wakame.log.debug("#{self.class}: Being processed the command: #{cmd.class}")
-              res = cmd.run
-              res
-            }
+            Wakame.log.debug("#{self.class}: Being processed the command: #{cmd.class}")
+            res = cmd.run
+            res
           rescue => e
             Wakame.log.error(e)
             res = e
