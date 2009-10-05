@@ -33,6 +33,7 @@ module Wakame
 
     def process_master
       process
+      require 'wakame/master'
       setup_database
       load_resources
       load_core_commands
@@ -42,7 +43,9 @@ module Wakame
     
     def process_agent
       process
+      require 'wakame/agent'
       load_actors
+      load_monitors
     end
     
     def process_cli
@@ -134,13 +137,23 @@ module Wakame
     end
 
     def load_actors
-      load_path = File.expand_path('cluster/actors', configuration.root_path)
-      Dir.glob("#{load_path}/*.rb").sort.each do |file|
-        if file =~ %r{\A#{Regexp.escape(load_path)}/([^/]+)\.rb\Z}
-          Wakame.log.debug("Loading Actor: #{file}")
-          load file
-        end
-      end
+      load_framework('lib/wakame/actor/**/*.rb', lambda{ |f|
+                       Wakame.log.debug("Loading Core Actor: #{f}")
+                     })
+
+      load_project('cluster/actors/*.rb', lambda{ |f|
+                     Wakame.log.debug("Loading Project Actor: #{f}")
+                   })
+    end
+
+    def load_monitors
+      load_framework('lib/wakame/monitor/**/*.rb', lambda{ |f|
+                       Wakame.log.debug("Loading Core Monitor: #{f}")
+                     })
+
+      #load_project('cluster/monitors/*.rb', lambda{ |f|
+      #               Wakame.log.debug("Loading Project Monitor: #{f}")
+      #             })
     end
 
     def load_core_triggers

@@ -68,8 +68,6 @@ module Wakame
 
 
     def setup_monitors
-      load_monitors
-
       @monitor_registry.register(Monitor::Agent.new, '/agent')
       @monitor_registry.register(Monitor::Service.new, '/service')
       
@@ -79,42 +77,28 @@ module Wakame
       }
     end
 
-    def load_monitors
-      require 'wakame/monitor/agent'
-      require 'wakame/monitor/service'
-    end
-
     def setup_actors
-      load_actors
-
       @actor_registry.register(Actor::ServiceMonitor.new, '/service_monitor')
       @actor_registry.register(Actor::Daemon.new, '/daemon')
       @actor_registry.register(Actor::System.new, '/system')
       @actor_registry.register(Actor::MySQL.new, '/mysql')
+      @actor_registry.register(Actor::Deploy.new, '/deploy')
       @actor_registry.actors.each { |path, actor|
 #        actor.setup(path)
         actor.agent = self
       }
     end
     
-    def load_actors
-      require 'wakame/actor/service_monitor'
-      require 'wakame/actor/daemon'
-      require 'wakame/actor/system'
-      require 'wakame/actor/mysql'
-    end
-
-
     def setup_dispatcher
       @dispatcher = Dispatcher.new(self)
       
       add_subscriber("agent_actor.#{agent_id}") { |data|
-        begin 
+        begin
           request = eval(data)
           @dispatcher.handle_request(request)
         rescue => e
           Wakame.log.error(e)
-          agent.publish_to('agent_event', Packets::ActorResponse.new(self, request[:token], Actor::STATUS_FAILED).marshal)
+          publish_to('agent_event', Packets::ActorResponse.new(self, request[:token], Actor::STATUS_FAILED, {:message=>e.message, :exclass=>e.class.to_s}).marshal)
         end
       }
     end
