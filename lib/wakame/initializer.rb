@@ -192,5 +192,21 @@ module Wakame
     
     end
 
+    def load_framework(glob_pat, pre_hook=nil, post_hook=nil)
+      Dir.glob(File.expand_path(glob_pat, configuration.framework_root_path)).sort.each{ |f|
+        pre_hook.call(f) if pre_hook
+        load f
+        post_hook.call(f) if post_hook
+      }
+    end
+
+    def load_project(glob_pat, pre_hook=nil, post_hook=nil)
+      Dir.glob(File.expand_path(glob_pat, configuration.root_path)).sort.each{ |f|
+        (pre_hook.call(f) || next) if pre_hook
+        load f
+        post_hook.call(f) if post_hook
+      }
+    end
+
   end
 end
