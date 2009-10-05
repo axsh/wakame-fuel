@@ -210,17 +210,12 @@ module Wakame
     end
 
     def handle_request(request)
-      slash = request[:path].rindex('/')
-      raise "Invalid request path: #{request[:path]}" unless slash
+      slash = request[:path].rindex('/') || raise("Invalid request path: #{request[:path]}")
 
       prefix = request[:path][0, slash]
       action = request[:path][slash+1, request[:path].length]
 
-      actor = agent.actor_registry.find_actor(prefix)
-      unless actor
-        Wakame.log.error("No refered actor instance: #{prefix}")
-        raise
-      end
+      actor = agent.actor_registry.find_actor(prefix) || raise("Invalid request path: #{request[:path]}")
 
       EM.defer(proc {
                  begin
@@ -242,6 +237,7 @@ module Wakame
                  status = Actor::STATUS_SUCCESS
                  if res.is_a?(Exception)
                    status = Actor::STATUS_FAILED
+                   opts = {:message => res.message, :exclass=>res.class.to_s}
                  else
                    opts = {:return_value=>res}
                  end
