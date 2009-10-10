@@ -1079,6 +1079,7 @@ module Wakame
       property :max_instances, {:default=>1}
       property :startup, {:default=>true}
       property :require_agent, {:default=>true}
+      property :tags, {:read_only=>true, :default=>[]}
 
       def self.inherited(klass)
         klass.class_eval {

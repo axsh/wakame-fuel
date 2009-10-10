@@ -694,3 +694,22 @@ __E__
     SVC_STATUS_MSG[stat]
   end
 end
+
+class Wakame::Cli::Subcommand::DeployApplication
+  include Wakame::Cli::Subcommand
+
+  def parse(args)
+    @params = {}
+    cmd = create_parser(args) { |opts|
+      opts.banner = "Usage: deploy_application [options] \"Application Name\""
+      opts.separator ""
+    }
+    @params[:app_name] = args.shift || abort("[ERROR]: Application name was not given")
+    @params
+  end
+
+  def run(requester)
+    requester.request(@params)
+  end
+
+end
