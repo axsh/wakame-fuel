@@ -5,6 +5,7 @@ require 'fileutils'
 class Wakame::Actor::Deploy
   include Wakame::Actor
 
+  # Download the application from repo_uri using arbitrary SCM tool.
   def checkout(ticket, repo_type, repo_uri, deploy_rev, app_root, app_name, options={})
     
     case repo_type
