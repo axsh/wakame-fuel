@@ -31,6 +31,25 @@ class Wakame::Actor::Deploy
     end
   end
 
+  # Swap the symlink "current" in /app_root/app_name to point the location as same as
+  # "latest" in the same folder.
+  def swap_current_link(app_root, app_name)
+    raise "Invalid application root path. Must be an absolute path: #{app_root}" unless app_root =~ /\A\//
+
+    latest_lnk_path = File.join(app_root, app_name, 'latest')
+    cur_lnk_path = File.join(app_root, app_name, 'current')
+    raise "'latest' symlink does not exist in #{File.join(app_root, app_name)}" unless File.symlink?(latest_lnk_path)
+    
+
+    tgt = File.readlink(latest_lnk_path)
+    raise "'latest' symlink may point the target in differnt folder: #{tgt}" if tgt =~ /[\/]/
+
+    if File.symlink?(cur_lnk_path)
+      FileUtils.rm_f(cur_lnk_path)
+    end
+    FileUtils.symlink(tgt, cur_lnk_path)
+  end
+
   private
 
   def checkout_s3(repo_uri, deploy_rev, options)
