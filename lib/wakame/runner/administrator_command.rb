@@ -713,3 +713,27 @@ class Wakame::Cli::Subcommand::DeployApplication
   end
 
 end
+
+class Wakame::Cli::Subcommand::Actor
+  include Wakame::Cli::Subcommand
+
+  summary 'Call actor method on an arbitrary agent.'
+
+  def parse(args)
+    @params = {}
+    cmd = create_parser(args) { |opts|
+      opts.banner = "Usage: actor [options] \"Agent ID\" \"/actor/path\" [\"args\"]"
+      opts.separator ""
+      opts.separator "options:"
+    }
+    @params[:agent_id] = args.shift || abort("[ERROR]: Agent ID was not given")
+    @params[:path] = args.shift || abort("[ERROR]: Path was not given")
+    @params[:args] = args.shift
+    @params
+  end
+
+  def run(requester)
+    requester.request(@params)
+  end
+
+end
