@@ -1,7 +1,7 @@
 
-
 require 'shellwords'
 require 'ext/shellwords' unless Shellwords.respond_to? :shellescape
+require 'fileutils'
 
 class Wakame::Actor::System
   include Wakame::Actor
@@ -42,6 +42,10 @@ class Wakame::Actor::System
     mount_point_dev=`/bin/df "#{path}" | awk 'NR==2 {print $1}'`
     Wakame.log.debug("Unmounting volume: #{mount_point_dev} on #{path}")
     Wakame::Util.exec("/bin/umount '#{Shellwords.shellescape(path)}'")
+  end
+
+  def touch(path)
+    FileUtils.touch(path)
   end
   
   private
