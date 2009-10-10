@@ -1,7 +1,7 @@
 class Wakame::Command::StartService
   include Wakame::Command
 
-  command_name='start_service'
+  command_name 'start_service'
 
   def run
     svc = service_cluster.find_service(params[:service_id])

@@ -6,12 +6,9 @@ module Wakame
     def self.included(klass)
       klass.class_eval {
         class << self
-          def command_name
+          def command_name(name=nil)
+            @command_name = name if name
             @command_name ||= Util.snake_case(self.to_s.split('::').last)
-          end
-          
-          def command_name=(name)
-            @command_name=name
           end
         end
       }

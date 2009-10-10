@@ -3,7 +3,7 @@ class Wakame::Command::Actor
   include Wakame::Command
   include Wakame::Service
 
-  command_name='actor'
+  command_name 'actor'
 
   def run
     agent = Agent.find(params['agent_id'])

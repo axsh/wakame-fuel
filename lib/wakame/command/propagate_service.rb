@@ -3,7 +3,7 @@ class Wakame::Command::PropagateService
   include Wakame::Command
   include Wakame
 
-  command_name='propagate_service'
+  command_name 'propagate_service'
 
   def run
     refsvc = service_cluster.find_service(@options["service_id"])

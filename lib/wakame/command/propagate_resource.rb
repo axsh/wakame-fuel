@@ -3,7 +3,7 @@ class Wakame::Command::PropagateResource
   include Wakame::Command
   include Wakame
 
-  command_name='propagate_resource'
+  command_name 'propagate_resource'
 
   def run
     resname = @options["resource"]

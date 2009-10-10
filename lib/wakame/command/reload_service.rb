@@ -2,7 +2,7 @@
 class Wakame::Command::ReloadService
   include Wakame::Command
 
-  command_name='reload_service'
+  command_name 'reload_service'
 
   def run
     svc = service_cluster.find_service(options['service_id'])

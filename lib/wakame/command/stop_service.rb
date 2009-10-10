@@ -1,7 +1,7 @@
 class Wakame::Command::StopService
   include Wakame::Command
 
-  command_name='stop_service'
+  command_name 'stop_service'
 
   # terminate
   # service_id or resource_name

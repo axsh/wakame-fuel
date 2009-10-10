@@ -2,7 +2,7 @@
 class Wakame::Command::ShutdownVm
   include Wakame::Command
 
-  command_name='shutdown_vm'
+  command_name 'shutdown_vm'
 
   def run(rule)
     registered_agents = rule.agent_monitor.registered_agents[@options["agent_id"]]
