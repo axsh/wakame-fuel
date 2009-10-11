@@ -34,6 +34,11 @@ module Wakame
   autoload :RuleEngine, 'wakame/rule_engine'
   autoload :StatusDB, 'wakame/status_db'
   autoload :ActionManager, 'wakame/action_manager'
+  autoload :AgentManager, 'wakame/agent_manager'
+  module AgentManagers
+    autoload :MonitorManager, 'wakame/agent_managers/monitor_manager'
+    autoload :ActorManager, 'wakame/agent_managers/actor_manager'
+  end
   #autoload :Initializer, 'wakame/initializer' # Do not autoload this class since the constant is used for the flag in bootstrap.
 
   def gen_id(str=nil)
