@@ -21,6 +21,7 @@ module Wakame
       register(Actor::System.new, '/system')
       register(Actor::MySQL.new, '/mysql')
       register(Actor::Deploy.new, '/deploy')
+      register(Actor::Monitor.new, '/monitor')
         
       end
 

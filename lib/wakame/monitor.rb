@@ -14,16 +14,13 @@ module Wakame
       }
     end
 
-    def handle_request(request)
-    end
-
-    def setup(assigned_path)
-    end
-
     def enable
     end
 
     def disable
+    end
+
+    def reload(config)
     end
 
     def publish_to(exchange, data)

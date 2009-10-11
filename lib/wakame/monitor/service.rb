@@ -1,20 +1,20 @@
 
 require 'open4'
-require 'wakame'
 
 class Wakame::Monitor::Service
 
   class ServiceChecker
     #include Wakame::Packets::Agent
-    attr_reader :timer, :svc_id
+    attr_reader :timer, :svc_id, :interval
     attr_accessor :last_checked_at, :status
 
-    def initialize(svc_id, svc_mon)
+    def initialize(svc_id, svc_mon, interval)
       @svc_id = svc_id
       @service_monitor = svc_mon
+      @interval = interval
       @status = Wakame::Service::STATUS_OFFLINE
       count = 0
-      @timer = Wakame::Monitor::CheckerTimer.new(5) {
+      @timer = Wakame::Monitor::CheckerTimer.new(@interval) {
         self.signal_checker
       }
     end
@@ -131,26 +131,9 @@ class Wakame::Monitor::Service
     @checkers = {}
   end
 
-  def setup(path)
-  end
-
-  def handle_request(request)
-    svc_id = request[:svc_id]
-    case request[:command]
-    when :start
-      register(svc_id, request[:cmdstr])
-    when :stop
-      unregister(svc_id)
-    end
-  end
-
   def send_event(a)
     Wakame.log.debug("Sending back the event: #{a.class}")
     publish_to('agent_event', a.marshal)
-  end
-
-  def dump_attrs
-    
   end
 
   def find_checker(svc_id)
@@ -164,9 +147,9 @@ class Wakame::Monitor::Service
     end
     case checker_type.to_sym
     when :pidfile
-      chk = PidFileChecker.new(svc_id, self, args[0])
+      chk = PidFileChecker.new(svc_id, self, args[0], args[1])
     when :command
-      chk = CommandChecker.new(svc_id, self, args[0])
+      chk = CommandChecker.new(svc_id, self, args[0], args[1])
     else
       raise "Unsupported checker type: #{checker_type}"
     end
@@ -191,6 +174,49 @@ class Wakame::Monitor::Service
     else
       raise RuntimeError, "#{self.class}: Specified service id was not found: #{svc_id}"
     end
+  end
+
+  def unregister_all
+    @checkers.keys.each { |svc_id|
+      unregister(svc_id)
+    }
+  end
+
+  # Reloading the service monitor with new configuration.
+  #
+  # Example of Hash data in config:
+  # config = {
+  #   'svc_id_abcde'=>{:type=>:pidfile, :path=>'/var/run/a.pid', :interval=>5},
+  #   'svc_id_12345'=>{:type=>:command, :cmdline=>'/bin/ps -ef | grep processname', :interval=>10}
+  # }
+  def reload(config)
+    unregister_all
+
+    reg_single = proc { |data|
+      data[:interval] ||= 5
+
+      case data[:type]
+      when :pidfile
+        register(svc_id, data[:type], data[:path], data[:interval])
+      when :command
+        register(svc_id, data[:type], data[:cmdline], data[:interval])
+      else
+        raise "Unsupported checker type: #{data[:type]}"
+      end
+    }
+    
+    config.each { |svc_id, data|
+      if data.is_a?(Array)
+        # TODO: Multiple monitors for single service ID
+        raise "TODO: Multiple monitors for single service ID"
+        data.each { |d|
+          reg_single.call(d)
+        }
+      elsif data.is_a?(Hash)
+        reg_single.call(data)
+      else
+      end
+    }
   end
 
 end
