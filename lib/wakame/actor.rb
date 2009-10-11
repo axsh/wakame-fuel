@@ -20,12 +20,9 @@ module Wakame
         @exposed[path]=meth
       end
 
-      def map_path
+      def map_path(path=nil)
+        @map_path = path if path
         @map_path ||= Util.snake_case(self.to_s.split('::').last)
-      end
-      
-      def map_path=(name)
-        @map_path=name
       end
     end
     
