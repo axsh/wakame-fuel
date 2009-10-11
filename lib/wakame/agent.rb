@@ -22,12 +22,14 @@ module Wakame
     define_queue 'agent_actor.%{agent_id}', 'agent_command', {:key=>'agent_id.%{agent_id}', :auto_delete=>true}
 
     attr_reader :actor_registry, :monitor_registry
+    attr_reader :managers, :monitor_manager, :actor_manager
 
     def agent_id
       @agent_id
     end
 
     def initialize(opts={})
+      @managers = {}
       determine_agent_id
       @actor_registry = ActorRegistry.new
       @monitor_registry = MonitorRegistry.new
@@ -35,9 +37,16 @@ module Wakame
 
     # post_setup
     def init
-      setup_monitors
-      setup_actors
-      setup_dispatcher
+      @monitor_manager = register_manager(AgentManagers::MonitorManager.new)
+      @actor_manager = register_manager(AgentManagers::ActorManager.new)
+
+
+      @managers.values.each { |mgr|
+        mgr.init
+      }
+      #setup_monitors
+      #setup_actors
+      #setup_dispatcher
 
       if Wakame.config.environment == :EC2
         attrs = self.class.ec2_fetch_local_attrs
@@ -118,6 +127,19 @@ module Wakame
       }
       attrs[:availability_zone] = ec2_query_metadata_uri('placement/availability-zone')
       attrs
+    end
+
+
+    def register_manager(agent_mgr)
+      raise ArgumentError unless agent_mgr.kind_of? Wakame::AgentManager
+      agent_mgr.agent = self
+      raise "The manager module is registered: #{agent_mgr.class.to_s}" if @managers.has_key? agent_mgr.class.to_s
+      @managers[agent_mgr.class.to_s] = agent_mgr
+      agent_mgr
+    end
+
+    def unregister_manager(agent_mgr_name)
+      @managers.delete(agent_mgr_name.to_s)
     end
 
   end
