@@ -12,9 +12,7 @@ module Wakame
 
         levels = service_cluster.dg.levels
         Wakame.log.debug("#{self.class}: Scheduled resource launch order: " + levels.collect {|lv| '['+ lv.collect{|prop| "#{prop.class}" }.join(', ') + ']' }.join(', '))
-        acquire_lock { |list|
-          levels.each {|lv| list << lv.collect{|res| res.class } }
-        }
+        acquire_lock(levels.map {|lv| lv.map{|res| res.class.to_s } })
 
         levels.each { |lv|
           Wakame.log.info("#{self.class}: Launching resources: #{lv.collect{|prop| "#{prop.class}" }.join(', ')}")

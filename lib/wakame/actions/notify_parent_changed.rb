@@ -11,9 +11,7 @@ module Wakame
           children = @parent_svc.child_instances
         }
 
-        acquire_lock { |lst|
-          lst << children.map{|c| c.resource.class.to_s }.uniq
-        }
+        acquire_lock(children.map{|c| c.resource.class.to_s }.uniq)
         
         Wakame.log.debug("#{self.class}: Child nodes for #{@parent_svc.resource.class}: " + children.map{|c| c.resource.class }.uniq.inspect )
 

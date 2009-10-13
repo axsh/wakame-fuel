@@ -124,13 +124,12 @@ module Wakame
       action_manager.active_jobs[self.job_id][:notes]
     end
 
-    # Set the lock flags to resources 
-    def acquire_lock(&blk)
+    # Set the lock flags to arbitrary object names.
+    #  acquire_lock('Lock Target 1', 'Lock Target 2')
+    #  acquire_lock(%w(aaaa bbbb cccc))
+    def acquire_lock(*args)
       StatusDB.barrier {
-        reslist = []
-        blk.call(reslist)
-        reslist.flatten!
-        reslist.each {|r| action_manager.lock_queue.set(r.to_s, self.job_id) }
+        args.flatten.each {|r| action_manager.lock_queue.set(r.to_s, self.job_id) }
       }
       
       action_manager.lock_queue.wait(self.job_id)

@@ -13,17 +13,13 @@ module Wakame
           return
         end
 
-        acquire_lock { |lst|
-          lst << @service_instance.resource.class.to_s
-        }
+        acquire_lock(@service_instance.resource.class.to_s)
 
         if @service_instance.resource.require_agent
           raise "The service is not bound cloud host object: #{@service_instance.id}" if @service_instance.cloud_host_id.nil?
 
           unless @service_instance.cloud_host.mapped?
-            acquire_lock { |lst|
-              lst << Service::AgentPool.class.to_s
-            }
+            acquire_lock(Service::AgentPool.class.to_s)
             
             # Try to arrange agent from existing agent pool.
             StatusDB.barrier {

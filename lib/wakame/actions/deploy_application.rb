@@ -31,9 +31,7 @@ module Wakame
         end
 
         resclass_names.uniq!
-        acquire_lock { |lst|
-          lst = resclass_names.dup
-        }
+        acquire_lock(resclass_names)
         
         # Checkout apps from each repository
         svc_lst.each { |svc|

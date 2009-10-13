@@ -15,9 +15,7 @@ module Wakame
           return
         end
 
-        acquire_lock { |lst|
-          lst << @svc.resource.class.to_s
-        }
+        acquire_lock(@svc.resource.class.to_s)
 
         if @svc.resource.require_agent && !@svc.cloud_host.mapped?
           raise "Agent is not bound on this service : #{@svc}"

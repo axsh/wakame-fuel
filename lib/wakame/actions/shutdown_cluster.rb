@@ -4,9 +4,7 @@ module Wakame
       def run
         levels = cluster.dg.levels
         Wakame.log.debug("#{self.class}: Resource shutdown order: " + levels.collect {|lv| '['+ lv.collect{|prop| "#{prop.class}" }.join(', ') + ']' }.join(', '))
-        acquire_lock { |list|
-          levels.each {|lv| list << lv.collect{|res| res.class } }
-        }
+        acquire_lock(levels.map {|lv| lv.map{|res| res.class.to_s } })
 
         levels.reverse.each { |lv|
           lv.each { |svc_prop|

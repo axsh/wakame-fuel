@@ -9,9 +9,7 @@ module Wakame
         Wakame.log.debug("#{self.class}: run() Begin: #{@svc.resource.class}")
         raise "CloudHost is not mapped Agent: CloudHost.id=#{@svc.cloud_host.id}" unless @svc.cloud_host.mapped?
 
-        acquire_lock { |lst|
-          lst << @svc.resource.class.to_s
-        }
+        acquire_lock(@svc.resource.class.to_s)
 
         begin
           tmpl = Wakame::Template.new(@svc)

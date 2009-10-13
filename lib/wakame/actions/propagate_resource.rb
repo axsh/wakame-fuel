@@ -9,9 +9,7 @@ module Wakame
       end
 
       def run
-        acquire_lock { |ary|
-          ary << @resource.class.to_s
-        }
+        acquire_lock(@resource.class.to_s)
 
         newsvc=nil
         StatusDB.barrier {
