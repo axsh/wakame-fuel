@@ -35,11 +35,14 @@ module Wakame
       STATUS_ONLINE  = 1
       STATUS_UNKNOWN = 2
       STATUS_TIMEOUT = 3
+      STATUS_RUNNING = 4
+      STATUS_REGISTERRING = 5
       
       property :last_ping_at
       property :vm_attr
       property :root_path
       property :status, {:read_only=>true, :default=>STATUS_INIT}
+      property :monitor_status, {:read_only=>true, :default=>STATUS_INIT}
       property :reported_services, {:read_only=>true, :default=>{}}
       property :cloud_host_id
 
@@ -56,11 +59,11 @@ module Wakame
       end
 
       def agent_ip
-        vm_attr[:local_ipv4]
+        vm_attr[:private_dns_name]
       end
 
       def vm_id
-        vm_attr[:instance_id]
+        vm_attr[:aws_instance_id]
       end
 
       # Tentative...
@@ -101,6 +104,14 @@ module Wakame
       end
 
       def terminate
+      end
+
+      def update_vm_attr
+        require 'right_aws'
+        ec2 = RightAws::Ec2.new(Wakame.config.aws_access_key, Wakame.config.aws_secret_key)
+        dat = ec2.describe_instances([self.id])
+        @vm_attr = dat[0]
+        self.save
       end
     end
 

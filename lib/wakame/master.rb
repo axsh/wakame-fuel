@@ -72,10 +72,13 @@ module Wakame
           
           case data[:class_type]
           when 'Wakame::Packets::Register'
+            agent.update_status(Service::Agent::STATUS_REGISTERRING)
+            agent_pool.register_as_observed(agent)
+
             agent.root_path = data[:root_path]
-            agent.vm_attr = data[:attrs]
+
             agent.save
-            agent_pool.register(agent)
+            master.action_manager.trigger_action(Actions::RegisterAgent.new(agent))
           when 'Wakame::Packets::UnRegister'
             agent_pool.unregister(agent)
           end
@@ -91,7 +94,6 @@ module Wakame
         # Variable update function for the common members
         set_report_values = proc { |agent|
           agent.last_ping_at = ping[:responded_at]
-          agent.vm_attr = ping[:attrs]
 
           agent.renew_reported_services(ping[:services])
           agent.save
@@ -273,7 +275,7 @@ module Wakame
              require 'right_aws'
              ec2 = RightAws::Ec2.new(Wakame.config.aws_access_key, Wakame.config.aws_secret_key)
              
-             ref_attr = ec2.describe_instances([agent.vm_attr[:instance_id]])
+             ref_attr = ec2.describe_instances([agent.vm_attr[:aws_instance_id]])
              ref_attr = ref_attr[0]
                  
              cluster = Service::ServiceCluster.find(cluster_id)
@@ -283,7 +285,7 @@ module Wakame
              }
              cluster.save
              
-             Wakame.log.debug("ServiceCluster \"#{cluster.name}\" template_vm_attr based on VM \"#{agent.vm_attr[:instance_id]}\" : #{spec.attrs.inspect}")
+             Wakame.log.debug("ServiceCluster \"#{cluster.name}\" template_vm_attr based on VM \"#{agent.vm_attr[:aws_instance_id]}\" : #{spec.attrs.inspect}")
            }
 
 
