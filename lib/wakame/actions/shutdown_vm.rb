@@ -21,7 +21,7 @@ module Wakame
         require 'right_aws'
         ec2 = RightAws::Ec2.new(Wakame.config.aws_access_key, Wakame.config.aws_secret_key, {:cache=>false})
 
-        res = ec2.terminate_instances([@agent.vm_attr[:instance_id]])
+        res = ec2.terminate_instances([@agent.vm_attr[:aws_instance_id]])
       end
     end
   end

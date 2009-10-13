@@ -34,7 +34,7 @@ __END__
 
         ConditionalWait.wait { | cond |
           cond.wait_event(Event::AgentMonitored) { |event|
-            event.agent.vm_attr[:instance_id] == inst_id
+            event.agent.vm_attr[:aws_instance_id] == inst_id
           }
           
           cond.poll(5, 360) {
