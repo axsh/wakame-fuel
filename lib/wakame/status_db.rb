@@ -296,7 +296,29 @@ module Wakame
 
       def reload
         self.class._instance_cache.delete(self.id)
-        self.class.find(self.id)
+        
+        StatusDB.adapter.find(self.id) { |id, hash|
+          if hash[AttributeHelper::CLASS_TYPE_KEY]
+            klass_const = Util.build_const(hash[AttributeHelper::CLASS_TYPE_KEY])
+          else
+            klass_const = self.class
+          end
+
+          # klass_const class is equal to self class or child of self class
+          unless klass_const <= self.class
+            raise "The class \"#{klass_const.to_s}\" has no relationship to #{self.class}"
+          end
+          
+          on_before_load
+          
+          @load_at = Time.now
+          
+          hash.each { |k,v|
+            instance_variable_set("@#{k}", v)
+          }
+          
+          on_after_load
+        }
       end
 
       # Callback methods
