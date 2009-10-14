@@ -277,6 +277,34 @@ module Wakame
         spec
       end
 
+      # Combine all the monitorring data from associated Resources.
+      # Example of return value:
+      # { '/service' => {
+      #     'svcid1' => {:type=>:pidfile, :path=>'/var/run/pid1.pid'},
+      #     'svcid2' => {:type=>:command, :cmdline=>'ps -ef | grep key'}
+      #   }
+      # }
+      def monitors
+        mon = {}
+        c = ServiceCluster.find(cluster_id)
+        c.services.keys.each { |svc_id|
+          svc = ServiceInstance.find(svc_id)
+          next if svc.status == Service::STATUS_INIT || svc.status == Service::STATUS_TERMINATE
+
+          svc.resource.monitors.each { |path, data|
+
+            data.each { |k, v|
+              if v.is_a? String
+                data[k] = instance_eval('"' + v.gsub(/%\{/, '#{') + '"')
+              end
+            }
+
+            mon[path] ||= {}
+            mon[path][svc_id] = data
+          }
+        }
+        mon
+      end
 
       # Delegate methods for Agent class
 
@@ -1091,6 +1119,7 @@ module Wakame
       property :startup, {:default=>true}
       property :require_agent, {:default=>true}
       property :tags, {:read_only=>true, :default=>[]}
+      property :monitors, {:default=>{}}
 
       def self.inherited(klass)
         klass.class_eval {

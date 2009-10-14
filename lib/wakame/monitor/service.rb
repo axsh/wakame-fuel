@@ -80,8 +80,8 @@ class Wakame::Monitor::Service
   end
 
   class PidFileChecker < ServiceChecker
-    def initialize(svc_id, svc_mon, pidpath)
-      super(svc_id, svc_mon)
+    def initialize(svc_id, svc_mon, pidpath, interval)
+      super(svc_id, svc_mon, interval)
       @pidpath = pidpath
     end
     
@@ -99,8 +99,8 @@ class Wakame::Monitor::Service
   class CommandChecker < ServiceChecker
     attr_reader :command
 
-    def initialize(svc_id, svc_mon, cmdstr)
-      super(svc_id, svc_mon)
+    def initialize(svc_id, svc_mon, cmdstr, interval)
+      super(svc_id, svc_mon, interval)
       @command = cmdstr
     end
 
@@ -192,7 +192,7 @@ class Wakame::Monitor::Service
   def reload(config)
     unregister_all
 
-    reg_single = proc { |data|
+    reg_single = proc { |svc_id, data|
       data[:interval] ||= 5
 
       case data[:type]
@@ -210,10 +210,10 @@ class Wakame::Monitor::Service
         # TODO: Multiple monitors for single service ID
         raise "TODO: Multiple monitors for single service ID"
         data.each { |d|
-          reg_single.call(d)
+          reg_single.call(svc_id, d)
         }
       elsif data.is_a?(Hash)
-        reg_single.call(data)
+        reg_single.call(svc_id, data)
       else
       end
     }

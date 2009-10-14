@@ -220,6 +220,14 @@ module AttributeHelper
       merged_attr_attributes[attr_name]
     end
 
+    # Update attr_attributes[name][:default] value.
+    # This works for existing name key.
+    def update_attribute(name, v)
+      attr_attr = get_attr_attribute(name)
+      raise "No such defined attribute: #{name}" if attr_attr.nil?
+      attr_attr[:default] = v
+    end
+
     def def_attribute(name, *args)
       attr = begin 
                if args.size == 0

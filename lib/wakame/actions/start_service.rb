@@ -52,12 +52,21 @@ module Wakame
             end
             
             raise "Could not find the agent to be assigned to : #{@service_instance.resource.class}" unless @service_instance.cloud_host.mapped?
-
-            @service_instance.resource.on_enter_agent(@service_instance, self)
           end
           
           raise "The assigned agent \"#{@service_instance.cloud_host.agent_id}\" for the service instance #{@service_instance.id} is not online."  unless @service_instance.cloud_host.status == Service::Agent::STATUS_ONLINE
-
+          
+          StatusDB.barrier {
+            @service_instance.update_status(Service::STATUS_STARTING)
+          }
+          
+          # Setup monitorring
+          @service_instance.cloud_host.monitors.each { |path, conf|
+            Wakame.log.debug("#{self.class}: Sending monitorring setting to #{@service_instance.cloud_host.agent_id}: #{path} => #{conf.inspect}")
+            actor_request(@service_instance.cloud_host.agent_id, '/monitor/reload', path, conf).request.wait
+          }
+          
+          @service_instance.resource.on_enter_agent(@service_instance, self)
         end
         
 

@@ -13,7 +13,11 @@ module Wakame
         @agent.update_vm_attr
         
         # Send monitoring conf
-        master.actor_request(@agent.id, '/monitor/reload', '/service', {}).request.wait
+        if @agent.cloud_host_id
+          @agent.cloud_host.monitors.each { |path, data|
+            master.actor_request(@agent.id, '/monitor/reload', path, data).request.wait
+          }
+        end
 
         StatusDB.barrier {
           @agent.update_status(Service::Agent::STATUS_RUNNING)
