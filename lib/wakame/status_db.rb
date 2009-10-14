@@ -162,7 +162,7 @@ module Wakame
             if hash[AttributeHelper::CLASS_TYPE_KEY]
               klass_const = Util.build_const(hash[AttributeHelper::CLASS_TYPE_KEY])
             else
-              klass_const = self.class
+              klass_const = self
             end
 
             # klass_const class is equal to self class or child of self class
