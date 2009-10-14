@@ -66,6 +66,10 @@ module Wakame
         vm_attr[:aws_instance_id]
       end
 
+      def cloud_host
+        self.cloud_host_id.nil? ? nil : CloudHost.find(self.cloud_host_id)
+      end
+
       # Tentative...
       def last_ping_at_time
         require 'time'
