@@ -100,8 +100,8 @@ module Wakame
     def fire_event(event_obj)
       raise ArgumentError unless event_obj.is_a?(Event::Base)
 
-      if Wakame.log.level == 'DEBUG' && !FIRE_EVENT_LOG_IGNORE_EVENTS.member?(event_obj.class)
-        Wakame.log.debug("Event #{event_obj.class} has been fired:" + (event_obj.log_message.nil? ? "" : event_obj.log_message) )
+      if Wakame.log.level == 0 && !FIRE_EVENT_LOG_IGNORE_EVENTS.member?(event_obj.class)
+        Wakame.log.debug("Event #{event_obj.class} has been fired:" + (event_obj.log_message.nil? ? '' : (' ' + event_obj.log_message)) )
       end
       tlist = @event_handlers[event_obj.class]
       return if tlist.nil?
