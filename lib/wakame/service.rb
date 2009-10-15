@@ -712,10 +712,10 @@ module Wakame
         all_offline = false
 
         onlines = self.each_instance.select { |i|
-          i.status == Service::STATUS_ONLINE
+          i.monitor_status == Service::STATUS_ONLINE
         }
         all_offline = self.each_instance.all? { |i|
-          i.status == Service::STATUS_OFFLINE
+          i.monitor_status == Service::STATUS_OFFLINE
         }
         #Wakame.log.debug "online instances: #{onlines.size}, assigned instances: #{self.instances.size}"
 
