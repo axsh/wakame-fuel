@@ -293,6 +293,7 @@ module Wakame
         c = ServiceCluster.find(cluster_id)
         c.services.keys.each { |svc_id|
           svc = ServiceInstance.find(svc_id)
+          next unless svc.cloud_host_id == self.id
           next if svc.status == Service::STATUS_INIT || svc.status == Service::STATUS_TERMINATE
 
           svc.resource.monitors.each { |path, data|
