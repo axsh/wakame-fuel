@@ -292,7 +292,7 @@ Instances (<%= cluster["services"].size %>):
   <%- cluster["services"].keys.each { |svc_id| 
     svc = body["services"][svc_id]
   -%>
-  <%= svc_id %> : <%= svc["resource_ref"]["class_type"] %> (<%= svc_status_msg(svc["status"]) %>)
+  <%= svc_id %> : <%= svc["resource_ref"]["class_type"] %> (<%= svc_status_msg(svc["status"]) %>:<%= monitor_status_msg(svc["monitor_status"]) %>)
     <%- if svc["agent_ref"] -%>
     On VM: <%= svc["agent_ref"]["id"] %>
     <%- end -%>
@@ -341,7 +341,15 @@ __E__
     Wakame::Service::STATUS_RELOADING=>'Reloading...',
     Wakame::Service::STATUS_MIGRATING=>'Migrating...',
     Wakame::Service::STATUS_ENTERING=>'Entering...',
-    Wakame::Service::STATUS_QUITTING=>'Quitting...'
+    Wakame::Service::STATUS_QUITTING=>'Quitting...',
+    Wakame::Service::STATUS_RUNNING=>'Running'
+  }
+
+  SVC_MONITOR_STATUS_MSG={
+    Wakame::Service::STATUS_OFFLINE=>'Offline',
+    Wakame::Service::STATUS_ONLINE=>'Online',
+    Wakame::Service::STATUS_UNKNOWN=>'Unknown',
+    Wakame::Service::STATUS_FAIL=>'Fail'
   }
 
   CLUSTER_STATUS_MSG={
@@ -375,11 +383,15 @@ __E__
 
   private
   def svc_status_msg(stat)
-    SVC_STATUS_MSG[stat]
+    SVC_STATUS_MSG[stat.to_i] || "Unknown Code: #{stat}"
+  end
+
+  def monitor_status_msg(stat)
+    SVC_MONITOR_STATUS_MSG[stat.to_i] || "Unknown Code: #{stat}"
   end
 
   def cluster_status_msg(stat)
-    CLUSTER_STATUS_MSG[stat]
+    CLUSTER_STATUS_MSG[stat.to_i] || "Unknown Code: #{stat}"
   end
 
   def map_ref_data(body)

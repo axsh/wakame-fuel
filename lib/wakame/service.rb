@@ -24,6 +24,7 @@ module Wakame
     STATUS_MIGRATING = 7
     STATUS_ENTERING = 8
     STATUS_QUITTING = 9
+    STATUS_RUNNING = 10
 
     # Data model for agent
     # Status life cycle:
@@ -851,19 +852,34 @@ module Wakame
       property :resource_id
       property :cluster_id
       property :status, {:read_only=>true, :default=>Service::STATUS_INIT}
-      property :monitor_status, {:default=>Service::STATUS_INIT}
-      property :status_changed_at, {:read_only=>true, :default=>proc{Time.now}}
+      property :monitor_status, {:default=>Service::STATUS_UNKNOWN}
+      property :status_changed_at, {:read_only=>true, :default=>Time.at(0)}
+      property :monitor_status_changed_at, {:read_only=>true, :default=>Time.at(0)}
 
-      def update_status(new_status, changed_at=Time.now, fail_message=nil)
+      def update_status(new_status)
         if @status != new_status
           prev_status = @status
           @status = new_status
-          @status_changed_at = changed_at
+          @status_changed_at = Time.now
+          
+          self.save
+        end
+      end
+
+      def update_monitor_status(new_status, changed_at=Time.now, fail_message=nil)
+        raise "Invalid status has been assigned: #{new_status}" unless [STATUS_UNKNOWN, STATUS_ONLINE, STATUS_OFFLINE, STATUS_FAIL].member?(new_status)
+
+        if @monitor_status != new_status
+
+          Wakame.log.debug("#{self.class}: #{self.id} update_monitor_status #{new_status}, #{@monitor_status}")
+          prev_status = @monitor_status
+          @monitor_status = new_status
+          @monitor_status_changed_at = changed_at
           
           self.save
 
           event = Event::ServiceStatusChanged.new(self.id, resource, new_status, prev_status)
-          event.time = @status_changed_at.dup
+          event.time = changed_at.dup
           ED.fire_event(event)
 
           tmp_event = nil

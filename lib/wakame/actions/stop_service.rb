@@ -28,7 +28,10 @@ module Wakame
         trigger_action(NotifyChildChanged.new(@svc))
         flush_subactions
 
-        @svc.resource.stop(@svc, self)
+        @svc.reload
+        if @svc.monitor_status == Wakame::Service::STATUS_ONLINE
+          @svc.resource.stop(@svc, self)
+        end
 
         if @do_terminate
           if @svc.resource.require_agent

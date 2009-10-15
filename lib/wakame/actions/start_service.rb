@@ -8,7 +8,7 @@ module Wakame
 
       def run
         # Skip to act when the service is having below status.
-        if @service_instance.status == Service::STATUS_STARTING || @service_instance.status == Service::STATUS_ONLINE
+        if @service_instance.status == Service::STATUS_RUNNING && @service_instance.monitor_status == Service::STATUS_ONLINE
           Wakame.log.info("Ignore to start the service as is being or already Online: #{@service_instance.resource.class}")
           return
         end
@@ -79,7 +79,15 @@ module Wakame
           flush_subactions
         end
 
-        @service_instance.resource.start(@service_instance, self)
+        @service_instance.reload
+        Wakame.log.debug("#{@service_instance.resource.class}: svc.monitor_status == Wakame::Service::STATUS_ONLINE => #{@service_instance.monitor_status == Wakame::Service::STATUS_ONLINE}")
+        if @service_instance.monitor_status != Wakame::Service::STATUS_ONLINE
+          @service_instance.resource.start(@service_instance, self)
+        end
+
+        StatusDB.barrier {
+          @service_instance.update_status(Service::STATUS_RUNNING)
+        }
         
         trigger_action(NotifyParentChanged.new(@service_instance))
         flush_subactions

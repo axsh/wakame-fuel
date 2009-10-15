@@ -16,7 +16,7 @@ module Wakame
         Wakame.log.debug("#{self.class}: Child nodes for #{@parent_svc.resource.class}: " + children.map{|c| c.resource.class }.uniq.inspect )
 
         children.each { |svc|
-          if svc.status != Service::STATUS_ONLINE
+          if svc.monitor_status != Service::STATUS_ONLINE
             next
           end
 

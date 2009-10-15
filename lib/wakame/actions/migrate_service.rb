@@ -23,8 +23,10 @@ module Wakame
           clone_service()
           flush_subactions
           trigger_action(StopService.new(@svc))
+          @svc.reload
         else
           trigger_action(StopService.new(@svc))
+          @svc.reload
           flush_subactions
           clone_service()
         end

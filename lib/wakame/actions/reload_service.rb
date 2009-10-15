@@ -7,7 +7,7 @@ module Wakame
 
       def run
         # Skip to act when the service is having below status.
-        if @svc.status != Service::STATUS_ONLINE
+        if @svc.monitor_status != Service::STATUS_ONLINE
           raise "Canceled as the service is being or already ONLINE: #{@svc.resource.class}"
         end
 
@@ -18,7 +18,7 @@ module Wakame
 	@svc.resource.reload(@svc, self)
 
         StatusDB.barrier {
-          @svc.update_status(Service::STATUS_ONLINE)
+          @svc.update_status(Service::STATUS_RUNNING)
         }
       end
 

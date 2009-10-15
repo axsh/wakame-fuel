@@ -136,7 +136,7 @@ module Wakame
             svc_inst = Service::ServiceInstance.find(response[:svc_id])
             if svc_inst
               response_time = Time.parse(response[:responded_at])
-              svc_inst.update_status(response[:new_status], response_time, response[:fail_message])
+              svc_inst.update_monitor_status(response[:new_status], response_time, response[:fail_message])
             end
           }
         when 'Wakame::Packets::ActorResponse'
