@@ -299,7 +299,7 @@ module Wakame
 
           svc.resource.monitors.each { |path, data|
 
-            data.each { |k, v|
+            data.dup.each { |k, v|
               if v.is_a? String
                 data[k] = instance_eval('"' + v.gsub(/%\{/, '#{') + '"')
               end
