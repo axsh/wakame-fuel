@@ -36,8 +36,6 @@ module Wakame
       @agent_kill_timeout = @agent_timeout * 2
       @gc_period = 20.to_f
 
-      Service::AgentPool.reset
-
       # GC event trigger for agent timer & status
       @agent_timeout_timer = EM::PeriodicTimer.new(@gc_period) {
         StatusDB.pass {
