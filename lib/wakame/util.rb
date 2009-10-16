@@ -209,9 +209,12 @@ module AttributeHelper
 
     def merged_attr_attributes
       hash = {}
+
+      deep_merge = proc {|key,v1,v2| Hash === v1 && Hash === v2 ? v1.merge(v2, &deep_merge) : v2}
+
       self.ancestors.reverse.each { |klass|
         next unless klass.include?(AttributeHelper)
-        hash.merge!(klass.attr_attributes.dup)
+        hash.merge!(klass.attr_attributes, &deep_merge)
       }
       hash
     end
@@ -223,9 +226,11 @@ module AttributeHelper
     # Update attr_attributes[name][:default] value.
     # This works for existing name key.
     def update_attribute(name, v)
-      attr_attr = get_attr_attribute(name)
+      attr_attr = get_attr_attribute(name.to_sym)
       raise "No such defined attribute: #{name}" if attr_attr.nil?
-      attr_attr[:default] = v
+      attr_attributes[name.to_sym] ||= {}
+      attr_attributes[name.to_sym].merge!({:default=>v})
+      name
     end
 
     def def_attribute(name, *args)
@@ -241,8 +246,9 @@ module AttributeHelper
                  end
                end
              end
-
       (attr_attributes[name.to_sym] ||= {}).merge!(attr)
+
+      attr = self.merged_attr_attributes
 
       if attr[:read_only]
         if self.respond_to? "#{name}=".to_sym
@@ -264,18 +270,16 @@ module AttributeHelper
       class_eval <<-__E__
       def #{name}
         if @#{name}.nil?
-          retrieve_attr_attribute { |a|
-            if a.has_key?(:#{name})
-              defval = a[:#{name}][:default]
-              case defval
-              when Proc
-                @#{name} = defval.call(self)
-              else
-                @#{name} = defval.dup rescue defval
-              end
-              break
-            end
-          }
+          a = self.class.get_attr_attribute(:#{name})
+          if a
+            defval = a[:default]
+            @#{name} = case defval
+                       when Proc
+                         defval.call(self)
+                       else
+                         defval.dup rescue defval
+                       end
+          end
         end
         @#{name}
       end

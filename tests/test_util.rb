@@ -12,7 +12,7 @@ class TestUtilClass < Test::Unit::TestCase
     include AttributeHelper
     
     def_attribute :a, 1
-    def_attribute :b, 2
+    def_attribute :b, {:default=>2, :persistent=>true}
     def_attribute :c, []
     attr :m
     attr_accessor :n, :o
@@ -24,6 +24,11 @@ class TestUtilClass < Test::Unit::TestCase
     def_attribute :d, 30
     def_attribute :e, 'aaa'
     def_attribute :f
+  end
+
+  class C < B
+    update_attribute :b, {:a=>1, :b=>1}
+    update_attribute :d, {:a=>1, :b=>1}
   end
 
   def test_attribute_helper1
@@ -44,6 +49,12 @@ class TestUtilClass < Test::Unit::TestCase
     assert_equal( {:type=>'TestUtilClass::B', :a=>1, :b=>2, :c=>[], :d=>30, :e=>'aaa', :f=>nil, :m=>nil, :n=>nil, :o=>nil, :p=>nil}, b.dump_attrs)
   end
 
+
+  def test_attribute_helper2
+    c = C.new
+    assert_equal({:default=>{:a=>1, :b=>1}, :persistent=>true}, C.get_attr_attribute(:b))
+    assert_equal({:default=>{:a=>1, :b=>1}}, C.get_attr_attribute(:d))
+  end
 
 
   H={23=>1, 38=>3, 2837=>1, 3727=>4, 937=>1, 184=>5, 328=>2, 8939=>1}
