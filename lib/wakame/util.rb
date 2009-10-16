@@ -259,7 +259,6 @@ module AttributeHelper
       else
         class_eval <<-__E__
         def #{name}=(v)
-          self.#{name}
           @#{name}=v
         end
 
