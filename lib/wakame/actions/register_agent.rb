@@ -14,6 +14,7 @@ module Wakame
         
         # Send monitoring conf
         if @agent.cloud_host_id
+          Wakame.log.debug("#{self.class}: #{@agent.id} is to be set the monitor conf: #{@agent.cloud_host.monitors.inspect}")
           @agent.cloud_host.monitors.each { |path, data|
             master.actor_request(@agent.id, '/monitor/reload', path, data).request.wait
           }
