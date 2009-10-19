@@ -11,6 +11,7 @@ require 'test/unit'
 
 require 'wakame'
 require 'wakame/initializer'
+require 'wakame/util'
 
 require 'ext/eventmachine'
 
