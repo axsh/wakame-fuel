@@ -526,7 +526,12 @@ module Wakame
           self.save
         end
 
-        CloudHost.delete(cloud_host_id) rescue nil
+        begin
+          ch = CloudHost.find(cloud_host_id)
+          ch.unmap_agent
+          ch.delete
+        rescue => e
+        end
       end
 
       def find_service(svc_id)
