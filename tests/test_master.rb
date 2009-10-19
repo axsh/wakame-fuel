@@ -6,10 +6,8 @@ $:.unshift(File.dirname(__FILE__))
 require 'setup_master.rb'
 
 require 'wakame'
-#require 'wakame/master'
 require 'wakame/service'
 require 'wakame/queue_declare'
-#require 'wakame/packets'
 
 class TestMaster < Test::Unit::TestCase
 
