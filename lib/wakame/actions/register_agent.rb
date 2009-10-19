@@ -22,6 +22,7 @@ module Wakame
 
         StatusDB.barrier {
           @agent.update_status(Service::Agent::STATUS_RUNNING)
+          @agent.update_monitor_status(Service::Agent::STATUS_ONLINE)
           Models::AgentPool.instance.register(@agent)
         }
         Wakame.log.debug("#{self.class}: run() end: #{@agent.id}")

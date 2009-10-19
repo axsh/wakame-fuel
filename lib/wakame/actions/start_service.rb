@@ -56,7 +56,7 @@ module Wakame
             raise "Could not find the agent to be assigned to : #{@service_instance.resource.class}" unless @service_instance.cloud_host.mapped?
           end
           
-          raise "The assigned agent \"#{@service_instance.cloud_host.agent_id}\" for the service instance #{@service_instance.id} is not online."  unless @service_instance.cloud_host.status == Service::Agent::STATUS_ONLINE
+          raise "The assigned agent \"#{@service_instance.cloud_host.agent_id}\" for the service instance #{@service_instance.id} is not online."  unless @service_instance.cloud_host.agent.monitor_status == Service::Agent::STATUS_ONLINE
           
           StatusDB.barrier {
             @service_instance.update_status(Service::STATUS_STARTING)

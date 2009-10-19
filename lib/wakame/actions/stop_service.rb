@@ -9,13 +9,15 @@ module Wakame
 
 
       def run
+        acquire_lock(@svc.resource.class.to_s)
+        @svc.reload
+
         # Skip to act when the service is having below status.
-        if @svc.status == Service::STATUS_STOPPING || @svc.status == Service::STATUS_OFFLINE
+        unless @svc.monitor_status == Service::STATUS_ONLINE || [Service::STATUS_RUNNING, Service::STATUS_FAIL].member?(@svc.status)
           Wakame.log.info("Ignore to stop the service as is being or already OFFLINE: #{@svc.resource.class}")
           return
         end
 
-        acquire_lock(@svc.resource.class.to_s)
 
         if @svc.resource.require_agent && !@svc.cloud_host.mapped?
           raise "Agent is not bound on this service : #{@svc}"

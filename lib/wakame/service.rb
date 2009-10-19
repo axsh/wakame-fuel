@@ -81,6 +81,13 @@ module Wakame
         if @status != new_status
           @status = new_status
           self.save
+        end
+      end
+
+      def update_monitor_status(new_status)
+        if @monitor_status != new_status
+          @monitor_status = new_status
+          self.save
 
           ED.fire_event(Event::AgentStatusChanged.new(self))
           # Send status specific event

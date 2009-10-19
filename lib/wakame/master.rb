@@ -47,7 +47,7 @@ module Wakame
             diff_time = Time.now - agent.last_ping_at_time
             #Wakame.log.debug "AgentMonitor GC : #{agent_id}: #{diff_time}"
             if diff_time > @agent_timeout.to_f
-              agent.update_status(Service::Agent::STATUS_TIMEOUT)
+              agent.update_monitor_status(Service::Agent::STATUS_TIMEOUT)
             end
             
             if diff_time > @agent_kill_timeout.to_f
@@ -96,7 +96,7 @@ module Wakame
           agent.renew_reported_services(ping[:services])
           agent.save
 
-          agent.update_status(Service::Agent::STATUS_ONLINE)
+          agent.update_monitor_status(Service::Agent::STATUS_ONLINE)
         }
         
         StatusDB.pass { 
