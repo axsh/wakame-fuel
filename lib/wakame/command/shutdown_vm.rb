@@ -4,17 +4,43 @@ class Wakame::Command::ShutdownVm
 
   command_name 'shutdown_vm'
 
-  def run(rule)
-    registered_agents = rule.agent_monitor.registered_agents[@options["agent_id"]]
-    if !registered_agents.services.nil?
-      if !@options["force"].nil?
-        registered_agents.services.each{|id, svc_inst|
-	  rule.trigger_action(Wakame::Actions::StopService.new(svc_inst))
-	}
+  def run
+    agent = Wakame::Models::AgentPool.instance.find_agent(@options['agent_id'])
+    if agent.cloud_host_id.nil?
+      trigger_action(Wakame::Actions::ShutdownVM.new(agent))
+    else
+      cloud_host = agent.cloud_host
+      # Check if the agent has the running service(s).
+      live_svcs = cloud_host.assigned_services.find_all {|svc_id|
+        Wakame::Service::ServiceInstance.find(svc_id).monitor_status == Wakame::Service::STATUS_ONLINE
+      }
+      if live_svcs.empty?
+        cloud_host.unmap_agent
+        trigger_action(Wakame::Actions::ShutdownVM.new(agent))
       else
-        raise "Service instances Launched"
+        raise "Service(s) are still running on #{agent.id}" unless @options['force']
+        
+        trigger_action { |action|
+          live_svcs.each {|svc_id|
+            svc = Service::ServiceInstance.find(svc_id)
+            action.trigger_action(Wakame::Actions::StopService.new(svc))
+          }
+          action.flush_subactions
+
+          StatusDB.barrier {
+            cluster = Wakame::Service::ServiceCluster.find(cloud_host.cluster_id)
+            live_svcs.each {|svc_id|
+              cluster.destroy(svc_id)
+            }
+            
+            cloud_host.unmap_agent
+            cluster.remove_cloud_host(cloud_host.id)
+          }
+
+          action.trigger_action(Wakame::Actions::ShutdownVM.new(agent))
+        }
       end
     end
-    rule.trigger_action(Wakame::Actions::ShutdownVM.new(registered_agents))
+      
   end
 end
