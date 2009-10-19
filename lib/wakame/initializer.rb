@@ -41,7 +41,6 @@ module Wakame
     end
     
     def process_agent
-      process
       require 'wakame/agent'
       load_actors
       load_monitors

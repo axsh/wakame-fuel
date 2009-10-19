@@ -2,7 +2,7 @@
 
 require File.dirname(__FILE__) + '/../config/boot'
 
-Wakame::Bootstrap.boot_agent!
+Wakame::Bootstrap.boot!
 
 require 'wakame/runner/agent'
 

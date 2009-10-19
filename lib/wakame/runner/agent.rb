@@ -66,6 +66,8 @@ module Wakame
           daemonize(@options[:log_file])
         end
 
+        Initializer.run(:process_agent)
+
         EM.epoll if Wakame.config.eventmachine_use_epoll
         EM.run {
           Wakame::Agent.start(opts)
