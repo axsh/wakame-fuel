@@ -317,7 +317,7 @@ Agents (<%= agent_pool["group_active"].size %>):
   <%- agent_pool["group_active"].each { |agent_id|
   a = body["agents"][agent_id]
   -%>
-  <%= a["id"] %> : <%= a["vm_attr"]["private_dns_name"] %>, <%= a["vm_attr"]["dns_name"] %>, <%= (Time.now - Time.parse(a["last_ping_at"])).to_i %> sec(s), placement=<%= a["vm_attr"]["aws_availability_zone"] %> (<%= svc_status_msg(a["status"]) %>)
+  <%= a["id"] %> : <%= a["vm_attr"]["private_dns_name"] %>, <%= a["vm_attr"]["dns_name"] %>, <%= (Time.now - Time.parse(a["last_ping_at"])).to_i %> sec(s), placement=<%= a["vm_attr"]["aws_availability_zone"] %> (<%= agent_status_msg(a["status"]) %>)
    <%- if a["reported_services"].size > 0 && !cluster["services"].empty? -%>
     Services (<%= a["reported_services"].size %>): <%= a["reported_services"].keys.collect{ |svc_id| body["services"][svc_id]["resource_ref"]["class_type"] }.join(', ') %>
    <%- end -%>
@@ -350,6 +350,17 @@ __E__
     Wakame::Service::STATUS_ONLINE=>'Online',
     Wakame::Service::STATUS_UNKNOWN=>'Unknown',
     Wakame::Service::STATUS_FAIL=>'Fail'
+  }
+
+  AGENT_STATUS_MSG={
+    Wakame::Service::Agent::STATUS_END     => 'Terminated',
+    Wakame::Service::Agent::STATUS_INIT    => 'Initialized',
+    Wakame::Service::Agent::STATUS_OFFLINE => 'Offline',
+    Wakame::Service::Agent::STATUS_ONLINE  => 'Online',
+    Wakame::Service::Agent::STATUS_UNKNOWN => 'Unknown',
+    Wakame::Service::Agent::STATUS_TIMEOUT => 'Timedout',
+    Wakame::Service::Agent::STATUS_RUNNING => 'Running',
+    Wakame::Service::Agent::STATUS_REGISTERRING => 'Registerring...'
   }
 
   CLUSTER_STATUS_MSG={
@@ -388,6 +399,10 @@ __E__
 
   def monitor_status_msg(stat)
     SVC_MONITOR_STATUS_MSG[stat.to_i] || "Unknown Code: #{stat}"
+  end
+
+  def agent_status_msg(stat)
+    AGENT_STATUS_MSG[stat.to_i] || "Unknown Code: #{stat}"
   end
 
   def cluster_status_msg(stat)
