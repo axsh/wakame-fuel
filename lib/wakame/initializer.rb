@@ -32,7 +32,6 @@ module Wakame
     end
 
     def process_master
-      process
       require 'wakame/master'
       setup_database
       load_resources

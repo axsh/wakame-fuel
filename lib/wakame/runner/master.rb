@@ -66,7 +66,8 @@ module Wakame
         end
 
         change_privilege(@options[:uid]) if @options[:uid]
-        
+
+        Initializer.run(:process_master)
 
         EM.epoll if Wakame.config.eventmachine_use_epoll
         EM.run {
