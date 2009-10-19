@@ -7,26 +7,28 @@ module Wakame
       end
 
       def run
+        acquire_lock(@service_instance.resource.class.to_s)
+        @service_instance.reload
+
         # Skip to act when the service is having below status.
         if @service_instance.status == Service::STATUS_RUNNING && @service_instance.monitor_status == Service::STATUS_ONLINE
           Wakame.log.info("Ignore to start the service as is being or already Online: #{@service_instance.resource.class}")
           return
         end
 
-        acquire_lock(@service_instance.resource.class.to_s)
-
         if @service_instance.resource.require_agent
           raise "The service is not bound cloud host object: #{@service_instance.id}" if @service_instance.cloud_host_id.nil?
 
           unless @service_instance.cloud_host.mapped?
-            acquire_lock(Service::AgentPool.class.to_s)
+            acquire_lock(Models::AgentPool.class.to_s)
             
             # Try to arrange agent from existing agent pool.
             StatusDB.barrier {
-              next if Service::AgentPool.instance.group_active.empty?
+              next if Models::AgentPool.instance.group_active.empty?
               agent2host = cluster.agents.invert
               
-              Service::AgentPool.instance.group_active.keys.each { |agent_id|
+              #Service::AgentPool.instance.group_active.keys.each { |agent_id|
+              Models::AgentPool.instance.group_active.each { |agent_id|
                 agent = Service::Agent.find(agent_id)
                 if !agent.has_resource_type?(@service_instance.resource) &&
                     agent2host[agent_id].nil? && # This agent is not mapped to any cloud hosts.

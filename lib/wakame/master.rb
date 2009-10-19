@@ -40,8 +40,8 @@ module Wakame
       @agent_timeout_timer = EM::PeriodicTimer.new(@gc_period) {
         StatusDB.pass {
           #Wakame.log.debug("Started agent GC : agents.size=#{@registered_agents.size}")
-          [self.agent_pool.group_active.keys, self.agent_pool.group_observed.keys].flatten.uniq.each { |agent_id|
-            agent = Service::Agent.find(agent_id)
+          self.agent_pool.dataset.all.each { |row|
+            agent = Service::Agent.find(row[:agent_id])
             #next if agent.status == Service::Agent::STATUS_OFFLINE
             
             diff_time = Time.now - agent.last_ping_at_time
@@ -66,7 +66,7 @@ module Wakame
         StatusDB.pass {
           agent_id = data[:agent_id]
           
-          agent = agent_pool.create_or_find(agent_id)
+          agent = agent_pool.agent_find_or_create(agent_id)
           
           case data[:class_type]
           when 'Wakame::Packets::Register'
@@ -158,7 +158,7 @@ module Wakame
     end
 
     def agent_pool
-      Service::AgentPool.instance
+      Models::AgentPool.instance
     end
 
    end
@@ -193,7 +193,7 @@ module Wakame
            cluster.name = name
          end
 
-         Service::AgentPool.reset
+         Models::AgentPool.reset
          cluster.reset
 
          blk.call(cluster)
@@ -287,7 +287,7 @@ module Wakame
            }
 
 
-           agent_id = Service::AgentPool.instance.group_active.keys.first
+           agent_id = Models::AgentPool.instance.group_active.first
            if agent_id.nil?
              # Set a single shot event handler to set the template values up from the first connected agent.
              EventDispatcher.subscribe_once(Event::AgentMonitored) { |event|

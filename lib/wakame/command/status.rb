@@ -14,9 +14,12 @@ class Wakame::Command::Status
         :cloud_hosts=>{}
       }
 
-      res[:agent_pool] = AgentPool.instance.dump_attrs
-      AgentPool.instance.group_active.keys.each { |id|
-        res[:agents][id] = Agent.find(id).dump_attrs
+      res[:agent_pool] = {
+        :group_active => Wakame::Models::AgentPool.instance.group_active,
+        :group_observed => Wakame::Models::AgentPool.instance.group_observed
+      }
+      Wakame::Models::AgentPool.instance.dataset.all.each { |row|
+        res[:agents][row[:agent_id]] = Agent.find(row[:agent_id]).dump_attrs
       }
 
       cluster_id = master.cluster_manager.clusters.first

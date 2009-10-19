@@ -14,9 +14,9 @@ module Wakame
           }
           flush_subactions
         }
-
-        agent_monitor.agent_pool.group_active.keys.each { |agent_id|
-          trigger_action(ShutdownVM.new(Service::Agent.find(agent_id)))
+        cluster.cloud_hosts.keys.each { |cloud_host_id|
+          cloud_host = Service::CloudHost.find(cloud_host_id)
+          trigger_action(ShutdownVM.new(cloud_host.agent))
         }
       end
     end

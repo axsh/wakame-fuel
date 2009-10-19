@@ -22,7 +22,7 @@ module Wakame
 
         StatusDB.barrier {
           @agent.update_status(Service::Agent::STATUS_RUNNING)
-          Service::AgentPool.instance.register(@agent)
+          Models::AgentPool.instance.register(@agent)
         }
         Wakame.log.debug("#{self.class}: run() end: #{@agent.id}")
       end
@@ -30,7 +30,7 @@ module Wakame
       def on_fail
         StatusDB.barrier {
           @agent.update_status(Service::Agent::STATUS_FAIL)
-          Service::AgentPool.instance.unregister(@agent)
+          Models::AgentPool.instance.unregister(@agent)
         }
       end
 

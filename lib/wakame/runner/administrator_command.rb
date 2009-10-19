@@ -314,7 +314,7 @@ Cluster:
 <%- if agent_pool && agent_pool["group_active"].size > 0 -%>
 
 Agents (<%= agent_pool["group_active"].size %>):
-  <%- agent_pool["group_active"].keys.each { |agent_id|
+  <%- agent_pool["group_active"].each { |agent_id|
   a = body["agents"][agent_id]
   -%>
   <%= a["id"] %> : <%= a["vm_attr"]["private_dns_name"] %>, <%= a["vm_attr"]["dns_name"] %>, <%= (Time.now - Time.parse(a["last_ping_at"])).to_i %> sec(s), placement=<%= a["vm_attr"]["aws_availability_zone"] %> (<%= svc_status_msg(a["status"]) %>)
