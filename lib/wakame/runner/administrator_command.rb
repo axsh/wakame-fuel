@@ -319,7 +319,9 @@ Agents (<%= agent_pool["group_active"].size %>):
   -%>
   <%= a["id"] %> : <%= a["vm_attr"]["private_dns_name"] %>, <%= a["vm_attr"]["dns_name"] %>, <%= (Time.now - Time.parse(a["last_ping_at"])).to_i %> sec(s), placement=<%= a["vm_attr"]["aws_availability_zone"] %> (<%= agent_status_msg(a["status"]) %>)
    <%- if a["reported_services"].size > 0 && !cluster["services"].empty? -%>
-    Services (<%= a["reported_services"].size %>): <%= a["reported_services"].keys.collect{ |svc_id| body["services"][svc_id]["resource_ref"]["class_type"] }.join(', ') %>
+    Services (<%= a["reported_services"].size %>): <%= a["reported_services"].keys.collect{ |svc_id|
+                body['services'][svc_id].nil? ? 'Unknown:' + svc_id[0,5] + '...' :  body["services"][svc_id]["resource_ref"]["class_type"]
+              }.join(', ') %>
    <%- end -%>
   <%- } -%>
 <%- else -%>
