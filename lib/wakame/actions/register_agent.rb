@@ -31,7 +31,6 @@ module Wakame
       def on_fail
         StatusDB.barrier {
           @agent.update_status(Service::Agent::STATUS_FAIL)
-          Models::AgentPool.instance.unregister(@agent)
         }
       end
 
