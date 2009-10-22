@@ -113,7 +113,7 @@ module Wakame
           m = @model_class.new
           m.id = id
           m.class_type = hash[AttributeHelper::CLASS_TYPE_KEY]
-       end 
+        end 
         m.dump = hash.inspect
         m.save
       end
@@ -123,7 +123,6 @@ module Wakame
       end
 
       def clear_store
-        setup_store
       end
       
     end
