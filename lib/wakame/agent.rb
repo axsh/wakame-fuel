@@ -43,7 +43,7 @@ module Wakame
         attrs = {}
       end
       publish_to('registry', Packets::Register.new(self, Wakame.config.root_path.to_s, attrs).marshal)
-      Wakame.log.info("Started agent process : WAKAME_ROOT=#{Wakame.config.root_path} WAKAME_ENV=#{Wakame.config.environment}, attrs=#{attrs.inspect}")
+      Wakame.log.info("Started agent process : AMQP Server=#{amqp_server_uri.to_s} WAKAME_ROOT=#{Wakame.config.root_path} WAKAME_ENV=#{Wakame.config.environment}, attrs=#{attrs.inspect}")
     end
 
     def cleanup
