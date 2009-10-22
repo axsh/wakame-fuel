@@ -83,7 +83,7 @@ module Wakame
           row[:group_type]=GROUP_ACTIVE
           row.save
           
-          Wakame.log.debug("#{self.class}: Register agent to active group: #{agent.id}")
+          Wakame.log.debug("#{self}: Register agent to active group: #{agent.id}")
           ED.fire_event(Event::AgentMonitored.new(agent))
         elsif row[:group_type] == GROUP_ACTIVE
         end
@@ -95,7 +95,7 @@ module Wakame
         if row.nil?
         else
           row.delete
-          Wakame.log.debug("#{self.class}: Unregister agent: #{agent.id}")
+          Wakame.log.debug("#{self}: Unregister agent: #{agent.id}")
           ED.fire_event(Event::AgentUnMonitored.new(agent))
         end
       end
