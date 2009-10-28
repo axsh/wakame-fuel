@@ -305,6 +305,10 @@ Cloud Host (<%= cluster["cloud_hosts"].size %>):
     cloud_host = body["cloud_hosts"][host_id]
   -%>
   <%= host_id %> : <% if cloud_host["agent_id"] %>bind to <%= cloud_host["agent_id"] %><% end %>
+    <%- assigned_svcs = body['services'].values.find_all{|data| data['cloud_host_id'] == host_id } -%>
+    <%- if assigned_svcs.size > 0 -%>
+    Assigned: <%= body['services'].values.find_all{|data| data['cloud_host_id'] == host_id }.map{|data| data['resource_ref']['class_type'] }.join(', ')  %>
+    <%- end -%>
   <%- } -%>
 <%- end -%>
 <%- else # if cluster -%>
