@@ -22,12 +22,12 @@ class Wakame::Command::ShutdownVm
         
         trigger_action { |action|
           live_svcs.each {|svc_id|
-            svc = Service::ServiceInstance.find(svc_id)
+            svc = Wakame::Service::ServiceInstance.find(svc_id)
             action.trigger_action(Wakame::Actions::StopService.new(svc))
           }
           action.flush_subactions
 
-          StatusDB.barrier {
+          Wakame::StatusDB.barrier {
             cluster = Wakame::Service::ServiceCluster.find(cloud_host.cluster_id)
             live_svcs.each {|svc_id|
               cluster.destroy(svc_id)
