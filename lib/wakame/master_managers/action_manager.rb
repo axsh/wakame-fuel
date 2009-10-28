@@ -71,8 +71,12 @@ module Wakame
         end
       end
 
-      def trigger_action(action)
-        raise ArguemntError unless action.is_a?(Action)
+      def trigger_action(action=nil, &blk)
+        if blk 
+          action = Action::ProcAction.new(blk)
+        end
+
+        raise ArgumentError unless action.is_a?(Action)
         context = create_job_context(action)
         action.action_manager = self
         action.job_id = context[:job_id]
