@@ -27,8 +27,10 @@ class Wakame::Command::PropagateService
       raise "The number must be between 1 and #{refsvc.resource.max_instances - service_cluster.instance_count(refsvc.resource)} (max limit: #{refsvc.resource.max_instances})"
     end
 
-    num.times {
-      trigger_action(Wakame::Actions::PropagateService.new(refsvc, cloud_host_id))
+    trigger_action { |action|
+      num.times {
+        action.trigger_action(Wakame::Actions::PropagateService.new(refsvc, cloud_host_id))
+      }
     }
   end
 end
