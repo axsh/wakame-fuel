@@ -10,6 +10,7 @@ module Wakame
 
       def run
         acquire_lock(@svc.resource.class.to_s)
+        @svc.reload
 
         if @svc.status == Service::STATUS_MIGRATING 
           Wakame.log.info("Ignore to migrate the service as is already MIGRATING: #{@svc.resource.class}")
