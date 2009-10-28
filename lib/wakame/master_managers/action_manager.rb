@@ -87,7 +87,7 @@ module Wakame
 
 
       def run_action(action)
-        raise ArguemntError unless action.is_a?(Action)
+        raise ArgumentError unless action.is_a?(Action)
         job_context = @active_jobs[action.job_id]
         raise "The job session is killed.: job_id=#{action.job_id}" if job_context.nil?
 
@@ -184,7 +184,7 @@ module Wakame
 
       private
       def create_job_context(root_action)
-        raise ArguemntError unless root_action.is_a?(Action)
+        raise ArgumentError unless root_action.is_a?(Action)
         root_action.job_id = job_id = Wakame.gen_id
 
         @active_jobs[job_id] = {
