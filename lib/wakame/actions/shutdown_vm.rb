@@ -30,6 +30,9 @@ module Wakame
           }
         }
 
+        StatusDB.barrier {
+          @agent.update_status(Service::Agent::STATUS_TERMINATING)
+        }
         shutdown_ec2_instance
 
       end

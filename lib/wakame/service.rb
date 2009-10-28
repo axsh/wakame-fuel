@@ -38,6 +38,7 @@ module Wakame
       STATUS_TIMEOUT = 3
       STATUS_RUNNING = 4
       STATUS_REGISTERRING = 5
+      STATUS_TERMINATING = 6
       
       property :last_ping_at
       property :vm_attr
@@ -116,6 +117,11 @@ module Wakame
       end
 
       def terminate
+        if mapped?
+          raise "#{self.class}[#{self.id}]: CloudHost is assigned live services." if cloud_host.assigned_services.all? {|svc_id| ServiceInstance.find(svc_id).status == Service::STATUS_END }
+          CloudHost.delete(cloud_host_id)
+        end
+        self.delete
       end
 
       def update_vm_attr

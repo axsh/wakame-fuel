@@ -362,7 +362,8 @@ __E__
     Wakame::Service::Agent::STATUS_UNKNOWN => 'Unknown',
     Wakame::Service::Agent::STATUS_TIMEOUT => 'Timedout',
     Wakame::Service::Agent::STATUS_RUNNING => 'Running',
-    Wakame::Service::Agent::STATUS_REGISTERRING => 'Registerring...'
+    Wakame::Service::Agent::STATUS_REGISTERRING => 'Registerring...',
+    Wakame::Service::Agent::STATUS_TERMINATING  => 'Terminating...'
   }
 
   CLUSTER_STATUS_MSG={

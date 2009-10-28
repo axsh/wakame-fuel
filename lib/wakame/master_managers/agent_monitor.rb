@@ -135,6 +135,10 @@ module Wakame
           end
         }
 
+        EventDispatcher.subscribe(Event::AgentUnMonitored) { |event|
+          agent = Service::Agent.find(event.agent.id)
+          agent.terminate
+        }
       end
 
       def terminate
