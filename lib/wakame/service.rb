@@ -142,14 +142,14 @@ module Wakame
         
       def map_agent(agent)
         raise ArgumentError unless agent.is_a?(Agent)
-        raise "Ensure to call unmap_agent() prior to mapping new agent" if self.mapped?
-        raise "The agent \"#{agent.id}\" is already mapped to the cloud host: #{agent.cloud_host_id}" if agent.mapped?
+        raise "Ensure to call unmap_agent() prior to mapping new agent: #{self.agent_id}" if self.mapped?
 
         self.agent_id = agent.id
         agent.cloud_host_id = self.id
 
         self.save
         agent.save
+        ED.fire_event(Event::AgentMappedCloudHost.new(self.id, agent.id))
       end
 
       def unmap_agent()
@@ -162,6 +162,7 @@ module Wakame
 
           self.agent_id = nil
           self.save
+          ED.fire_event(Event::AgentUnmappedCloudHost.new(self.id, agent.id))
         end
       end
 
@@ -430,6 +431,8 @@ module Wakame
 
         svc.delete
         self.save
+
+        ED.fire_event(Event::ServiceDestroied.new(svc_id))
       end
       thread_immutable_methods :destroy
 
@@ -463,6 +466,7 @@ module Wakame
         svc.save
         self.save
 
+        ED.fire_event(Event::ServicePropagated.new(svc.id))
         svc
       end
       thread_immutable_methods :propagate_resource
@@ -500,6 +504,7 @@ module Wakame
         svc.save
         self.save
 
+        ED.fire_event(Event::ServicePropagated.new(svc.id))
         svc
       end
       thread_immutable_methods :propagate_service
@@ -762,6 +767,8 @@ module Wakame
           @status_changed_at = Time.now
           
           self.save
+
+          ED.fire_event(Event::ServiceStatusChanged.new(self.id, new_status, prev_status))
         end
       end
 
@@ -777,19 +784,19 @@ module Wakame
           
           self.save
 
-          event = Event::ServiceStatusChanged.new(self.id, resource, new_status, prev_status)
+          event = Event::ServiceMonitorStatusChanged.new(self.id, new_status, prev_status)
           event.time = changed_at.dup
           ED.fire_event(event)
 
           tmp_event = nil
           if prev_status != Service::STATUS_ONLINE && new_status == Service::STATUS_ONLINE
-            tmp_event = Event::ServiceOnline.new(self.id, self.resource)
+            tmp_event = Event::ServiceOnline.new(self.id)
             tmp_event.time = @status_changed_at.dup
           elsif prev_status != Service::STATUS_OFFLINE && new_status == Service::STATUS_OFFLINE
-            tmp_event = Event::ServiceOffline.new(self.id, self.resource)
+            tmp_event = Event::ServiceOffline.new(self.id)
             tmp_event.time = @status_changed_at.dup
           elsif prev_status != Service::STATUS_FAIL && new_status == Service::STATUS_FAIL
-            tmp_event = Event::ServiceFailed.new(self.id, self.resource, fail_message)
+            tmp_event = Event::ServiceFailed.new(self.id, fail_message)
             tmp_event.time = @status_changed_at.dup
           end
           ED.fire_event(tmp_event) if tmp_event
@@ -812,7 +819,7 @@ module Wakame
         self.cloud_host_id = new_cloud_host.id
         self.save
         
-        ED.fire_event(Event::ServiceBoundHost.new(self, new_cloud_host))
+        ED.fire_event(Event::ServiceBoundCloudHost.new(self.id, new_cloud_host.id))
       end
       thread_immutable_methods :bind_cloud_host
       
@@ -824,7 +831,7 @@ module Wakame
         
         self.save
 
-        ED.fire_event(Event::ServiceUnboundHost.new(self, old_item))
+        ED.fire_event(Event::ServiceUnboundCloudHost.new(self.id, old_item.id))
         old_item
       end
       thread_immutable_methods :unbind_cloud_host

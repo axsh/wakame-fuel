@@ -53,18 +53,33 @@ module Wakame
     end
 
     class ServiceStatus < Base
-      attr_reader :instance_id, :property
-      def initialize(instance_id, property)
+      attr_reader :instance_id
+      def initialize(instance_id)
         super()
         @instance_id = instance_id
-        @property = property
       end
     end
 
+    # Event class for the change of ServiceInstance#status
     class ServiceStatusChanged < ServiceStatus
       attr_reader :status, :previous_status
-      def initialize(instance_id, property, new_status, prev_status)
-        super(instance_id, property)
+      def initialize(instance_id, new_status, prev_status)
+        super(instance_id)
+        @status = new_status
+        @previous_status = prev_status
+      end
+
+      def log_message
+        "#{instance_id}, #{@previous_status} -> #{@status}"
+      end
+    end
+
+
+    # Event class for the change of ServiceInstance#monitor_status
+    class ServiceMonitorStatusChanged < ServiceStatus
+      attr_reader :status, :previous_status
+      def initialize(instance_id, new_status, prev_status)
+        super(instance_id)
         @status = new_status
         @previous_status = prev_status
       end
@@ -80,9 +95,31 @@ module Wakame
     end
     class ServiceFailed < ServiceStatus
       attr_reader :message
-      def initialize(instance_id, property, message)
-        super(instance_id, property)
+      def initialize(instance_id, message)
+        super(instance_id)
         @message = message
+      end
+    end
+
+    class ServicePropagated < ServiceStatus
+    end
+    class ServiceDestroied < ServiceStatus
+    end
+
+    class AgentMappedCloudHost < Base
+      attr_reader :agent_id, :cloud_host_id
+      def initialize(cloud_host_id, agent_id)
+        super()
+        @agent_id = agent_id
+        @cloud_host_id = cloud_host_id
+      end
+    end
+    class AgentUnmappedCloudHost < Base
+      attr_reader :agent_id, :cloud_host_id
+      def initialize(cloud_host_id, agent_id)
+        super()
+        @agent_id = agent_id
+        @cloud_host_id = cloud_host_id
       end
     end
 
@@ -124,20 +161,20 @@ module Wakame
       end
     end
 
-    class ServiceUnboundHost < Base
-      attr_reader :service, :host
-      def initialize(service, host)
+    class ServiceUnboundCloudHost < Base
+      attr_reader :svc_id, :cloud_host_id
+      def initialize(svc_id, cloud_host_id)
         super()
-        @service = service
-        @host = host
+        @svc_id = svc_id
+        @cloud_host_id = cloud_host_id
       end
     end
-    class ServiceBoundHost < Base
-      attr_reader :service, :host
-      def initialize(service, host)
+    class ServiceBoundCloudHost < Base
+      attr_reader :svc_id, :cloud_host_id
+      def initialize(svc_id, cloud_host_id)
         super()
-        @service = service
-        @host = host
+        @svc_id = svc_id
+        @cloud_host_id = cloud_host_id
       end
     end
 
@@ -156,22 +193,6 @@ module Wakame
         super()
         @service = svc_inst
         @service_cluster = cluster
-      end
-    end
-
-    class ServiceDestroied < Base
-      attr_reader :service
-      def initialize(svc_inst)
-        super()
-        @service = svc_inst
-      end
-    end
-
-    class ServicePropagated < Base
-      attr_reader :service
-      def initialize(svc_inst)
-        super()
-        @service = svc_inst
       end
     end
 
