@@ -101,6 +101,16 @@ module Wakame
                 svc_inst.save
               else
                 Wakame.log.error("#{self.class}: Unknown service ID: #{response[:svc_id]}")
+                agent = Service::Agent.find(response[:agent_id])
+                if agent.mapped?
+                  agent.cloud_host.live_monitors.each { |path, conf|
+                    Wakame.log.debug("#{self.class}: Refreshing monitoring setting on #{agent.id}: #{path} => #{conf.inspect}")
+                    Master.instance.actor_request(agent.id, '/monitor/reload', path, conf).request
+                  }
+                else
+                  Wakame.log.debug("#{self.class}: Resetting monitoring setting on #{agent.id}")
+                  Master.instance.actor_request(agent.id, '/monitor/reload', '/service', {}).request
+                end
               end
             }
           when 'Wakame::Packets::ServiceStatusChanged'

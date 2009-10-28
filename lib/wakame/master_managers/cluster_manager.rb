@@ -62,7 +62,28 @@ module Wakame
            }
          }
        }
-
+      
+       @check_event_tickets << EventDispatcher.subscribe(Event::ServiceStatusChanged) { |event|
+         svc = Service::ServiceInstance.find(event.instance_id)
+         case svc.status
+         when Service::STATUS_ENTERING
+           EM.defer {
+             # Refresh the monitoring conf on the agent
+             svc.cloud_host.live_monitors.each { |path, conf|
+               Wakame.log.debug("#{self.class}: Refreshing monitoring setting on #{svc.cloud_host.agent_id} (on enter): #{path} => #{conf.inspect}")
+               Master.instance.actor_request(svc.cloud_host.agent_id, '/monitor/reload', path, conf).request.wait
+             }
+           }
+         when Service::STATUS_QUITTING
+           EM.defer {
+             # Refresh the monitoring conf on the agent
+             svc.cloud_host.live_monitors.each { |path, conf|
+               Wakame.log.debug("#{self.class}: Refreshing monitoring setting on #{svc.cloud_host.agent_id} (on quit): #{path} => #{conf.inspect}")
+               Master.instance.actor_request(svc.cloud_host.agent_id, '/monitor/reload', path, conf).request.wait
+             }
+           }
+         end
+       }
      end
 
      def reload

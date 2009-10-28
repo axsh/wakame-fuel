@@ -59,15 +59,9 @@ module Wakame
           raise "The assigned agent \"#{@svc.cloud_host.agent_id}\" for the service instance #{@svc.id} is not online."  unless @svc.cloud_host.agent.monitor_status == Service::Agent::STATUS_ONLINE
           
           StatusDB.barrier {
-            @svc.update_status(Service::STATUS_STARTING)
+            @svc.update_status(Service::STATUS_ENTERING)
           }
-          
-          # Setup monitorring
-          @svc.cloud_host.monitors.each { |path, conf|
-            Wakame.log.debug("#{self.class}: Sending monitorring setting to #{@svc.cloud_host.agent_id}: #{path} => #{conf.inspect}")
-            actor_request(@svc.cloud_host.agent_id, '/monitor/reload', path, conf).request.wait
-          }
-          
+
           @svc.resource.on_enter_agent(@svc, self)
         end
         

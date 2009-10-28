@@ -184,13 +184,13 @@ module Wakame
       #     'svcid2' => {:type=>:command, :cmdline=>'ps -ef | grep key'}
       #   }
       # }
-      def monitors
+      def live_monitors(live_stats=[Service::STATUS_ENTERING, Service::STATUS_STARTING, Service::STATUS_RUNNING])
         mon = {}
         c = ServiceCluster.find(cluster_id)
         c.services.keys.each { |svc_id|
           svc = ServiceInstance.find(svc_id)
           next unless svc.cloud_host_id == self.id
-          next if svc.status == Service::STATUS_INIT || svc.status == Service::STATUS_TERMINATE
+          next unless live_stats.member?(svc.status)
 
           svc.resource.monitors.each { |path, data|
 
