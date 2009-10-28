@@ -13,14 +13,9 @@ module Wakame
         @svc.reload
 
         # Skip to act when the service is having below status.
-        unless @svc.monitor_status == Service::STATUS_ONLINE || [Service::STATUS_RUNNING, Service::STATUS_FAIL].member?(@svc.status)
+        if @svc.status == Service::STATUS_TERMINATE && @svc.monitor_status == Service::STATUS_OFFLINE
           Wakame.log.info("Ignore to stop the service as is being or already OFFLINE: #{@svc.resource.class}")
           return
-        end
-
-
-        if @svc.resource.require_agent && !@svc.cloud_host.mapped?
-          raise "Agent is not bound on this service : #{@svc}"
         end
 
         StatusDB.barrier {
