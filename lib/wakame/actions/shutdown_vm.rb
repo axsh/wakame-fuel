@@ -7,11 +7,29 @@ module Wakame
       end
 
       def run
-        #if @agent.id == master.master_local_agent_id
-        #  Wakame.log.info("Skip to shutdown VM as the master is running on this node: #{@agent.agent_id}")
-        #  return
-        #end
-        
+        if @agent.mapped?
+          cloud_host = @agent.cloud_host
+          raise "The VM has running service(s)." if cloud_host.assigned_services.any? {|svc_id|
+            Wakame::Service::ServiceInstance.find(svc_id).monitor_status == Wakame::Service::STATUS_ONLINE
+          }
+        end
+
+        require 'uri'
+        require 'socket'
+        Master.instance.cluster_manager.clusters.each { |cluster_id|
+          cluster = Service::ServiceCluster.find(cluster_id)
+          next if cluster.advertised_amqp_servers.nil?
+          amqp_uri = URI.parse(cluster.advertised_amqp_servers)
+          amqp_svr_ip = IPSocket.getaddress(amqp_uri.host)
+          
+          [@agent.vm_attr[:dns_name], @agent.vm_attr[:private_dns_name]].each { |hostname|
+            if IPSocket.getaddress(hostname) == amqp_svr_ip
+              Wakame.log.info("Skip to shutdown the VM as the master is running on this node: #{@agent.id}")
+              return
+            end
+          }
+        }
+
         shutdown_ec2_instance
 
       end
