@@ -31,8 +31,8 @@ module Wakame
       Master.instance
     end
 
-    def trigger_action(action)
-      master.action_manager.trigger_action(action)
+    def trigger_action(action=nil, &blk)
+      master.action_manager.trigger_action(action, &blk)
     end
 
     # Tentative utility method for 
