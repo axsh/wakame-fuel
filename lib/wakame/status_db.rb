@@ -174,7 +174,6 @@ module Wakame
             obj.on_before_load
 
             obj.instance_variable_set(:@id, id)
-            obj.instance_variable_set(:@_orig, hash.dup.freeze)
             obj.instance_variable_set(:@load_at, Time.now)
         
             hash.each { |k,v|
@@ -243,33 +242,18 @@ module Wakame
         @load_at.nil?
       end
 
-      def dirty?(key=nil)
-        return true if new_record?
-
-        if key
-          attr_attr = self.class.get_attr_attribute(key.to_sym)
-          raise "#{key} is not the key to be saved" if attr_attr.nil? || !attr_attr[:persistent]
-          return @_orig[key.to_sym] != self.__send__(key.to_sym)
-        else
-          self.class.merged_attr_attributes.each { |k,v|
-            next unless v[:persistent]
-            #p "@_orig[#{k.to_sym}]=#{@_orig[k.to_sym].inspect}"
-            #p "@self.__send__(#{k.to_sym})=#{self.__send__(k.to_sym).inspect}"
-            return true if @_orig[k.to_sym] != self.__send__(k.to_sym)
-          }
-          return false
-        end
+      def dirty?
+        raise NotImplementedError
       end
 
       def save
-#        return unless dirty?
-#       raise "No change" unless dirty?
+        #return unless dirty?
 
         validate_on_save
 
         self.class.merged_attr_attributes.each { |k,v|
           next unless v[:persistent]
-          if dirty?(k) && v[:call_after_changed]
+          if v[:call_after_changed]
             case v[:call_after_changed]
             when Symbol
               self.__send__(v[:call_after_changed].to_sym) # if self.respond_to?(v[:call_after_changed].to_sym)
@@ -284,7 +268,6 @@ module Wakame
             dumper.call(k)
           end
         }
-        @_orig = hash_saved.dup.freeze
 
         StatusDB.adapter.save(self.id, hash_saved)
       end
