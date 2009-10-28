@@ -282,8 +282,8 @@ Cluster : <%= cluster["name"].to_s %> (<%= cluster_status_msg(cluster["status"])
   resource = body["resources"][res_id]
 -%>
   <%= resource["class_type"] %> : <current=<%= resource["instance_count"] %> min=<%= resource["min_instances"] %>, max=<%= resource["max_instances"] %><%= resource["require_agent"] ? "" : ", AgentLess" %>>
-  <%- resource["services_ref"].each { |svc_inst| -%>
-     <%= svc_inst["id"] %> (<%= svc_status_msg(svc_inst["status"]) %>)
+  <%- resource["services_ref"].each { |svc| -%>
+     <%= svc["id"] %> (<%= svc_status_msg(svc["status"]) %>:<%= monitor_status_msg(svc["monitor_status"]) %>)
   <%- } -%>
 <%- } -%>
 <%- if cluster["services"].size > 0  -%>
