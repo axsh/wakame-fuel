@@ -38,7 +38,6 @@ class Wakame::Command::Status
           res[:cloud_hosts][id]=CloudHost.find(id).dump_attrs
         }
       end
-#p res[:cluster]
       res
     }
 
