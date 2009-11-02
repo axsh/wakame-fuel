@@ -34,6 +34,8 @@ module Wakame
       res = @q.shift
       time_elapsed = ::Time.now - time_start
       Wakame.log.debug("#{self}.barrier: Elapsed time for #{blk}: #{time_elapsed} sec") if time_elapsed > 0.05
+      fail "Too long barrier" if time_elapsed > 4.5
+
       if res[0] == false && res[1].is_a?(Exception)
         raise res[1]
       end
@@ -89,6 +91,7 @@ module Wakame
       end
 
       def find(id, &blk)
+        Wakame.log.debug("StatusDB.find(#{id}) called on #{Thread.current.to_s}")  unless Thread.current == WorkerThread.worker_thread 
         m = @model_class[id]
         if m
           hash = eval(m[:dump])
@@ -108,6 +111,7 @@ module Wakame
       end
 
       def save(id, hash)
+        Wakame.log.debug("StatusDB.save(#{id}) called on #{Thread.current.to_s}") unless Thread.current == WorkerThread.worker_thread 
         m = @model_class[id]
         if m.nil? 
           m = @model_class.new
