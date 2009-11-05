@@ -99,6 +99,9 @@ module Wakame
         end
       end
 
+      def actor_request(path, *args)
+        Master.instance.actor_request(self.id, path, *args)
+      end
 
       def renew_reported_services(svc_id_list)
         reported_services.clear
