@@ -1,5 +1,6 @@
 
 require 'thread'
+require 'timeout'
 
 module Wakame
   module StatusDB
@@ -19,19 +20,31 @@ module Wakame
         return blk.call
       end
       
-      @q ||= ::Queue.new
+      Wakame.log.debug("StatusDB.barrier: Called at #{caller(1)[0..1].inspect} on the thread #{Thread.current}.")
+
+      q = ::Queue.new
       time_start = ::Time.now
       
       self.pass {
         begin
           res = blk.call
-          @q << [true, res]
+          q << [true, res]
         rescue => e
-          @q << [false, e]
+          q << [false, e]
         end
       }
-      
-      res = @q.shift
+
+      res = nil
+      begin
+        timeout(10) do
+          res = q.shift
+        end
+      rescue Timeout::Error => e
+        Wakame.log.error("WorkerThread.queue.size=#{WorkerThread.queue.size}")
+        Wakame.log.error(e)
+        raise e
+      end
+
       time_elapsed = ::Time.now - time_start
       Wakame.log.debug("#{self}.barrier: Elapsed time for #{blk}: #{time_elapsed} sec") if time_elapsed > 0.05
       fail "Too long barrier" if time_elapsed > 4.5
