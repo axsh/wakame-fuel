@@ -114,10 +114,11 @@ class Wakame::Monitor::Service
           outputs << l
         }
       }
-      Wakame.log.debug("#{self.class}: Exit Status #{@command}: #{cmdstat}")
       if outputs.size > 0
         @service_monitor.send_event(Wakame::Packets::MonitoringOutput.new(@service_monitor.agent, self.svc_id, outputs.join('')))
       end
+
+      Wakame.log.debug("#{self.class}: Detected the failed exit status: #{@command}: #{cmdstat}") if cmdstat.exitstatus != 0
       cmdstat.exitstatus == 0 ? Wakame::Service::STATUS_ONLINE : Wakame::Service::STATUS_OFFLINE
     end
   end
@@ -132,7 +133,7 @@ class Wakame::Monitor::Service
   end
 
   def send_event(a)
-    Wakame.log.debug("Sending back the event: #{a.class}")
+    #Wakame.log.debug("Sending back the event: #{a.class}")
     publish_to('agent_event', a.marshal)
   end
 
