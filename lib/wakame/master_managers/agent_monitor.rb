@@ -36,6 +36,7 @@ module Wakame
         
         master.add_subscriber('registry') { |data|
           data = eval(data)
+          next if Time.parse(data[:responded_at]) < master.started_at
           
           StatusDB.pass {
             agent_id = data[:agent_id]
@@ -92,6 +93,8 @@ module Wakame
         
         master.add_subscriber('agent_event') { |data|
           response = eval(data)
+          next if Time.parse(response[:responded_at]) < master.started_at
+
           case response[:class_type]
           when 'Wakame::Packets::StatusCheckResult'
             StatusDB.pass {
