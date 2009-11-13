@@ -102,15 +102,7 @@ module Wakame
               else
                 Wakame.log.error("#{self.class}: Unknown service ID: #{response[:svc_id]}")
                 agent = Service::Agent.find(response[:agent_id])
-                if agent.mapped?
-                  agent.cloud_host.live_monitors.each { |path, conf|
-                    Wakame.log.debug("#{self.class}: Refreshing monitoring setting on #{agent.id}: #{path} => #{conf.inspect}")
-                    Master.instance.actor_request(agent.id, '/monitor/reload', path, conf).request
-                  }
-                else
-                  Wakame.log.debug("#{self.class}: Resetting monitoring setting on #{agent.id}")
-                  Master.instance.actor_request(agent.id, '/monitor/reload', '/service', {}).request
-                end
+                correct_svc_monitor_mismatch(agent)
               end
             }
           when 'Wakame::Packets::ServiceStatusChanged'
@@ -136,8 +128,10 @@ module Wakame
         }
 
         EventDispatcher.subscribe(Event::AgentUnMonitored) { |event|
-          agent = Service::Agent.find(event.agent.id)
-          agent.terminate
+          StatusDB.pass {
+            agent = Service::Agent.find(event.agent.id)
+            agent.terminate
+          }
         }
       end
 
@@ -147,6 +141,21 @@ module Wakame
 
       def agent_pool
         Models::AgentPool.instance
+      end
+
+
+      private
+      def correct_svc_monitor_mismatch(agent)
+        if agent.mapped?
+          agent.cloud_host.live_monitors.each { |path, conf|
+            Wakame.log.debug("#{self.class}: Refreshing monitoring setting on #{agent.id}: #{path} => #{conf.inspect}")
+            agent.actor_request('/monitor/reload', path, conf).request
+          }
+        else
+          Wakame.log.debug("#{self.class}: Resetting monitoring setting on #{agent.id}")
+          agent.actor_request('/monitor/reload', '/service', {}).request
+        end
+        
       end
 
     end
