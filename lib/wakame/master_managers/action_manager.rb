@@ -148,33 +148,9 @@ module Wakame
                 action.bind_thread(nil)
               end
 
-              res
-            }, proc { |res|
-              unless @active_jobs.has_key?(job_context[:job_id])
-                next
-              end
-              
-              actary = []
-              job_context[:root_action].walk_subactions {|a| actary << a }
-              #Wakame.log.debug(actary.collect{|a| {a.class.to_s=>a.status}}.inspect)
-
-              if res.is_a?(Exception)
-                job_context[:exception]=res
-              end
-
-              if actary.all? { |act| act.status == :complete }
-
-                if actary.all? { |act| act.completion_status == :succeeded }
-                  ED.fire_event(Event::JobComplete.new(action.job_id))
-                else
-                  ED.fire_event(Event::JobFailed.new(action.job_id, res))
-                end
-
-                job_context[:complete_at]=Time.now
-                @job_history << job_context
-                @active_jobs.delete(job_context[:job_id])
-                @lock_queue.quit(job_context[:job_id])
-              end
+              StatusDB.pass {
+                process_job_complete(action, res)
+              }
             }
           rescue => e
             Wakame.log.error(e)
@@ -192,9 +168,45 @@ module Wakame
           :create_at=>Time.now,
           :start_at=>nil,
           :complete_at=>nil,
+          :completion_status=>nil,
           :root_action=>root_action,
           :notes=>{}
         }
+      end
+
+      def process_job_complete(action, res)
+        job_id = action.job_id
+        job_context = @active_jobs[job_id] || return
+
+        actary = []
+        job_context[:root_action].walk_subactions {|a| actary << a }
+        #Wakame.log.debug(actary.collect{|a| {a.class.to_s=>a.status}}.inspect)
+        
+        actary.all? { |act| act.status == :complete } || return
+        @lock_queue.quit(job_id)
+
+        if res.is_a?(Exception)
+          job_context[:exception]=res
+        end
+
+        job_context[:complete_at]=Time.now
+        
+        if actary.all? { |act| act.completion_status == :succeeded }
+          end_status = :succeeded
+        else
+          end_status = :failed
+        end
+        job_context[:completion_status] = end_status
+        
+        case end_status
+        when :succeeded
+          ED.fire_event(Event::JobSuccess.new(action.job_id))
+        when :failed
+          ED.fire_event(Event::JobFailed.new(action.job_id, res))
+        end
+        ED.fire_event(Event::JobComplete.new(action.job_id, end_status))
+        
+        @active_jobs.delete(job_id)
       end
 
     end

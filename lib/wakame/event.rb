@@ -242,6 +242,13 @@ module Wakame
     class JobStart < JobEvent
     end
     class JobComplete < JobEvent
+      attr_reader :status
+      def initialize(job_id, status)
+        super(job_id)
+        @status = status
+      end
+    end
+    class JobSuccess < JobEvent
     end
     class JobFailed < JobEvent
       attr_reader :exception
