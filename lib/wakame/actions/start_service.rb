@@ -20,7 +20,7 @@ module Wakame
           raise "The service is not bound cloud host object: #{@svc.id}" if @svc.cloud_host_id.nil?
 
           unless @svc.cloud_host.mapped?
-            acquire_lock(Models::AgentPool.class.to_s)
+            acquire_lock(Models::AgentPool.to_s)
             
             # Try to arrange agent from existing agent pool.
             StatusDB.barrier {
