@@ -216,17 +216,17 @@ module Wakame
         @locks = {}
         @id2res = {}
 
+        @self_m = ::Mutex.new
+
         @queue_by_thread = {}
         @qbt_m = ::Mutex.new
       end
       
       def set(resource, id)
-        # Ths Job ID already holds/reserves the lock regarding the resource.
-        return if @id2res.has_key?(id) && @id2res[id].has_key?(resource.to_s)
-
-        # Need to use EM.barrier while RuleEngine is using EventMachine's threads.
-        #StatusDB.barrier {
-        EM.barrier {
+        @self_m.synchronize {
+          # Ths Job ID already holds/reserves the lock regarding the resource.
+          return if @id2res.has_key?(id) && @id2res[id].has_key?(resource.to_s)
+        
           @locks[resource.to_s] ||= []
           @id2res[id] ||= {}
           
@@ -237,22 +237,25 @@ module Wakame
       end
 
       def reset()
-        @locks.keys { |k|
-          @locks[k].clear
+        @self_m.synchronize {
+          @locks.keys { |k|
+            @locks[k].clear
+          }
+          @id2res.clear
         }
-        @id2res.clear
       end
 
       def test(id)
-        reslist = @id2res[id]
-        return :pass if reslist.nil? || reslist.empty?
-
-        # 
-        if reslist.keys.all? { |r| id == @locks[r.to_s][0] }
-          return :runnable
-        else
-          return :wait
-        end
+        @self_m.synchronize {
+          reslist = @id2res[id]
+          return :pass if reslist.nil? || reslist.empty?
+          
+          if reslist.keys.all? { |r| id == @locks[r.to_s][0] }
+            return :runnable
+          else
+            return :wait
+          end
+        }
       end
 
       def wait(id, tout=60*30)
@@ -269,21 +272,18 @@ module Wakame
       end
       
       def quit(id)
-        # Need to use EM.barrier while RuleEngine is using EventMachine's threads.
-        #StatusDB.barrier {
-        EM.barrier {
-          case test(id)
-          when :runnable, :wait
+        case test(id)
+        when :runnable, :wait
+          @self_m.synchronize {
             @id2res[id].keys.each { |r| @locks[r.to_s].delete_if{ |i| i == id } }
             @locks.delete_if{ |k,v| v.nil? || v.empty? }
-
-            @qbt_m.synchronize {
-              @queue_by_thread.each {|t, q| q.enq(id) }
-            }
-          end
-          
-          @id2res.delete(id)
-        }
+          }
+          @qbt_m.synchronize {
+            @queue_by_thread.each {|t, q| q.enq(id) }
+          }
+        end
+        
+        @id2res.delete(id)
         Wakame.log.debug("#{self.class}: quit(#{id})" + "\n#{self.inspect}")
       end
 
