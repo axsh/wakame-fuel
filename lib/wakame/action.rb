@@ -20,10 +20,12 @@ module Wakame
     
     # Tentative utility method for 
     def service_cluster
-      cluster_id = master.cluster_manager.clusters.first
-      raise "There is no cluster loaded" if cluster_id.nil?
+      StatusDB.barrier {
+        cluster_id = master.cluster_manager.clusters.first
+        raise "There is no cluster loaded" if cluster_id.nil?
 
-      Service::ServiceCluster.find(cluster_id)
+        Service::ServiceCluster.find(cluster_id)
+      }
     end
     alias :cluster :service_cluster
 

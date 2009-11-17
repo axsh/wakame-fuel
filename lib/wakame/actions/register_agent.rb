@@ -10,13 +10,17 @@ module Wakame
         
         acquire_lock("Agent:#{@agent.id}")
 
-        @agent.update_vm_attr
+        StatusDB.barrier {
+          @agent.update_vm_attr
+        }
         
         # Send monitoring conf
         if @agent.cloud_host_id
           Wakame.log.debug("#{self.class}: #{@agent.id} is to be set the monitor conf: #{@agent.cloud_host.live_monitors.inspect}")
-          @agent.cloud_host.live_monitors.each { |path, data|
-            master.actor_request(@agent.id, '/monitor/reload', path, data).request.wait
+          StatusDB.barrier {
+            @agent.cloud_host.live_monitors.each { |path, data|
+              master.actor_request(@agent.id, '/monitor/reload', path, data).request.wait
+            }
           }
         end
 

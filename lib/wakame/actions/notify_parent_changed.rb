@@ -6,9 +6,8 @@ module Wakame
       end
       
       def run
-        children = []
-        StatusDB.barrier {
-          children = @parent_svc.child_instances
+        children = StatusDB.barrier {
+          @parent_svc.child_instances
         }
 
         acquire_lock(children.map{|c| c.resource.class.to_s }.uniq)

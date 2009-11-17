@@ -6,8 +6,7 @@ module Wakame
       end
       
       def run
-        parents = []
-        StatusDB.barrier {
+        parents = StatusDB.barrier {
           parents = @child_svc.parent_instances
         }
 
