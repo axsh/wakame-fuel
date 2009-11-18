@@ -111,7 +111,10 @@ module Wakame
         m = @model_class[id]
         if m
           hash = eval(m[:dump])
-          blk.call(id, hash)
+          hash[AttributeHelper::CLASS_TYPE_KEY]=m.class_type
+          hash
+        else
+          nil
         end
       end
 
@@ -177,31 +180,34 @@ module Wakame
           obj = _instance_cache[id]
           return obj unless obj.nil?
 
-          StatusDB.adapter.find(id) { |id, hash|
-            if hash[AttributeHelper::CLASS_TYPE_KEY]
-              klass_const = Util.build_const(hash[AttributeHelper::CLASS_TYPE_KEY])
-            else
-              klass_const = self
-            end
-
-            # klass_const class is equal to self class or child of self class
-            if klass_const <= self
-              obj = klass_const.new
-            else
-              raise "Can not instanciate the object #{klass_const.to_s} from #{self}"
-            end
-
-            obj.on_before_load
-
-            obj.instance_variable_set(:@id, id)
-            obj.instance_variable_set(:@load_at, Time.now)
-        
-            hash.each { |k,v|
-              obj.instance_variable_set("@#{k}", v)
-            }
-
-            obj.on_after_load
+          hash = StatusDB.barrier {
+            StatusDB.adapter.find(id)
           }
+          return nil unless hash
+
+          if hash[AttributeHelper::CLASS_TYPE_KEY]
+            klass_const = Util.build_const(hash[AttributeHelper::CLASS_TYPE_KEY])
+          else
+            klass_const = self
+          end
+          
+          # klass_const class is equal to self class or child of self class
+          if klass_const <= self
+            obj = klass_const.new
+          else
+            raise "Can not instanciate the object #{klass_const.to_s} from #{self}"
+          end
+          
+          obj.on_before_load
+          
+          obj.instance_variable_set(:@id, id)
+          obj.instance_variable_set(:@load_at, Time.now)
+          
+          hash.each { |k,v|
+            obj.instance_variable_set("@#{k}", v)
+          }
+          
+          obj.on_after_load
 
           _instance_cache[id] = obj
           obj
@@ -209,13 +215,17 @@ module Wakame
 
 
         def find_all
-          StatusDB.adapter.find_all(self.to_s).map { |id|
-            find(id)
+          StatusDB.barrier {
+            StatusDB.adapter.find_all(self.to_s).map { |id|
+              find(id)
+            }
           }
         end
 
         def exists?(id) 
-          _instance_cache.has_key?(id) || StatusDB.adapter.exists?(id)
+          StatusDB.barrier {
+            _instance_cache.has_key?(id) || StatusDB.adapter.exists?(id)
+          }
         end
 
         # A helper method to define an accessor with persistent flag.
@@ -233,8 +243,9 @@ module Wakame
           obj = find(id)
           if obj
             obj.on_before_delete
-
-            StatusDB.adapter.delete(id)
+            StatusDB.barrier {
+              StatusDB.adapter.delete(id)
+            }
             _instance_cache.delete(id)
 
             obj.on_after_delete 
@@ -288,8 +299,9 @@ module Wakame
             dumper.call(k)
           end
         }
-
-        StatusDB.adapter.save(self.id, hash_saved)
+        StatusDB.barrier {
+          StatusDB.adapter.save(self.id, hash_saved)
+        }
       end
 
       def delete
@@ -298,29 +310,29 @@ module Wakame
 
       def reload
         self.class._instance_cache.delete(self.id)
-        
-        StatusDB.adapter.find(self.id) { |id, hash|
-          if hash[AttributeHelper::CLASS_TYPE_KEY]
-            klass_const = Util.build_const(hash[AttributeHelper::CLASS_TYPE_KEY])
-          else
-            klass_const = self.class
-          end
-
-          # klass_const class is equal to self class or child of self class
-          unless klass_const <= self.class
-            raise "The class \"#{klass_const.to_s}\" has no relationship to #{self.class}"
-          end
-          
-          on_before_load
-          
-          @load_at = Time.now
-          
-          hash.each { |k,v|
-            instance_variable_set("@#{k}", v)
-          }
-          
-          on_after_load
+        hash = StatusDB.barrier {
+          StatusDB.adapter.find(self.id)
         }
+        if hash[AttributeHelper::CLASS_TYPE_KEY]
+          klass_const = Util.build_const(hash[AttributeHelper::CLASS_TYPE_KEY])
+        else
+          klass_const = self.class
+        end
+        
+        # klass_const class is equal to self class or child of self class
+        unless klass_const <= self.class
+          raise "The class \"#{klass_const.to_s}\" has no relationship to #{self.class}"
+        end
+        
+        on_before_load
+        
+        @load_at = Time.now
+        
+        hash.each { |k,v|
+          instance_variable_set("@#{k}", v)
+        }
+            
+        on_after_load
       end
 
       # Callback methods
