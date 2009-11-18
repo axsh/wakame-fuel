@@ -175,9 +175,23 @@ module Wakame
     def setup_database
       require 'sequel'
       
-      #@db = Sequel.connect(Wakame.config.status_db_dsn, {:logger=>Wakame.log})
-      db = Sequel.connect(Wakame.config.status_db_dsn)
-
+      db = Sequel.connect(Wakame.config.status_db_dsn, {:logger=>Wakame.log})
+      #db = Sequel.connect(Wakame.config.status_db_dsn, {:timeout=>15000})
+      if db.uri  =~ /\Asqlite:/
+        orig_proc = db.pool.connection_proc
+        db.pool.connection_proc = proc { |svr|
+          con = orig_proc.call(svr)
+          con.busy_handler {|data, retries|
+            if retries > 5
+              Wakame.log.fatal("Detected the SQLite's busy lock: #{Thread.current}, data=#{data}, retries=#{retries}")
+              exit 100
+            end
+            sleep 8
+            true
+          }
+          con
+        }
+      end
 
       if db.table_exists?(:metadata)
       else
