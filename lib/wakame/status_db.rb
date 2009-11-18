@@ -88,7 +88,7 @@ module Wakame
 
       def self.terminate
         if self.queue.size > 0
-          Wakame.log.warn("#{self.class}: #{self.class.queue.size} of non-processed reqs are going to be ignored to shutdown the worker thread.")
+          Wakame.log.warn("#{self.class}: #{self.class.queue.size} of queued reqs are going to be ignored to shutdown the worker thread.")
           self.queue.clear
         end
         self.worker_thread.kill if !self.worker_thread.nil? && self.worker_thread.alive?
