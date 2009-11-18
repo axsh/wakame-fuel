@@ -106,8 +106,8 @@ module Wakame
         @model_class = Wakame::Models::ObjectStore
       end
 
-      def find(id, &blk)
-        Wakame.log.debug("StatusDB.find(#{id}) called on #{Thread.current.to_s}")  unless Thread.current == WorkerThread.worker_thread 
+      def find(id)
+        Wakame.log.debug("StatusDB.find(#{id}) called by #{Thread.current.to_s}")  unless Thread.current == WorkerThread.worker_thread 
         m = @model_class[id]
         if m
           hash = eval(m[:dump])
@@ -130,7 +130,7 @@ module Wakame
       end
 
       def save(id, hash)
-        Wakame.log.debug("StatusDB.save(#{id}) called on #{Thread.current.to_s}") unless Thread.current == WorkerThread.worker_thread 
+        Wakame.log.debug("StatusDB.save(#{id}) called by #{Thread.current.to_s}") unless Thread.current == WorkerThread.worker_thread 
         m = @model_class[id]
         if m.nil? 
           m = @model_class.new
@@ -142,6 +142,7 @@ module Wakame
       end
 
       def delete(id)
+        Wakame.log.debug("StatusDB.delete(#{id}) called by #{Thread.current.to_s}") unless Thread.current == WorkerThread.worker_thread 
         @model_class[id].destroy
       end
 
