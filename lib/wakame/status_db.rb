@@ -71,8 +71,11 @@ module Wakame
         if @thread.nil?
           @thread = Thread.new {
             while blk = queue.deq
+              Wakame.log.debug("#{self}: Queued Jobs: #{queue.size}") if queue.size > 0
               begin
-                blk.call
+                Wakame::Models::ObjectStore.db.transaction {
+                  blk.call
+                }
               rescue => e
                 Wakame.log.error("#{self.class}: #{e}")
                 Wakame.log.error(e)
