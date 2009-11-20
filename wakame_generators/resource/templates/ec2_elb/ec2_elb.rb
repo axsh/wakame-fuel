@@ -1,8 +1,8 @@
 class Ec2ELB < Wakame::Service::Resource
   
   property :elb_name
-  property :require_agent, false
   property :just_unregister_when_stop, false
+  update_attribute :require_agent, false
   
   def on_parent_changed(svc, action)
     start(svc, action)
@@ -13,8 +13,8 @@ class Ec2ELB < Wakame::Service::Resource
 
     parents = svc.parent_instances.dup
 
-    vm_slice_ids = parents.collect{|a| a.cloud_host.agent.vm_attr[:instance_id] }.uniq
-    av_zones = parents.collect{|a| a.cloud_host.agent.vm_attr[:availability_zone] }.uniq
+    vm_slice_ids = parents.collect{|a| a.cloud_host.agent.vm_attr[:aws_instance_id] }.uniq
+    av_zones = parents.collect{|a| a.cloud_host.agent.vm_attr[:aws_availability_zone] }.uniq
     Wakame.log.info("Setting up the ELB #{self.elb_name} with #{vm_slice_ids.join(', ')}")
     begin
       res = elb.describe_load_balancers(self.elb_name)
@@ -38,9 +38,7 @@ class Ec2ELB < Wakame::Service::Resource
       elb.register_instances_with_load_balancer(self.elb_name, *elb_not_members)
     end
 
-    EM.barrier {
-      svc.update_status(Wakame::Service::STATUS_ONLINE)
-    }
+    svc.update_monitor_status(Wakame::Service::STATUS_ONLINE)
   end
   
   def stop(svc, action)
@@ -48,7 +46,7 @@ class Ec2ELB < Wakame::Service::Resource
 
     if self.just_unregister_when_stop
       parents = svc.parent_instances.dup
-      vm_slice_ids = parents.collect{|a| a.cloud_host.agent.vm_attr[:instance_id] }.uniq
+      vm_slice_ids = parents.collect{|a| a.cloud_host.agent.vm_attr[:aws_instance_id] }.uniq
       Wakame.log.info("Deregistering the VM instances (#{vm_slice_ids.join(', ')}) from ELB #{self.elb_name}")
 
       elb.deregister_instances_with_load_balancer(self.elb_name, *vm_slice_id)
@@ -62,10 +60,7 @@ class Ec2ELB < Wakame::Service::Resource
       end
     end
 
-    EM.barrier {
-      svc.update_status(Wakame::Service::STATUS_OFFLINE)
-    }
-
+    svc.update_monitor_status(Wakame::Service::STATUS_OFFLINE)
   end
 
   private

@@ -2,7 +2,12 @@ class Apache_WWW < Wakame::Service::Resource
   include HttpServer
   include HttpAssetServer
 
-  property :listen_port, {:default=>8000}
+  update_attribute :listen_port, 8000
+  update_attribute :monitors, {'/service' => {
+      :type => :pidfile,
+      :path => '/var/run/apache2-www.pid'
+    }
+  }
   
   def render_config(template)
     template.glob_basedir(%w(conf/envvars-www init.d/apache2-www)) { |d|
@@ -21,10 +26,8 @@ class Apache_WWW < Wakame::Service::Resource
       }
     }
 
-    request = action.actor_request(svc.cloud_host.agent_id,
-                                   '/service_monitor/register', svc.id, :pidfile, '/var/run/apache2-www.pid').request
-    request = action.actor_request(svc.cloud_host.agent_id,
-                                   '/daemon/start', "apache_www", 'init.d/apache2-www'){ |req|
+    action.actor_request(svc.cloud_host.agent_id,
+                         '/daemon/start', "apache_www", 'init.d/apache2-www'){ |req|
       req.wait
       Wakame.log.debug("#{self.class} process started")
     }
@@ -38,21 +41,20 @@ class Apache_WWW < Wakame::Service::Resource
       }
     }
 
-    request = action.actor_request(svc.cloud_host.agent_id,
-                                   '/daemon/stop', 'apache_www', 'init.d/apache2-www'){ |req|
+    action.actor_request(svc.cloud_host.agent_id,
+                         '/daemon/stop', 'apache_www', 'init.d/apache2-www'){ |req|
       req.wait
       Wakame.log.debug("#{self.class} process stooped")
     }
     cond.wait
-
-    request = action.actor_request(svc.cloud_host.agent_id,
-                                   '/service_monitor/unregister', svc.id ).request
   end
   
   def reload(svc, action)
-    request = action.actor_request(svc.cloud_host.agent_id,
-                                   '/daemon/reload', 'apache_www', 'init.d/apache2-www').request
-    request.wait
+    action.actor_request(svc.cloud_host.agent_id,
+                         '/daemon/reload', 'apache_www', 'init.d/apache2-www'){ |req|
+      req.wait
+      Wakame.log.debug("#{self.class} process reloaded")
+    }
   end
   
 end

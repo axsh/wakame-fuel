@@ -1,8 +1,13 @@
 class Apache_LB < Wakame::Service::Resource
   include HttpServer
   
-  property :listen_port, {:default=>80}
-  property :listen_port_https, {:default=>443}
+  update_attribute :listen_port, 80
+  update_attribute :listen_port_https, 443
+  update_attribute :monitors, {'/service' => {
+      :type => :pidfile,
+      :path => '/var/run/apache2-lb.pid'
+    }
+  }
   
   def render_config(template)
     template.glob_basedir(%w(conf/envvars-lb init.d/apache2-lb)) { |d|
@@ -27,8 +32,6 @@ class Apache_LB < Wakame::Service::Resource
       }
     }
 
-    request = action.actor_request(svc.cloud_host.agent_id,
-                                   '/service_monitor/register', svc.id, :pidfile, '/var/run/apache2-lb.pid').request
     action.actor_request(svc.cloud_host.agent_id,
                          '/daemon/start', "apache_lb", 'init.d/apache2-lb'){ |req|
       req.wait
@@ -52,9 +55,6 @@ class Apache_LB < Wakame::Service::Resource
     }
 
     cond.wait
-
-    request = action.actor_request(svc.cloud_host.agent_id,
-                                   '/service_monitor/unregister', svc.id ).request
   end
 
   def reload(svc, action)

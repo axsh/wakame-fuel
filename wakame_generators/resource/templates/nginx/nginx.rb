@@ -1,8 +1,13 @@
 class Nginx < Wakame::Service::Resource
   include HttpServer
   
-  property :listen_port, {:default=>80}
-  property :listen_port_https, {:default=>443}
+  update_attribute :listen_port, 80
+  update_attribute :listen_port_https, 443
+  update_attribute :monitors, { '/service' => {
+      :type => :pidfile,
+      :path => '/var/run/nginx.pid'
+    }
+  }
   
   def render_config(template)
     template.glob_basedir(%w(conf/nginx.conf conf/vh/*.conf)) { |d|
@@ -25,8 +30,6 @@ class Nginx < Wakame::Service::Resource
       }
     }
 
-    request = action.actor_request(svc.cloud_host.agent_id,
-                                   '/service_monitor/register', svc.id, :pidfile, '/var/run/nginx.pid').request
     action.actor_request(svc.cloud_host.agent_id,
                          '/daemon/start', "nginx", 'init.d/nginx'){ |req|
       req.wait
@@ -50,9 +53,6 @@ class Nginx < Wakame::Service::Resource
     }
 
     cond.wait
-
-    request = action.actor_request(svc.cloud_host.agent_id,
-                                   '/service_monitor/unregister', svc.id ).request
   end
 
   def reload(svc, action)
