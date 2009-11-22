@@ -6,15 +6,14 @@ require 'rake/clean'
 begin
   require 'jeweler'
   Jeweler::Tasks.new do |gem|
+    # gem is a Gem::Specification... see http://www.rubygems.org/read/chapter/20 for additional settings
     gem.name = "wakame"
     gem.summary = %q{A distributed service framework on top of Cloud environments.}
     gem.description = <<__END__
 __END__
-    gem.email = ["m-fujiwara@axsh.net"]
-    gem.homepage = "http://wakame.rubyforge.org/"
-    gem.authors = ["axsh co.,Ltd.", "Masahiro Fujiwara"]
-    # gem is a Gem::Specification... see http://www.rubygems.org/read/chapter/20 for additional settings
-    gem.rubyforge_project = 'wakame'
+    gem.email = ["info@axsh.net"]
+    gem.homepage = "http://wakame.axsh.jp/"
+    gem.authors = ["axsh Co. Ltd."]
     gem.executables = ['wakame']
     [['amqp','>= 0.6.5'],
      ['right_aws','>= 1.10.0'], # Ec2ELB works with 1.10.99 in their github.
