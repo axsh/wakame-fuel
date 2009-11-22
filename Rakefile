@@ -16,19 +16,19 @@ __END__
     # gem is a Gem::Specification... see http://www.rubygems.org/read/chapter/20 for additional settings
     gem.rubyforge_project = 'wakame'
     gem.executables = ['wakame']
-    [['amqp','>= 0.6.0'],
+    [['amqp','>= 0.6.5'],
      ['right_aws','>= 1.10.0'], # Ec2ELB works with 1.10.99 in their github.
-     ['eventmachine','>= 0.12.8'],
+     ['eventmachine','>= 0.12.10'],
      ['rake', '>= 0.8.7'],
      ['log4r', '>= 1.0.5'],
      ['daemons', '>= 1.0.10'],
      ['rubigen', '>= 1.5.2'],
-     ['open4', '>= 0.9.6'],
+     ['open4', '>= 1.0.0'],
      ['jeweler', '>= 1.0.0'],
      ['rack', '>= 1.0.0'],
-     ['thin', '>= 1.2.2'],
+     ['thin', '>= 1.2.5'],
      ['json', '>= 1.1.7'],
-     ['sequel', '>= 3.2.0']
+     ['sequel', '>= 3.6.0']
     ].each { |i|
       gem.add_dependency(i[0], i[1])
     }
