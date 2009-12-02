@@ -203,22 +203,26 @@ module Wakame
         db[:metadata].insert(:version=>'0.4', :created_at=>Time.now)
       end
 
-      Dir.glob("#{configuration.framework_root_path}/lib/wakame/models/**/*.rb").each{ |f|
-        self.class.loaded_classes.clear
+      load_framework('wakame/models/*.rb', 
+                     lambda {|path| self.class.loaded_classes.clear},
+                     lambda {|path|
+                               
+                       self.class.loaded_classes.each { |model_class|
+                         next unless model_class.is_a?(Class) && model_class < Sequel::Model
+                         
+                         model_class.create_table?
+                       }
 
-        load f
-        
-        self.class.loaded_classes.each { |model_class|
-          next unless model_class.is_a?(Class) && model_class < Sequel::Model
-
-          model_class.create_table?
-        }
-      }
-    
+                     })
     end
 
     def load_framework(glob_pat, pre_hook=nil, post_hook=nil)
-      Dir.glob(File.expand_path(glob_pat, configuration.framework_root_path)).sort.each{ |f|
+      if Wakame::Bootstrap.boot_type == Wakame::Bootstrap::VendorBoot
+        rbfiles = Dir.glob(File.expand_path(glob_pat, configuration.framework_root_path))  
+      else
+        rbfiles = Gem.find_files(glob_pat)
+      end
+      rbfiles.sort.each{ |f|
         pre_hook.call(f) if pre_hook
         load f
         post_hook.call(f) if post_hook
