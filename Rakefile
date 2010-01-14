@@ -40,9 +40,9 @@ __END__
                          'tasks/**/*',
                          'tests/**/*'].to_a
   end
-
+  Jeweler::GemcutterTasks.new
 rescue LoadError
-  puts "Jeweler (or a dependency) not available. Install it with: sudo gem install jeweler"
+  puts "Jeweler (or a dependency) not available. Install it with: gem install jeweler"
 end
 
 require 'rake/testtask'

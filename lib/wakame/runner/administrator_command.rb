@@ -771,3 +771,29 @@ class Wakame::Cli::Subcommand::Actor
   end
 
 end
+
+class Wakame::Cli::Subcommand::ControlService
+  include Wakame::Cli::Subcommand
+
+  def parse(args)
+    @params = {}
+    create_parser(args) {|opts|
+      opts.banner = 'Usage: control_service [options] "Resource Name" "Service ID" "Number"'
+      opts.separator('Options:')
+    }
+
+    raise "Unknown Resource Name: #{args}" unless args.size > 0
+    @params["resource"] = args.shift
+
+    raise "Unknown Service ID: #{args}" unless args.size > 0
+    @params[:service_id] = args.shift
+
+    raise "Unknown Number: #{args}" unless args.size > 0
+    @params[:number] = args.shift.to_i
+  end
+
+  def run(requester)
+    requester.request(@params)
+  end
+
+end

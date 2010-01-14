@@ -24,11 +24,10 @@ module Wakame
             
             # Try to arrange agent from existing agent pool.
             StatusDB.barrier {
-              next if Models::AgentPool.instance.group_active.empty?
+              next if Models::AgentPool.group_active.empty?
               agent2host = cluster.agents.invert
               
-              #Service::AgentPool.instance.group_active.keys.each { |agent_id|
-              Models::AgentPool.instance.group_active.each { |agent_id|
+              Models::AgentPool.group_active.each { |agent_id|
                 agent = Service::Agent.find(agent_id)
                 if !agent.has_resource_type?(@svc.resource) &&
                     agent2host[agent_id].nil? && # This agent is not mapped to any cloud hosts.

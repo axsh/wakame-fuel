@@ -13,7 +13,7 @@ module Wakame
       end
     end
     
-    def self.barrier(&blk)
+    def self.barrier(tout=60*2, &blk)
       abort "Cant use barrier() in side of the EventMachine thread." if Kernel.const_defined?(:EventMachine) && ::EventMachine.reactor_thread?
 
       if Thread.current == WorkerThread.worker_thread
@@ -36,7 +36,7 @@ module Wakame
 
       res = nil
       begin
-        timeout(10) do
+        timeout(tout) do
           res = q.shift
         end
       rescue Timeout::Error => e
@@ -47,7 +47,6 @@ module Wakame
 
       time_elapsed = ::Time.now - time_start
       Wakame.log.debug("#{self}.barrier: Elapsed time for #{blk}: #{time_elapsed} sec") if time_elapsed > 0.05
-      fail "Too long barrier" if time_elapsed > 4.5
 
       if res[0] == false && res[1].is_a?(Exception)
         raise res[1]

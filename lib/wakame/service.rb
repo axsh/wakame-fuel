@@ -121,7 +121,7 @@ module Wakame
 
       def terminate
         if mapped?
-          raise "#{self.class}[#{self.id}]: CloudHost is assigned live services." if cloud_host.assigned_services.all? {|svc_id| ServiceInstance.find(svc_id).status == Service::STATUS_END }
+          raise "#{self.class}[#{self.id}]: CloudHost is assigned live services." if cloud_host.assigned_services.all? {|svc_id| ServiceInstance.find(svc_id).status == Service::STATUS_TERMINATE }
           CloudHost.delete(cloud_host_id)
         end
         self.delete
@@ -1017,7 +1017,7 @@ module Wakame
 
         def satisfy?(vm_attr, diff)
           # Compare critical variables which will return false if they are not same.
-          return false unless [:availability_zone, :instance_type, :image_id].all? { |k| diff[k].nil? ? true : diff[k] == vm_attr[k] }
+          return false unless [:availability_zone, :instance_type, :image_id].all? { |k| diff[k].nil? ? true : diff[k] == vm_attr[self.class.vm_attr_defs[k][:right_aws_key]] }
           true
         end
 

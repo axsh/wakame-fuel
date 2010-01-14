@@ -161,7 +161,9 @@ module Wakame
          if cluster.advertised_amqp_servers.nil?
            StatusDB.pass {
              cluster = Service::ServiceCluster.find(cluster_id)
-             cluster.advertised_amqp_servers = master.amqp_server_uri.to_s
+             #cluster.advertised_amqp_servers = master.amqp_server_uri.to_s
+             attrs = Wakame::Master.ec2_fetch_local_attrs
+             cluster.advertised_amqp_servers = "amqp://#{attrs[:local_ipv4]}/"
              cluster.save
              Wakame.log.debug("ServiceCluster \"#{cluster.name}\" advertised_amqp_servers: #{cluster.advertised_amqp_servers}")
            }

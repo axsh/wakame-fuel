@@ -91,16 +91,9 @@ module Wakame
 #         end
 #       }
 
-      $LOAD_PATH.each{ |d|
-        Dir.glob("#{d}/wakame/command/**/*.rb").each{ |f|
-          f =~ %r{(wakame/command/.+)\.rb\Z}
-          require "#{$1}"
-        }
-      }
-      
-      #%w(launch_cluster shutdown_cluster status action_status actor).each { |f|
-      #  require "wakame/command/#{f}"
-      #}
+      load_framework('wakame/command/**/*.rb', lambda{ |f|
+                       Wakame.log.debug("Loading Core Commands: #{f}")
+                     })
     end
 
 
@@ -135,7 +128,7 @@ module Wakame
     end
 
     def load_actors
-      load_framework('lib/wakame/actor/**/*.rb', lambda{ |f|
+      load_framework('wakame/actor/**/*.rb', lambda{ |f|
                        Wakame.log.debug("Loading Core Actor: #{f}")
                      })
 
@@ -145,7 +138,7 @@ module Wakame
     end
 
     def load_monitors
-      load_framework('lib/wakame/monitor/**/*.rb', lambda{ |f|
+      load_framework('wakame/monitor/**/*.rb', lambda{ |f|
                        Wakame.log.debug("Loading Core Monitor: #{f}")
                      })
 
@@ -155,28 +148,23 @@ module Wakame
     end
 
     def load_core_triggers
-      $LOAD_PATH.each{ |d|
-        Dir.glob("#{d}/wakame/triggers/**/*.rb").each{ |f|
-          f =~ %r{(wakame/triggers/.+)\.rb\Z}
-          require "#{$1}"
-        }
-      }
+      load_framework("wakame/triggers/**/*.rb", lambda{ |f|
+                       Wakame.log.debug("Loading Core triggers: #{f}")
+                     })
     end
 
     def load_core_actions
-      $LOAD_PATH.each{ |d|
-        Dir.glob("#{d}/wakame/actions/**/*.rb").each{ |f|
-          f =~ %r{(wakame/actions/.+)\.rb\Z}
-          require "#{$1}"
-        }
-      }
+      load_framework("wakame/actions/**/*.rb", lambda{ |f|
+                       Wakame.log.debug("Loading Core Actions: #{f}")
+                     })
     end
 
     def setup_database
       require 'sequel'
       
-      db = Sequel.connect(Wakame.config.status_db_dsn, {:logger=>Wakame.log})
+      #db = Sequel.connect(Wakame.config.status_db_dsn, {:logger=>Wakame.log})
       #db = Sequel.connect(Wakame.config.status_db_dsn, {:timeout=>15000})
+      db = Sequel.connect(Wakame.config.status_db_dsn)
       if db.uri  =~ /\Asqlite:/
         orig_proc = db.pool.connection_proc
         db.pool.connection_proc = proc { |svr|
@@ -193,16 +181,6 @@ module Wakame
         }
       end
 
-      if db.table_exists?(:metadata)
-      else
-        db.create_table? :metadata do
-          primary_key :id
-          column :version, :string
-          column :created_at, :datetime
-        end
-        db[:metadata].insert(:version=>'0.4', :created_at=>Time.now)
-      end
-
       load_framework('wakame/models/*.rb', 
                      lambda {|path| self.class.loaded_classes.clear},
                      lambda {|path|
@@ -214,11 +192,23 @@ module Wakame
                        }
 
                      })
+
+
+      if db.table_exists?(:metadata)
+      else
+        db.create_table? :metadata do
+          primary_key :id
+          column :version, :string
+          column :created_at, :datetime
+        end
+        db[:metadata].insert(:version=>'0.4', :created_at=>Time.now)
+      end
+
     end
 
     def load_framework(glob_pat, pre_hook=nil, post_hook=nil)
       if Wakame::Bootstrap.boot_type == Wakame::Bootstrap::VendorBoot
-        rbfiles = Dir.glob(File.expand_path(glob_pat, configuration.framework_root_path))  
+        rbfiles = Dir.glob(File.expand_path(glob_pat, File.join(configuration.framework_root_path, 'lib')))  
       else
         rbfiles = Gem.find_files(glob_pat)
       end
