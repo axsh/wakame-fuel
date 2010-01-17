@@ -33,10 +33,13 @@ class Ec2ELB < Wakame::Service::Resource
       elbdesc = res[0]
     end
 
-    elb_members, elb_not_members = vm_slice_ids.partition{|i| elbdesc[:instances].member?(i) }
-    unless elb_not_members.empty?
-      elb.register_instances_with_load_balancer(self.elb_name, *elb_not_members)
+    elbdesc[:stripped_instances] = elbdesc[:instances].map { |i| i.strip }
+    needless_ids = elbdesc[:stripped_instances] - vm_slice_ids
+
+    unless needless_ids.empty?
+      elb.deregister_instances_with_load_balancer(elb_name, needless_ids)
     end
+    elb.register_instances_with_load_balancer(elb_name, vm_slice_ids)
 
     svc.update_monitor_status(Wakame::Service::STATUS_ONLINE)
   end
