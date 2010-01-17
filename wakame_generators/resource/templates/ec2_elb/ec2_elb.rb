@@ -52,7 +52,7 @@ class Ec2ELB < Wakame::Service::Resource
       vm_slice_ids = parents.collect{|a| a.cloud_host.agent.vm_attr[:aws_instance_id] }.uniq
       Wakame.log.info("Deregistering the VM instances (#{vm_slice_ids.join(', ')}) from ELB #{self.elb_name}")
 
-      elb.deregister_instances_with_load_balancer(self.elb_name, *vm_slice_id)
+      elb.deregister_instances_with_load_balancer(self.elb_name, *vm_slice_ids)
     else
       Wakame.log.info("Destroying the ELB #{self.elb_name}.")
       # Ignore errors in case of any issues.
