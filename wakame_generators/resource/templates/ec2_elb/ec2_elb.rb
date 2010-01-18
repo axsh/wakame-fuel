@@ -41,6 +41,12 @@ class Ec2ELB < Wakame::Service::Resource
     end
     elb.register_instances_with_load_balancer(elb_name, vm_slice_ids)
 
+    current_av_zones = elbdesc[:availability_zones].map { |av_zone| av_zone }
+    needless_av_zones = current_av_zones - av_zones
+    unless needless_av_zones.empty?
+      elb.disable_availability_zones_for_load_balancer(elb_name, needless_av_zones)
+    end
+
     svc.update_monitor_status(Wakame::Service::STATUS_ONLINE)
   end
   
