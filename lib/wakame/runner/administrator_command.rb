@@ -817,6 +817,26 @@ class Wakame::Cli::Subcommand::DeployApplication
 
 end
 
+class Wakame::Cli::Subcommand::DeployConfig
+  include Wakame::Cli::Subcommand
+
+  command_name 'deploy_config'
+  summary "Deploy configuration files"
+
+  def parse(args)
+    create_parser(args) {|opts|
+      opts.banner = "Usage: deploy_config"
+      opts.separator ""
+      opts.separator "options:"
+    }
+  end
+
+  def run(requester)
+    requester.request()
+  end
+
+end
+
 class Wakame::Cli::Subcommand::Actor
   include Wakame::Cli::Subcommand
 
