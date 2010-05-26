@@ -33,6 +33,8 @@ class Ec2ELB < Wakame::Service::Resource
       elbdesc = res[0]
     end
 
+    elb.enable_availability_zones_for_load_balancer(elb_name, av_zones)
+
     elbdesc[:stripped_instances] = elbdesc[:instances].map { |i| i.strip }
     needless_ids = elbdesc[:stripped_instances] - vm_slice_ids
 
