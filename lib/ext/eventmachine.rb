@@ -35,7 +35,7 @@ module EventMachine
 
   # Redefine EM's threadpool
   def self.spawn_threadpool
-    until @threadpool.size == 20
+    until @threadpool.size == 30
       thread = Thread.new {
         loop {
           op, cback = *@threadqueue.pop
