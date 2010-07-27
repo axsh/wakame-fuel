@@ -1,3 +1,21 @@
+Wakame.log.debug("WAKAME_CLUSTER_ENV=#{Wakame.config.cluster_env}")
+
+case Wakame.config.cluster_env
+when  'development'
+    ec2_elb_front_fqdn = 'www.d.example.com'
+    elb_name = ''
+when  'test'
+    ec2_elb_front_fqdn = 'www.t.example.com'
+    elb_name = ''
+when  'qa'
+    ec2_elb_front_fqdn = 'www.q.example.com'
+    elb_name = ''
+when  'production'
+    ec2_elb_front_fqdn = 'www.example.com'
+    elb_name = ''
+end
+
+
 define_cluster('WebCluster1') { |c|
   c.add_resource(Apache_APP.new) { |r|
     r.listen_port = 8001
@@ -5,7 +23,7 @@ define_cluster('WebCluster1') { |c|
   }
   c.add_resource(Nginx.new)
   c.add_resource(Ec2ELB.new) { |r|
-    r.elb_name = 'xxxxxxx'
+    r.elb_name = elb_name
   }
   c.add_resource(MySQL_Master.new) {|r|
     r.mysqld_basedir = '/home/wakame/mysql'
