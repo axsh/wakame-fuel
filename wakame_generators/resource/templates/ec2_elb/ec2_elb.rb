@@ -32,6 +32,7 @@ class Ec2ELB < Wakame::Service::Resource
       res = elb.describe_load_balancers(self.elb_name)
       elbdesc = res[0]
     end
+    Wakame.log.info("Registerd the ELB #{self.elb_name} as #{elbdesc[:dns_name]}")
 
     elb.enable_availability_zones_for_load_balancer(elb_name, av_zones)
 
