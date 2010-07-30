@@ -34,12 +34,18 @@ case "$1" in
 	echo -n "Starting $DESC: "
 	start-stop-daemon --start --oknodo --quiet --pidfile /var/run/$NAME.pid \
 		--exec $DAEMON -- $DAEMON_OPTS
+<%- if (resource.fcgi_enabled) %>
+        $WAKAME_ROOT/tmp/config/nginx/init.d/spawn-fcgi start
+<% end %>
 	echo "$NAME."
 	;;
   stop)
 	echo -n "Stopping $DESC: "
 	start-stop-daemon --stop --oknodo --quiet --pidfile /var/run/$NAME.pid \
 		--exec $DAEMON
+<%- if (resource.fcgi_enabled) %>
+        $WAKAME_ROOT/tmp/config/nginx/init.d/spawn-fcgi stop
+<% end %>
 	echo "$NAME."
 	;;
   restart|force-reload)
