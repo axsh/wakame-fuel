@@ -189,6 +189,7 @@ Gem::Specification.new do |s|
      "wakame_generators/resource/templates/nginx/conf/vh/aaa.test.conf",
      "wakame_generators/resource/templates/nginx/conf/vh/ec2_elb_common.conf",
      "wakame_generators/resource/templates/nginx/init.d/nginx",
+     "wakame_generators/resource/templates/nginx/init.d/spawn-fcgi",
      "wakame_generators/resource/templates/nginx/nginx.rb",
      "wakame_generators/resource/templates/nginx_passenger/conf/nginx-passenger.conf",
      "wakame_generators/resource/templates/nginx_passenger/conf/vh/ec2_elb_common.conf",
