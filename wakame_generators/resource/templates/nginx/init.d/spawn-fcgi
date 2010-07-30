@@ -1,0 +1,46 @@
+#!/bin/sh
+#
+
+NAME=spawn-fcgi
+DESC=spawn-fcgi
+PIDFILE=/var/run/$NAME.pid
+PROGRAM=/usr/bin/spawn-fcgi
+ADDR=127.0.0.1
+PORT=9000
+USER=www-data
+GROUP=www-data
+FCGIWRAP=/usr/local/bin/fcgiwrap
+
+
+
+if [ -f /etc/default/spawn-fcgi ]; then
+        . /etc/default/spawn-fcgi
+fi
+
+set -e
+
+case "$1" in
+        start)
+                echo -n "Starting $DESC: "
+                $PROGRAM -f $FCGIWRAP -P $PIDFILE -a $ADDR -p $PORT -u $USER -g $GROUP
+                echo "$NAME."
+                ;;
+        stop)
+                echo -n "Stopping $DESC: "
+                [ -f $PIDFILE ] || exit 1
+                PID=`cat $PIDFILE`
+                kill $PID
+                echo "$NAME."
+                ;;
+        restart)
+                $0 stop
+                sleep 1
+                $0 start
+                ;;
+        *)
+                echo "Usage: /etc/init.d/$NAME [start|stop]" >&2
+                exit 1;
+                ;;
+esac
+
+exit 0
