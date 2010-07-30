@@ -1,6 +1,9 @@
 class Nginx < Wakame::Service::Resource
   include HttpServer
-  
+
+  property :ec2_elb_front_fqdn
+  property :fcgi_enabled
+
   update_attribute :listen_port, 80
   update_attribute :listen_port_https, 443
   update_attribute :monitors, { '/service' => {
@@ -13,8 +16,10 @@ class Nginx < Wakame::Service::Resource
     template.glob_basedir(%w(conf/nginx.conf conf/vh/*.conf)) { |d|
       template.render(d)
     }
-    template.cp('init.d/nginx')
-    template.chmod("init.d/nginx", 0755)
+    %w(init.d/nginx init.d/spawn-fcgi).each { |script|
+      template.render(script)
+      template.chmod(script, 0755)
+    }
   end
 
   def on_parent_changed(svc, action)
