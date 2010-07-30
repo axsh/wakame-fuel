@@ -2,11 +2,11 @@
 
 Gem::Specification.new do |s|
   s.name = %q{wakame}
-  s.version = "0.5.0"
+  s.version = "0.5.1"
 
   s.required_rubygems_version = Gem::Requirement.new(">= 0") if s.respond_to? :required_rubygems_version=
   s.authors = ["axsh co.,Ltd.", "Masahiro Fujiwara"]
-  s.date = %q{2009-09-18}
+  s.date = %q{2010-07-30}
   s.default_executable = %q{wakame}
   s.description = %q{}
   s.email = ["m-fujiwara@axsh.net"]
@@ -16,6 +16,7 @@ Gem::Specification.new do |s|
   ]
   s.files = [
     "History.txt",
+     "LICENSE",
      "README.rdoc",
      "Rakefile",
      "VERSION",
@@ -32,6 +33,8 @@ Gem::Specification.new do |s|
      "app_generators/wakame/templates/config/environments/common.rb",
      "app_generators/wakame/templates/config/environments/ec2.rb",
      "app_generators/wakame/templates/config/environments/stand_alone.rb",
+     "app_generators/wakame/templates/config/init.d/centos/wakame-agent",
+     "app_generators/wakame/templates/config/init.d/centos/wakame-master",
      "app_generators/wakame/templates/config/init.d/wakame-agent",
      "app_generators/wakame/templates/config/init.d/wakame-master",
      "app_generators/wakame/wakame_generator.rb",
@@ -42,9 +45,10 @@ Gem::Specification.new do |s|
      "lib/ext/uri.rb",
      "lib/wakame.rb",
      "lib/wakame/action.rb",
-     "lib/wakame/action_manager.rb",
+     "lib/wakame/actions/deploy_application.rb",
      "lib/wakame/actions/deploy_config.rb",
      "lib/wakame/actions/destroy_instances.rb",
+     "lib/wakame/actions/freeze_cluster.rb",
      "lib/wakame/actions/launch_cluster.rb",
      "lib/wakame/actions/launch_vm.rb",
      "lib/wakame/actions/migrate_service.rb",
@@ -52,25 +56,35 @@ Gem::Specification.new do |s|
      "lib/wakame/actions/notify_parent_changed.rb",
      "lib/wakame/actions/propagate_resource.rb",
      "lib/wakame/actions/propagate_service.rb",
+     "lib/wakame/actions/register_agent.rb",
      "lib/wakame/actions/reload_service.rb",
      "lib/wakame/actions/scaleout_when_high_load.rb",
      "lib/wakame/actions/shutdown_cluster.rb",
      "lib/wakame/actions/shutdown_vm.rb",
      "lib/wakame/actions/start_service.rb",
      "lib/wakame/actions/stop_service.rb",
+     "lib/wakame/actions/unfreeze_cluster.rb",
      "lib/wakame/actions/util.rb",
      "lib/wakame/actor.rb",
      "lib/wakame/actor/daemon.rb",
+     "lib/wakame/actor/deploy.rb",
+     "lib/wakame/actor/monitor.rb",
      "lib/wakame/actor/mysql.rb",
+     "lib/wakame/actor/s3fs.rb",
      "lib/wakame/actor/service_monitor.rb",
      "lib/wakame/actor/system.rb",
      "lib/wakame/agent.rb",
+     "lib/wakame/agent_manager.rb",
+     "lib/wakame/agent_managers/actor_manager.rb",
+     "lib/wakame/agent_managers/monitor_manager.rb",
      "lib/wakame/amqp_client.rb",
      "lib/wakame/command.rb",
      "lib/wakame/command/action_status.rb",
      "lib/wakame/command/actor.rb",
      "lib/wakame/command/agent_status.rb",
-     "lib/wakame/command/clone_service.rb",
+     "lib/wakame/command/control_service.rb",
+     "lib/wakame/command/deploy_application.rb",
+     "lib/wakame/command/deploy_config.rb",
      "lib/wakame/command/import_cluster_config.rb",
      "lib/wakame/command/launch_cluster.rb",
      "lib/wakame/command/launch_vm.rb",
@@ -83,7 +97,6 @@ Gem::Specification.new do |s|
      "lib/wakame/command/start_service.rb",
      "lib/wakame/command/status.rb",
      "lib/wakame/command/stop_service.rb",
-     "lib/wakame/command_queue.rb",
      "lib/wakame/configuration.rb",
      "lib/wakame/daemonize.rb",
      "lib/wakame/event.rb",
@@ -93,6 +106,15 @@ Gem::Specification.new do |s|
      "lib/wakame/instance_counter.rb",
      "lib/wakame/logger.rb",
      "lib/wakame/master.rb",
+     "lib/wakame/master_manager.rb",
+     "lib/wakame/master_managers/action_manager.rb",
+     "lib/wakame/master_managers/agent_monitor.rb",
+     "lib/wakame/master_managers/cluster_manager.rb",
+     "lib/wakame/master_managers/command_queue.rb",
+     "lib/wakame/models/agent_pool.rb",
+     "lib/wakame/models/application_repository.rb",
+     "lib/wakame/models/object_store.rb",
+     "lib/wakame/models/service_cluster_pool.rb",
      "lib/wakame/monitor.rb",
      "lib/wakame/monitor/agent.rb",
      "lib/wakame/monitor/service.rb",
@@ -111,7 +133,7 @@ Gem::Specification.new do |s|
      "lib/wakame/triggers/maintain_ssh_known_hosts.rb",
      "lib/wakame/triggers/shutdown_unused_vm.rb",
      "lib/wakame/util.rb",
-     "lib/wakame/vm_manipulator.rb",
+     "lib/wakame.rb",
      "tasks/ec2.rake",
      "tests/cluster.json",
      "tests/setup_agent.rb",
@@ -122,6 +144,7 @@ Gem::Specification.new do |s|
      "tests/test_amqp_client.rb",
      "tests/test_graph.rb",
      "tests/test_master.rb",
+     "tests/test_model_agent_pool.rb",
      "tests/test_monitor.rb",
      "tests/test_scheduler.rb",
      "tests/test_service.rb",
@@ -153,6 +176,9 @@ Gem::Specification.new do |s|
      "wakame_generators/resource/templates/memcached/conf/memcached.conf",
      "wakame_generators/resource/templates/memcached/init.d/memcached",
      "wakame_generators/resource/templates/memcached/memcached.rb",
+     "wakame_generators/resource/templates/mongodb/conf/mongodb.conf",
+     "wakame_generators/resource/templates/mongodb/init.d/mongodb",
+     "wakame_generators/resource/templates/mongodb/mongodb.rb",
      "wakame_generators/resource/templates/mysql_master/conf/my.cnf",
      "wakame_generators/resource/templates/mysql_master/init.d/mysql",
      "wakame_generators/resource/templates/mysql_master/mysql_master.rb",
@@ -161,15 +187,21 @@ Gem::Specification.new do |s|
      "wakame_generators/resource/templates/mysql_slave/mysql_slave.rb",
      "wakame_generators/resource/templates/nginx/conf/nginx.conf",
      "wakame_generators/resource/templates/nginx/conf/vh/aaa.test.conf",
+     "wakame_generators/resource/templates/nginx/conf/vh/ec2_elb_common.conf",
      "wakame_generators/resource/templates/nginx/init.d/nginx",
-     "wakame_generators/resource/templates/nginx/nginx.rb"
+     "wakame_generators/resource/templates/nginx/nginx.rb",
+     "wakame_generators/resource/templates/nginx_passenger/conf/nginx-passenger.conf",
+     "wakame_generators/resource/templates/nginx_passenger/conf/vh/ec2_elb_common.conf",
+     "wakame_generators/resource/templates/nginx_passenger/init.d/nginx-passenger",
+     "wakame_generators/resource/templates/nginx_passenger/nginx_passenger.rb",
+     "wakame_generators/resource/templates/s3fs/s3fs.rb",
   ]
   s.has_rdoc = true
   s.homepage = %q{http://wakame.rubyforge.org/}
   s.rdoc_options = ["--charset=UTF-8"]
   s.require_paths = ["lib"]
   s.rubyforge_project = %q{wakame}
-  s.rubygems_version = %q{1.3.1}
+  s.rubygems_version = %q{1.3.5}
   s.summary = %q{A distributed service framework on top of Cloud environments.}
 
   if s.respond_to? :specification_version then
@@ -177,47 +209,53 @@ Gem::Specification.new do |s|
     s.specification_version = 2
 
     if Gem::Version.new(Gem::RubyGemsVersion) >= Gem::Version.new('1.2.0') then
-      s.add_runtime_dependency(%q<amqp>, [">= 0.6.0"])
-      s.add_runtime_dependency(%q<right_aws>, [">= 1.10.0"])
-      s.add_runtime_dependency(%q<eventmachine>, [">= 0.12.8"])
+      s.add_runtime_dependency(%q<amqp>, ["= 0.6.5"])
+      s.add_runtime_dependency(%q<right_aws>, [">= 2.0.0"])
+      s.add_runtime_dependency(%q<eventmachine>, [">= 0.12.10"])
       s.add_runtime_dependency(%q<rake>, [">= 0.8.7"])
-      s.add_runtime_dependency(%q<log4r>, [">= 1.0.5"])
+      s.add_runtime_dependency(%q<log4r>, [">= 1.1.2"])
       s.add_runtime_dependency(%q<daemons>, [">= 1.0.10"])
-      s.add_runtime_dependency(%q<rubigen>, [">= 1.5.2"])
+      s.add_runtime_dependency(%q<rubigen>, [">= 1.5.5"])
       s.add_runtime_dependency(%q<open4>, [">= 0.9.6"])
-      s.add_runtime_dependency(%q<jeweler>, [">= 1.0.0"])
-      s.add_runtime_dependency(%q<rack>, [">= 1.0.0"])
-      s.add_runtime_dependency(%q<thin>, [">= 1.2.2"])
-      s.add_runtime_dependency(%q<json>, [">= 1.1.7"])
-      s.add_runtime_dependency(%q<sequel>, [">= 3.2.0"])
+      s.add_runtime_dependency(%q<jeweler>, [">= 1.4.0"])
+      s.add_runtime_dependency(%q<rack>, ["= 1.1.0"])
+      s.add_runtime_dependency(%q<thin>, [">= 1.2.5"])
+      s.add_runtime_dependency(%q<json_pure>, [">= 1.4.3"])
+      s.add_runtime_dependency(%q<sequel>, ["= 3.7.0"])
+      s.add_runtime_dependency(%q<ruby-hmac>, ["= 0.3.2"])
+      s.add_runtime_dependency(%q<sqlite3-ruby>, ["= 1.2.5"])
     else
-      s.add_dependency(%q<amqp>, [">= 0.6.0"])
-      s.add_dependency(%q<right_aws>, [">= 1.10.0"])
-      s.add_dependency(%q<eventmachine>, [">= 0.12.8"])
+      s.add_dependency(%q<amqp>, ["= 0.6.5"])
+      s.add_dependency(%q<right_aws>, [">= 2.0.0"])
+      s.add_dependency(%q<eventmachine>, [">= 0.12.10"])
       s.add_dependency(%q<rake>, [">= 0.8.7"])
-      s.add_dependency(%q<log4r>, [">= 1.0.5"])
+      s.add_dependency(%q<log4r>, [">= 1.1.2"])
       s.add_dependency(%q<daemons>, [">= 1.0.10"])
-      s.add_dependency(%q<rubigen>, [">= 1.5.2"])
+      s.add_dependency(%q<rubigen>, [">= 1.5.5"])
       s.add_dependency(%q<open4>, [">= 0.9.6"])
-      s.add_dependency(%q<jeweler>, [">= 1.0.0"])
-      s.add_dependency(%q<rack>, [">= 1.0.0"])
-      s.add_dependency(%q<thin>, [">= 1.2.2"])
-      s.add_dependency(%q<json>, [">= 1.1.7"])
-      s.add_dependency(%q<sequel>, [">= 3.2.0"])
+      s.add_dependency(%q<jeweler>, [">= 1.4.0"])
+      s.add_dependency(%q<rack>, ["= 1.1.0"])
+      s.add_dependency(%q<thin>, [">= 1.2.5"])
+      s.add_dependency(%q<json_pure>, [">= 1.4.3"])
+      s.add_dependency(%q<sequel>, ["= 3.7.0"])
+      s.add_dependency(%q<ruby-hmac>, ["= 0.3.2"])
+      s.add_dependency(%q<sqlite3-ruby>, ["= 1.2.5"])
     end
   else
-    s.add_dependency(%q<amqp>, [">= 0.6.0"])
-    s.add_dependency(%q<right_aws>, [">= 1.10.0"])
-    s.add_dependency(%q<eventmachine>, [">= 0.12.8"])
+    s.add_dependency(%q<amqp>, ["= 0.6.5"])
+    s.add_dependency(%q<right_aws>, [">= 2.0.0"])
+    s.add_dependency(%q<eventmachine>, [">= 0.12.10"])
     s.add_dependency(%q<rake>, [">= 0.8.7"])
-    s.add_dependency(%q<log4r>, [">= 1.0.5"])
+    s.add_dependency(%q<log4r>, [">= 1.1.2"])
     s.add_dependency(%q<daemons>, [">= 1.0.10"])
-    s.add_dependency(%q<rubigen>, [">= 1.5.2"])
+    s.add_dependency(%q<rubigen>, [">= 1.5.5"])
     s.add_dependency(%q<open4>, [">= 0.9.6"])
-    s.add_dependency(%q<jeweler>, [">= 1.0.0"])
-    s.add_dependency(%q<rack>, [">= 1.0.0"])
-    s.add_dependency(%q<thin>, [">= 1.2.2"])
-    s.add_dependency(%q<json>, [">= 1.1.7"])
-    s.add_dependency(%q<sequel>, [">= 3.2.0"])
+    s.add_dependency(%q<jeweler>, [">= 1.4.0"])
+    s.add_dependency(%q<rack>, ["= 1.1.0"])
+    s.add_dependency(%q<thin>, [">= 1.2.5"])
+    s.add_dependency(%q<json_pure>, [">= 1.4.3"])
+    s.add_dependency(%q<sequel>, ["= 3.7.0"])
+    s.add_dependency(%q<ruby-hmac>, ["= 0.3.2"])
+    s.add_dependency(%q<sqlite3-ruby>, ["= 1.2.5"])
   end
 end
